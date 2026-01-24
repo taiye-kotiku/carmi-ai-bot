@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     try {
         const supabase = await createClient();
         const {
@@ -18,7 +19,7 @@ export async function GET(
         const { data: job, error } = await supabase
             .from("jobs")
             .select("*")
-            .eq("id", params.id)
+            .eq("id", id)
             .eq("user_id", user.id)
             .single();
 

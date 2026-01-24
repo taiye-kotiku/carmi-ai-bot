@@ -13,12 +13,12 @@ export default function HomePage() {
             <span className="text-xl font-bold">Hebrew AI</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/login">
-              <Button variant="ghost">התחברות</Button>
-            </Link>
-            <Link href="/signup">
-              <Button>התחל בחינם</Button>
-            </Link>
+            <Button variant="ghost" asChild>
+              <Link href="/login">התחברות</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/signup">התחל בחינם</Link>
+            </Button>
           </div>
         </div>
       </header>
@@ -43,17 +43,17 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/signup">
-              <Button size="lg" className="text-lg px-8 h-14">
+            <Button size="lg" className="text-lg px-8 h-14" asChild>
+              <Link href="/signup">
                 <Zap className="h-5 w-5 ml-2" />
                 התחל בחינם
-              </Button>
-            </Link>
-            <Link href="#features">
-              <Button size="lg" variant="outline" className="text-lg px-8 h-14">
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" className="text-lg px-8 h-14" asChild>
+              <Link href="#features">
                 למד עוד
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
 
           <p className="text-sm text-gray-500 mt-4">
@@ -139,11 +139,11 @@ export default function HomePage() {
                   <span>5 קרוסלות</span>
                 </li>
               </ul>
-              <Link href="/signup">
-                <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/signup">
                   התחל בחינם
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
 
             {/* Starter Plan */}
@@ -174,11 +174,11 @@ export default function HomePage() {
                   <span>מיתוג אוטומטי</span>
                 </li>
               </ul>
-              <Link href="/signup?plan=starter">
-                <Button variant="secondary" className="w-full">
+              <Button variant="secondary" className="w-full" asChild>
+                <Link href="/signup?plan=starter">
                   בחר בתוכנית
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
 
             {/* Pro Plan */}
@@ -210,11 +210,11 @@ export default function HomePage() {
                   <span>גישה ל-API</span>
                 </li>
               </ul>
-              <Link href="/signup?plan=pro">
-                <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/signup?plan=pro">
                   בחר בתוכנית
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
         </div>

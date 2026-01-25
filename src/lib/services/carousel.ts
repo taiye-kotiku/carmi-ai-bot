@@ -1,5 +1,5 @@
 // src/lib/services/carousel.ts
-import { createCanvas, loadImage, registerFont, CanvasRenderingContext2D } from "canvas";
+import { createCanvas, loadImage, GlobalFonts, CanvasRenderingContext2D } from "@napi-rs/canvas";
 import path from "path";
 import { CarouselTemplate, CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 
@@ -7,7 +7,7 @@ import { CarouselTemplate, CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 const FONT_PATH = path.join(process.cwd(), "public/fonts/Assistant-Bold.ttf");
 
 try {
-    registerFont(FONT_PATH, { family: "Assistant", weight: "bold" });
+    GlobalFonts.registerFromPath(FONT_PATH, "Assistant");
 } catch (e) {
     console.warn("Could not register custom font, using default");
 }

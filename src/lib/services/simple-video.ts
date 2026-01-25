@@ -1,6 +1,6 @@
 // src/lib/services/simple-video.ts
-import { createCanvas, loadImage } from "canvas";
-import GIFEncoder from "gifencoder";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
+import GifEncoder from "gif-encoder-2";
 
 interface CreateSlideshowOptions {
     imageUrls: string[];
@@ -13,7 +13,7 @@ interface CreateSlideshowOptions {
 export async function createSlideshowGif(options: CreateSlideshowOptions): Promise<Buffer> {
     const { imageUrls, width, height, frameDuration, fadeFrames } = options;
 
-    const encoder = new GIFEncoder(width, height);
+    const encoder = new GifEncoder(width, height);
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 

@@ -232,6 +232,45 @@ export interface Database {
                     updated_at?: string;
                 };
             };
+            characters: {
+                Row: {
+                    id: string;
+                    user_id: string;
+                    name: string;
+                    description: string | null;
+                    reference_images: string[];
+                    thumbnail_url: string | null;
+                    settings: {
+                        model?: string;
+                        ip_adapter_scale?: number;
+                    };
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    user_id: string;
+                    name: string;
+                    description?: string | null;
+                    reference_images: string[];
+                    thumbnail_url?: string | null;
+                    settings?: {
+                        model?: string;
+                        ip_adapter_scale?: number;
+                    };
+                };
+                Update: {
+                    name?: string;
+                    description?: string | null;
+                    reference_images?: string[];
+                    thumbnail_url?: string | null;
+                    settings?: {
+                        model?: string;
+                        ip_adapter_scale?: number;
+                    };
+                    updated_at?: string;
+                };
+            };
         };
     };
 }
@@ -243,3 +282,4 @@ export type Generation = Database["public"]["Tables"]["generations"]["Row"];
 export type Job = Database["public"]["Tables"]["jobs"]["Row"];
 export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 export type CreditTransaction = Database["public"]["Tables"]["credit_transactions"]["Row"];
+export type Character = Database["public"]["Tables"]["characters"]["Row"];

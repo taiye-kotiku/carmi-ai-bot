@@ -1,3 +1,4 @@
+// src/components/layout/sidebar.tsx
 "use client";
 
 import Link from "next/link";
@@ -10,50 +11,142 @@ import {
     Film,
     Wand2,
     FolderOpen,
-    CreditCard,
+    Scissors,
+    Users,
+    Sparkles,
+    LayoutGrid,
+    Clapperboard,
     Settings,
-    Scissors
+    CreditCard,
+    HelpCircle,
+    LogOut,
 } from "lucide-react";
 
-const navigation = [
-    { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
-    { name: "יצירת תמונה", href: "/generate/text-to-image", icon: Image },
-    { name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
-    { name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
-    { name: "המרת ריל", href: "/generate/reel-converter", icon: Film },
-    { name: "גלריה", href: "/gallery", icon: FolderOpen },
-    { name: "חיתוך סרטון", href: "/generate/video-clips", icon: Scissors },
+type NavItem =
+    | { type: "divider"; label: string }
+    | { type: "link"; name: string; href: string; icon: React.ComponentType<{ className?: string }>; badge?: string };
+
+const navigation: NavItem[] = [
+    // Dashboard
+    { type: "link", name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
+
+    // Content Generation
+    { type: "divider", label: "יצירת תוכן" },
+    { type: "link", name: "יצירת תמונה", href: "/generate/text-to-image", icon: Image },
+    { type: "link", name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
+    { type: "link", name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
+    { type: "link", name: "המרת ריל", href: "/generate/reel-converter", icon: Film },
+    { type: "link", name: "חיתוך סרטון", href: "/generate/video-clips", icon: Scissors },
+    { type: "link", name: "יצירת קרוסלה", href: "/generate/carousel", icon: LayoutGrid },
+
+    // Characters
+    { type: "divider", label: "דמויות" },
+    { type: "link", name: "הדמויות שלי", href: "/characters", icon: Users },
+    { type: "link", name: "תמונה עם דמות", href: "/generate/character", icon: Sparkles },
+    { type: "link", name: "סרטון דמות", href: "/generate/character-video", icon: Clapperboard, badge: "חדש" },
+
+    // Library
+    { type: "divider", label: "ספרייה" },
+    { type: "link", name: "גלריה", href: "/gallery", icon: FolderOpen },
+
+    // Settings
+    { type: "divider", label: "הגדרות" },
+    { type: "link", name: "מיתוג", href: "/settings/brand", icon: Settings },
+    { type: "link", name: "מנוי וקרדיטים", href: "/settings/billing", icon: CreditCard },
 ];
 
 export function Sidebar() {
     const pathname = usePathname();
 
     return (
-        <aside className="w-64 bg-white border-l border-gray-200 min-h-screen p-4" dir="rtl">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-purple-600">AI Studio</h1>
+        <aside className="hidden lg:flex lg:flex-col fixed right-0 top-0 w-64 bg-white border-l border-gray-200 h-screen" dir="rtl">
+            {/* Logo */}
+            <div className="p-6 border-b border-gray-100">
+                <Link href="/dashboard" className="flex items-center gap-2">
+                    <div className="h-9 w-9 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center">
+                        <Sparkles className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                        AI Studio
+                    </span>
+                </Link>
             </div>
 
-            <nav className="space-y-2">
-                {navigation.map((item) => {
-                    const isActive = pathname === item.href;
+            {/* Navigation */}
+            <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+                {navigation.map((item, index) => {
+                    // Render divider
+                    if (item.type === "divider") {
+                        return (
+                            <div key={`divider-${index}`} className="pt-5 pb-2">
+                                <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                    {item.label}
+                                </p>
+                            </div>
+                        );
+                    }
+
+                    // Render link
+                    const isActive =
+                        pathname === item.href ||
+                        (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
                     return (
                         <Link
-                            key={item.name}
+                            key={item.href}
                             href={item.href}
                             className={cn(
-                                "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                                "flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
                                 isActive
-                                    ? "bg-purple-100 text-purple-700"
-                                    : "text-gray-600 hover:bg-gray-100"
+                                    ? "bg-purple-100 text-purple-700 font-medium"
+                                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                             )}
                         >
-                            <item.icon className="h-5 w-5" />
-                            <span>{item.name}</span>
+                            <div className="flex items-center gap-3">
+                                <item.icon className={cn("h-5 w-5", isActive && "text-purple-600")} />
+                                <span>{item.name}</span>
+                            </div>
+                            {item.badge && (
+                                <span className="px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full">
+                                    {item.badge}
+                                </span>
+                            )}
                         </Link>
                     );
                 })}
             </nav>
+
+            {/* Bottom Section */}
+            <div className="p-4 border-t border-gray-100 space-y-3">
+                {/* Help */}
+                <Link
+                    href="/help"
+                    className="flex items-center gap-3 px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                    <HelpCircle className="h-5 w-5" />
+                    <span className="text-sm">עזרה ותמיכה</span>
+                </Link>
+
+                {/* Pro Tip Card */}
+                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="h-6 w-6 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+                        </div>
+                        <span className="text-sm font-semibold text-purple-700">טיפ מקצועי</span>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed">
+                        צור דמות ושמור על עקביות מושלמת בכל התמונות והסרטונים שלך!
+                    </p>
+                    <Link
+                        href="/characters"
+                        className="mt-3 text-xs font-medium text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                    >
+                        צור דמות ראשונה
+                        <span className="text-lg leading-none">←</span>
+                    </Link>
+                </div>
+            </div>
         </aside>
     );
 }

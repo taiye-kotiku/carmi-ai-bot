@@ -1,7 +1,9 @@
+// src/app/(dashboard)/layout.tsx
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { MobileNav } from "@/components/layout/mobile-nav";
 import { Toaster } from "sonner";
 
 export default async function DashboardLayout({
@@ -19,9 +21,10 @@ export default async function DashboardLayout({
     return (
         <div className="min-h-screen bg-gray-50" dir="rtl">
             <Sidebar />
-            <div className="lg:pr-64">
+            <MobileNav />
+            <div className="lg:mr-64">
                 <Header />
-                <main className="p-6">{children}</main>
+                <main className="p-4 lg:p-6 pb-24 lg:pb-6">{children}</main>
             </div>
             <Toaster position="top-center" richColors />
         </div>

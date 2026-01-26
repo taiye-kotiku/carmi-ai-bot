@@ -38,6 +38,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
+    "node-loader": "^2.1.0",
     "tailwindcss": "^4",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5"

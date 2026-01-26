@@ -1,4 +1,8 @@
+
 // src/app/api/generate/carousel/route.ts
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic"; // recommended, since you hit DB + auth
+
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
@@ -6,6 +10,7 @@ import { nanoid } from "nanoid";
 import { generateCarousel } from "@/lib/services/carousel";
 import { generateCarouselContent } from "@/lib/services/carousel-content";
 import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
+
 
 export async function POST(req: Request) {
     try {

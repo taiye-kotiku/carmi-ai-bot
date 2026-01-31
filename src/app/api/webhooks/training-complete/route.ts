@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(request: NextRequest) {
     try {
@@ -19,14 +14,16 @@ export async function POST(request: NextRequest) {
         }
 
         if (status === "ready") {
-            // Training succeeded - update character
-            const { error: updateError } = await supabase
+            // Training succeeded
+            const { error: updateError } = await supabaseAdmin
                 .from("characters")
                 .update({
-                    status: "ready",
-                    lora_url: model_url,
-                    trigger_word: trigger_word,
-                    trained_at: new Date().toISOString(),
+                    model_status: "ready",
+                    model_url: model_url,
+                    training_completed_at: new Date().toISOString(),
+                    settings: {
+                        trigger_word: trigger_word,
+                    },
                 })
                 .eq("id", character_id);
 
@@ -38,12 +35,12 @@ export async function POST(request: NextRequest) {
             console.log("✅ Character updated to ready:", character_id);
 
         } else if (status === "failed") {
-            // Training failed - update status
-            const { error: updateError } = await supabase
+            // Training failed
+            const { error: updateError } = await supabaseAdmin
                 .from("characters")
                 .update({
-                    status: "failed",
-                    error_message: error || "Training failed",
+                    model_status: "failed",
+                    training_error: error || "Training failed",
                 })
                 .eq("id", character_id);
 

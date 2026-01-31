@@ -1,9 +1,7 @@
-// src/app/api/characters/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
-// GET - List all characters for user
 export async function GET() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -25,7 +23,6 @@ export async function GET() {
     return NextResponse.json(data);
 }
 
-// POST - Create new character
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -38,22 +35,15 @@ export async function POST(req: NextRequest) {
     const { name, description, reference_images, settings } = body;
 
     if (!name?.trim()) {
-        return NextResponse.json(
-            { error: "נא להזין שם לדמות" },
-            { status: 400 }
-        );
+        return NextResponse.json({ error: "נא להזין שם לדמות" }, { status: 400 });
     }
 
     if (!reference_images?.length) {
-        return NextResponse.json(
-            { error: "נא להעלות לפחות תמונה אחת" },
-            { status: 400 }
-        );
+        return NextResponse.json({ error: "נא להעלות לפחות תמונה אחת" }, { status: 400 });
     }
 
-    // Determine initial status based on image count
     const canTrain = reference_images.length >= 3;
-    const initialStatus = canTrain ? "training" : "draft";
+    const initialStatus = canTrain ? "training" : "pending";
 
     const { data, error } = await supabaseAdmin
         .from("characters")
@@ -63,8 +53,9 @@ export async function POST(req: NextRequest) {
             description: description?.trim() || null,
             reference_images,
             thumbnail_url: reference_images[0],
-            settings: settings || { ip_adapter_scale: 0.8, model: "pulid" },
-            status: initialStatus,
+            settings: settings || { ip_adapter_scale: 0.8, model: "flux-lora" },
+            model_status: initialStatus,
+            training_started_at: canTrain ? new Date().toISOString() : null,
         })
         .select()
         .single();
@@ -90,10 +81,9 @@ export async function POST(req: NextRequest) {
 
             if (!trainResponse.ok) {
                 console.error("Training trigger failed:", await trainResponse.text());
-                // Update status back to draft if training failed to start
                 await supabaseAdmin
                     .from("characters")
-                    .update({ status: "draft" })
+                    .update({ model_status: "pending" })
                     .eq("id", data.id);
             } else {
                 console.log("🚀 Training started for character:", data.id);
@@ -102,7 +92,7 @@ export async function POST(req: NextRequest) {
             console.error("Training trigger error:", err);
             await supabaseAdmin
                 .from("characters")
-                .update({ status: "draft" })
+                .update({ model_status: "pending" })
                 .eq("id", data.id);
         }
     }

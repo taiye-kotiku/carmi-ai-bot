@@ -12,6 +12,10 @@ import {
     ImageIcon,
     Calendar,
     Sparkles,
+    CheckCircle2,
+    AlertCircle,
+    Clock,
+    RotateCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +25,40 @@ import { DeleteCharacterModal } from "@/components/features/delete-character-mod
 import { Character } from "@/types/database";
 import { toast } from "sonner";
 import Link from "next/link";
+
+// Status badge component
+function StatusBadge({ status }: { status: string }) {
+    switch (status) {
+        case "training":
+            return (
+                <div className="flex items-center gap-1.5 bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    מאמן...
+                </div>
+            );
+        case "ready":
+            return (
+                <div className="flex items-center gap-1.5 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-medium">
+                    <CheckCircle2 className="h-3 w-3" />
+                    מוכן
+                </div>
+            );
+        case "failed":
+            return (
+                <div className="flex items-center gap-1.5 bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-medium">
+                    <AlertCircle className="h-3 w-3" />
+                    נכשל
+                </div>
+            );
+        default:
+            return (
+                <div className="flex items-center gap-1.5 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-medium">
+                    <Clock className="h-3 w-3" />
+                    טיוטה
+                </div>
+            );
+    }
+}
 
 export default function CharactersPage() {
     const [characters, setCharacters] = useState<Character[]>([]);
@@ -49,6 +87,15 @@ export default function CharactersPage() {
         fetchCharacters();
     }, [fetchCharacters]);
 
+    // Auto-refresh when there are training characters
+    useEffect(() => {
+        const hasTraining = characters.some((c) => c.model_status === "training");
+        if (hasTraining) {
+            const interval = setInterval(fetchCharacters, 15000); // Check every 15 seconds
+            return () => clearInterval(interval);
+        }
+    }, [characters, fetchCharacters]);
+
     // Close menu when clicking outside
     useEffect(() => {
         const handleClick = () => setOpenMenuId(null);
@@ -58,6 +105,23 @@ export default function CharactersPage() {
         }
     }, [openMenuId]);
 
+    // Manual retry training
+    async function retryTraining(characterId: string) {
+        try {
+            const res = await fetch(`/api/characters/${characterId}/train`, {
+                method: "POST",
+            });
+            if (res.ok) {
+                toast.success("האימון התחיל מחדש!");
+                fetchCharacters();
+            } else {
+                throw new Error("Failed to start training");
+            }
+        } catch (err) {
+            toast.error("שגיאה בהפעלת האימון");
+        }
+    }
+
     function formatDate(dateString: string) {
         return new Date(dateString).toLocaleDateString("he-IL", {
             day: "numeric",
@@ -65,6 +129,8 @@ export default function CharactersPage() {
             year: "numeric",
         });
     }
+
+    const trainingCount = characters.filter((c) => c.model_status === "training").length;
 
     return (
         <div className="max-w-6xl mx-auto">
@@ -86,6 +152,21 @@ export default function CharactersPage() {
                     דמות חדשה
                 </Button>
             </div>
+
+            {/* Training Progress Banner */}
+            {trainingCount > 0 && (
+                <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                    <div className="flex-1">
+                        <p className="font-medium text-blue-900">
+                            {trainingCount} {trainingCount === 1 ? "דמות באימון" : "דמויות באימון"}
+                        </p>
+                        <p className="text-sm text-blue-700">
+                            האימון לוקח כ-15-20 דקות. הדף יתעדכן אוטומטית.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Loading State */}
             {loading && (
@@ -121,15 +202,28 @@ export default function CharactersPage() {
                     {characters.map((character) => (
                         <Card
                             key={character.id}
-                            className="group overflow-hidden hover:shadow-lg transition-shadow"
+                            className={`group overflow-hidden hover:shadow-lg transition-shadow ${character.model_status === "training" ? "ring-2 ring-blue-300" : ""
+                                }`}
                         >
                             {/* Character Image */}
                             <div className="relative aspect-square bg-gray-100">
                                 <img
                                     src={character.thumbnail_url || character.reference_images[0]}
                                     alt={character.name}
-                                    className="w-full h-full object-cover"
+                                    className={`w-full h-full object-cover ${character.model_status === "training" ? "opacity-75" : ""
+                                        }`}
                                 />
+
+                                {/* Training Overlay */}
+                                {character.model_status === "training" && (
+                                    <div className="absolute inset-0 bg-blue-900/20 flex items-center justify-center">
+                                        <div className="bg-white/90 backdrop-blur-sm rounded-xl p-4 text-center">
+                                            <Loader2 className="h-8 w-8 text-blue-600 animate-spin mx-auto mb-2" />
+                                            <p className="text-sm font-medium">מאמן AI...</p>
+                                            <p className="text-xs text-gray-500">~15 דקות</p>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Overlay with reference count */}
                                 <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 flex items-center gap-1">
@@ -137,6 +231,11 @@ export default function CharactersPage() {
                                     <span className="text-xs text-white">
                                         {character.reference_images.length}
                                     </span>
+                                </div>
+
+                                {/* Status Badge */}
+                                <div className="absolute top-2 right-2">
+                                    <StatusBadge status={character.model_status || "draft"} />
                                 </div>
 
                                 {/* Menu Button */}
@@ -167,6 +266,19 @@ export default function CharactersPage() {
                                                 <Pencil className="h-4 w-4" />
                                                 עריכה
                                             </button>
+                                            {character.model_status === "failed" && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        retryTraining(character.id);
+                                                        setOpenMenuId(null);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                                                >
+                                                    <RotateCw className="h-4 w-4" />
+                                                    נסה שוב
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -198,12 +310,35 @@ export default function CharactersPage() {
                                         <Calendar className="h-3 w-3" />
                                         {formatDate(character.created_at)}
                                     </div>
-                                    <Link href={`/generate/character?id=${character.id}`}>
-                                        <Button size="sm" variant="outline">
-                                            <Sparkles className="h-3 w-3 ml-1" />
-                                            יצירה
+                                    {character.model_status === "ready" ? (
+                                        <Link href={`/generate/character?id=${character.id}`}>
+                                            <Button size="sm" variant="default">
+                                                <Sparkles className="h-3 w-3 ml-1" />
+                                                יצירה
+                                            </Button>
+                                        </Link>
+                                    ) : character.model_status === "training" ? (
+                                        <Button size="sm" variant="outline" disabled>
+                                            <Loader2 className="h-3 w-3 ml-1 animate-spin" />
+                                            מאמן...
                                         </Button>
-                                    </Link>
+                                    ) : character.model_status === "failed" ? (
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => retryTraining(character.id)}
+                                        >
+                                            <RotateCw className="h-3 w-3 ml-1" />
+                                            נסה שוב
+                                        </Button>
+                                    ) : (
+                                        <Link href={`/generate/character?id=${character.id}`}>
+                                            <Button size="sm" variant="outline">
+                                                <Sparkles className="h-3 w-3 ml-1" />
+                                                יצירה
+                                            </Button>
+                                        </Link>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
@@ -225,7 +360,7 @@ export default function CharactersPage() {
                 </div>
             )}
 
-            {/* Reference Images Preview (when characters exist) */}
+            {/* How it works section */}
             {!loading && characters.length > 0 && (
                 <div className="mt-12">
                     <h2 className="text-lg font-semibold mb-4">איך זה עובד?</h2>
@@ -234,27 +369,27 @@ export default function CharactersPage() {
                             <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
                                 <span className="text-lg font-bold text-purple-600">1</span>
                             </div>
-                            <h3 className="font-medium mb-1">העלה תמונות ייחוס</h3>
+                            <h3 className="font-medium mb-1">העלה 3+ תמונות</h3>
                             <p className="text-sm text-gray-500">
-                                העלה 1-4 תמונות ברורות של הפנים מזוויות שונות
+                                העלה תמונות ברורות של הפנים מזוויות שונות לאימון AI
                             </p>
                         </div>
                         <div className="bg-white rounded-xl p-4 border">
                             <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
                                 <span className="text-lg font-bold text-purple-600">2</span>
                             </div>
-                            <h3 className="font-medium mb-1">תאר את הסצנה</h3>
+                            <h3 className="font-medium mb-1">המתן לאימון</h3>
                             <p className="text-sm text-gray-500">
-                                כתוב מה הדמות עושה, איפה היא נמצאת, ומה האווירה
+                                ה-AI לומד את הפנים תוך ~15 דקות. תקבל התראה כשיסתיים
                             </p>
                         </div>
                         <div className="bg-white rounded-xl p-4 border">
                             <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
                                 <span className="text-lg font-bold text-purple-600">3</span>
                             </div>
-                            <h3 className="font-medium mb-1">קבל תמונות עקביות</h3>
+                            <h3 className="font-medium mb-1">צור תמונות מדהימות</h3>
                             <p className="text-sm text-gray-500">
-                                הבינה המלאכותית תיצור תמונות עם אותה דמות בדיוק
+                                תאר סצנה וקבל תמונות של הדמות שלך בכל מצב שתרצה
                             </p>
                         </div>
                     </div>

@@ -51,6 +51,10 @@ export async function POST(req: NextRequest) {
         );
     }
 
+    // Determine initial status based on image count
+    const canTrain = reference_images.length >= 3;
+    const initialStatus = canTrain ? "training" : "draft";
+
     const { data, error } = await supabaseAdmin
         .from("characters")
         .insert({
@@ -60,6 +64,7 @@ export async function POST(req: NextRequest) {
             reference_images,
             thumbnail_url: reference_images[0],
             settings: settings || { ip_adapter_scale: 0.8, model: "pulid" },
+            status: initialStatus,
         })
         .select()
         .single();
@@ -67,6 +72,39 @@ export async function POST(req: NextRequest) {
     if (error) {
         console.error("Create character error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Auto-start training if 3+ images
+    if (canTrain && process.env.MODAL_TRAINING_ENDPOINT) {
+        try {
+            const trainResponse = await fetch(process.env.MODAL_TRAINING_ENDPOINT, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    character_id: data.id,
+                    character_name: data.name,
+                    reference_image_urls: reference_images,
+                    webhook_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/training-complete`,
+                }),
+            });
+
+            if (!trainResponse.ok) {
+                console.error("Training trigger failed:", await trainResponse.text());
+                // Update status back to draft if training failed to start
+                await supabaseAdmin
+                    .from("characters")
+                    .update({ status: "draft" })
+                    .eq("id", data.id);
+            } else {
+                console.log("🚀 Training started for character:", data.id);
+            }
+        } catch (err) {
+            console.error("Training trigger error:", err);
+            await supabaseAdmin
+                .from("characters")
+                .update({ status: "draft" })
+                .eq("id", data.id);
+        }
     }
 
     return NextResponse.json(data);

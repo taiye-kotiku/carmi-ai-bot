@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Upload, Loader2, Trash2 } from "lucide-react";
+import { X, Upload, Loader2, Trash2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,12 +26,14 @@ export function CreateCharacterModal({
     const [uploading, setUploading] = useState(false);
     const [creating, setCreating] = useState(false);
 
+    const canTrain = images.length >= 3;
+
     async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const files = e.target.files;
         if (!files?.length) return;
 
-        if (images.length + files.length > 4) {
-            toast.error("ניתן להעלות עד 4 תמונות");
+        if (images.length + files.length > 10) {
+            toast.error("ניתן להעלות עד 10 תמונות");
             return;
         }
 
@@ -87,7 +89,12 @@ export function CreateCharacterModal({
                 throw new Error(data.error);
             }
 
-            toast.success("הדמות נוצרה בהצלחה! 🎉");
+            if (canTrain) {
+                toast.success("הדמות נוצרה! 🎉 האימון התחיל ויסתיים בעוד כ-15 דקות");
+            } else {
+                toast.success("הדמות נוצרה! 🎉 הוסף עוד תמונות כדי להתחיל אימון");
+            }
+
             onCreated();
             handleClose();
         } catch (err: any) {
@@ -143,14 +150,11 @@ export function CreateCharacterModal({
                         placeholder="תאר את הדמות - גיל, מאפיינים, סגנון..."
                         rows={2}
                     />
-                    <p className="text-xs text-gray-500">
-                        התיאור עוזר לשמור על עקביות טובה יותר
-                    </p>
                 </div>
 
                 {/* Images */}
                 <div className="space-y-2">
-                    <Label>תמונות ייחוס (1-4)</Label>
+                    <Label>תמונות ייחוס (3-10 מומלץ לאימון)</Label>
                     <div className="grid grid-cols-4 gap-2">
                         {images.map((url, i) => (
                             <div key={i} className="relative aspect-square">
@@ -167,7 +171,7 @@ export function CreateCharacterModal({
                                 </button>
                             </div>
                         ))}
-                        {images.length < 4 && (
+                        {images.length < 10 && (
                             <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
                                 {uploading ? (
                                     <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
@@ -185,9 +189,18 @@ export function CreateCharacterModal({
                             </label>
                         )}
                     </div>
-                    <p className="text-xs text-gray-500">
-                        💡 העלה תמונות ברורות של הפנים מזוויות שונות לתוצאות הטובות ביותר
-                    </p>
+
+                    {/* Training info box */}
+                    <div className={`p-3 rounded-lg text-sm ${canTrain ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                        {canTrain ? (
+                            <div className="flex items-center gap-2">
+                                <Sparkles className="w-4 h-4" />
+                                <span>מעולה! {images.length} תמונות - אימון AI יתחיל אוטומטית</span>
+                            </div>
+                        ) : (
+                            <span>💡 העלה לפחות 3 תמונות כדי להפעיל אימון AI לדמות</span>
+                        )}
+                    </div>
                 </div>
 
                 {/* Actions */}
@@ -207,7 +220,7 @@ export function CreateCharacterModal({
                         {creating ? (
                             <Loader2 className="w-4 h-4 animate-spin ml-2" />
                         ) : null}
-                        צור דמות
+                        {canTrain ? "צור והתחל אימון" : "צור דמות"}
                     </Button>
                 </div>
             </div>

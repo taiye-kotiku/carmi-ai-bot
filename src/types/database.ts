@@ -240,9 +240,15 @@ export interface Database {
                     description: string | null;
                     reference_images: string[];
                     thumbnail_url: string | null;
+                    model_status: 'pending' | 'training' | 'ready' | 'failed';
+                    model_url: string | null;
+                    training_started_at: string | null;
+                    training_completed_at: string | null;
+                    training_error: string | null;
                     settings: {
                         model?: string;
                         ip_adapter_scale?: number;
+                        trigger_word?: string;
                     };
                     created_at: string;
                     updated_at: string;
@@ -254,9 +260,13 @@ export interface Database {
                     description?: string | null;
                     reference_images: string[];
                     thumbnail_url?: string | null;
+                    model_status?: 'pending' | 'training' | 'ready' | 'failed';
+                    model_url?: string | null;
+                    training_started_at?: string | null;
                     settings?: {
                         model?: string;
                         ip_adapter_scale?: number;
+                        trigger_word?: string;
                     };
                 };
                 Update: {
@@ -264,9 +274,15 @@ export interface Database {
                     description?: string | null;
                     reference_images?: string[];
                     thumbnail_url?: string | null;
+                    model_status?: 'pending' | 'training' | 'ready' | 'failed';
+                    model_url?: string | null;
+                    training_started_at?: string | null;
+                    training_completed_at?: string | null;
+                    training_error?: string | null;
                     settings?: {
                         model?: string;
                         ip_adapter_scale?: number;
+                        trigger_word?: string;
                     };
                     updated_at?: string;
                 };

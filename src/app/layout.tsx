@@ -8,8 +8,8 @@ const heebo = Heebo({
 });
 
 export const metadata: Metadata = {
-  title: "Hebrew AI Bot | יצירת תוכן עם AI",
-  description: "צור תוכן מדהים לרשתות חברתיות עם בינה מלאכותית",
+  title: "קוסם | פלטפורמה מבוססת AI ליצירת תוכן",
+  description: "צור תמונות, סרטונים, קרוסלות – פלטפורמה אינטרנטית מבוססת בינה מלאכותית ליצירת תוכן ויזואלי",
 };
 
 export default function RootLayout({

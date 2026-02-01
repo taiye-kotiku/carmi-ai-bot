@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Mail, MessageSquare, Send } from "lucide-react";
+import { ArrowRight, Mail, Send } from "lucide-react";
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -24,8 +24,8 @@ export default function ContactPage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">✨</span>
-            <span className="text-xl font-bold">יוצרים</span>
+            <span className="text-2xl">🧙</span>
+            <span className="text-xl font-bold">קוסם</span>
           </Link>
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
@@ -48,7 +48,7 @@ export default function ContactPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 mb-12">
+          <div className="mb-12">
             <Card>
               <CardHeader>
                 <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center mb-2">
@@ -59,30 +59,10 @@ export default function ContactPage() {
               </CardHeader>
               <CardContent>
                 <a
-                  href="mailto:support@yotzrim.ai"
+                  href="mailto:kossem.yotzer@gmail.com"
                   className="text-primary hover:underline font-medium"
                 >
-                  support@yotzrim.ai
-                </a>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center mb-2">
-                  <MessageSquare className="h-6 w-6 text-primary" />
-                </div>
-                <CardTitle>טלגרם</CardTitle>
-                <CardDescription>צור קשר ישיר בבוט</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <a
-                  href="https://t.me/yotzrim_bot"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline font-medium"
-                >
-                  @yotzrim_bot
+                  kossem.yotzer@gmail.com
                 </a>
               </CardContent>
             </Card>
@@ -159,7 +139,7 @@ export default function ContactPage() {
             <Link href="/privacy" className="hover:text-white">פרטיות</Link>
             <Link href="/contact" className="hover:text-white">צור קשר</Link>
           </div>
-          <p className="text-gray-500 text-sm mt-4">© 2025 יוצרים. כל הזכויות שמורות.</p>
+          <p className="text-gray-500 text-sm mt-4">© 2025 קוסם. כל הזכויות שמורות.</p>
         </div>
       </footer>
     </div>

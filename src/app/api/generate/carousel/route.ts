@@ -29,6 +29,8 @@ export async function POST(req: Request) {
             slide_count = 5,
             style = "educational",
             use_brand = false,
+            logo_url: customLogoUrl,
+            logo_position = "top-right",
         } = body;
 
         // Validate
@@ -61,14 +63,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Get brand settings if requested
-        let brandLogo: string | undefined;
+        // Get logo: custom upload, or from brand
+        let brandLogo: string | undefined = customLogoUrl;
         let brandColor: string | undefined;
+        let logoPosition = logo_position;
 
-        if (use_brand) {
+        if (!brandLogo && use_brand) {
             const { data: brand } = await supabase
                 .from("brands")
-                .select("logo_url, primary_color, is_enabled")
+                .select("logo_url, primary_color, logo_position, is_enabled")
                 .eq("user_id", user.id)
                 .eq("is_enabled", true)
                 .single();
@@ -76,6 +79,7 @@ export async function POST(req: Request) {
             if (brand) {
                 brandLogo = brand.logo_url || undefined;
                 brandColor = brand.primary_color || undefined;
+                if (brand.logo_position) logoPosition = brand.logo_position;
             }
         }
 
@@ -98,6 +102,7 @@ export async function POST(req: Request) {
             style,
             brandLogo,
             brandColor,
+            logoPosition,
             requiredCredits,
         });
 
@@ -116,6 +121,7 @@ interface ProcessOptions {
     style: string;
     brandLogo?: string;
     brandColor?: string;
+    logoPosition?: string;
     requiredCredits: number;
 }
 
@@ -158,6 +164,7 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
             templateId: options.templateId,
             logoUrl: options.brandLogo,
             brandColor: options.brandColor,
+            logoPosition: options.logoPosition as any,
         });
 
         await supabaseAdmin

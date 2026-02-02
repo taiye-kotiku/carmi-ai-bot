@@ -22,6 +22,9 @@ export default function HomePage() {
             <span className="text-xl font-bold text-white">קוסם</span>
           </Link>
           <div className="flex items-center gap-4">
+            <Link href="/carousel-test" className="text-slate-400 hover:text-white text-sm transition-colors">
+              בדיקת קרוסלה
+            </Link>
             <Link href="#examples" className="text-slate-400 hover:text-white text-sm transition-colors">
               דוגמאות
             </Link>
@@ -265,25 +268,41 @@ export default function HomePage() {
               </div>
               <h3 className="text-lg font-semibold mb-2 text-white">סטארטר</h3>
               <div className="mb-4">
-                <span className="text-4xl font-bold text-white">₪69</span>
+                <span className="text-4xl font-bold text-white">₪139</span>
                 <span className="text-indigo-200/80">/חודש</span>
               </div>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>100 יצירות תמונה</span>
+                  <span>250 מודעות / תמונות בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>20 המרות ריל</span>
+                  <span>20 קרוסלות מותאמות</span>
                 </li>
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>50 קרוסלות</span>
+                  <span>סוכן קופירייטר מקצועי</span>
                 </li>
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>מיתוג אוטומטי</span>
+                  <span>מחולל תמונות יצירתי ומתקדם</span>
+                </li>
+                <li className="flex items-center gap-2 text-indigo-100">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>יצירת תוכן מותאם אישית</span>
+                </li>
+                <li className="flex items-center gap-2 text-indigo-100">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>עריכת תמונות עם AI</span>
+                </li>
+                <li className="flex items-center gap-2 text-indigo-100">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>יצירת סרטונים עם הדמות שלך</span>
+                </li>
+                <li className="flex items-center gap-2 text-indigo-100">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>דמות ראשונה בחינם</span>
                 </li>
               </ul>
               <Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
@@ -295,31 +314,43 @@ export default function HomePage() {
 
             {/* Pro Plan */}
             <div className="bg-white/5 backdrop-blur-sm p-8 rounded-2xl border border-white/10">
-              <h3 className="text-lg font-semibold mb-2 text-white">מקצועי</h3>
+              <h3 className="text-lg font-semibold mb-2 text-white">יוצר תוכן מקצועי</h3>
               <div className="mb-4">
-                <span className="text-4xl font-bold text-white">₪179</span>
+                <span className="text-4xl font-bold text-white">₪229</span>
                 <span className="text-slate-400">/חודש</span>
               </div>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>500 יצירות תמונה</span>
+                  <span>500 מודעות / תמונות בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>100 המרות ריל</span>
+                  <span>50 קרוסלות מותאמות</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>200 קרוסלות</span>
+                  <span>סוכן קופירייטר מקצועי</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת וידאו</span>
+                  <span>מחולל תמונות יצירתי ומתקדם</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>גישה ל-API</span>
+                  <span>יצירת תוכן מותאם אישית</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-300">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>עריכת תמונות עם AI</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-300">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>יצירת סרטונים מקצועיים עם הדמות שלך</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-300">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>2 דמויות ראשונות בחינם</span>
                 </li>
               </ul>
               <Button variant="outline" className="w-full border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20" asChild>

@@ -16,11 +16,39 @@ const WIDTH = 1080;
 const HEIGHT = 1350;
 const MARGIN = 80;
 
+function getLogoPosition(position: LogoPosition, logoSize: number): { x: number; y: number } {
+    const topY = 60;
+    const bottomY = HEIGHT - 60 - logoSize;
+    const leftX = MARGIN;
+    const rightX = WIDTH - MARGIN - logoSize;
+    const centerX = (WIDTH - logoSize) / 2;
+
+    switch (position) {
+        case "top-left": return { x: leftX, y: topY };
+        case "top-right": return { x: rightX, y: topY };
+        case "top-middle": return { x: centerX, y: topY };
+        case "bottom-left": return { x: leftX, y: bottomY };
+        case "bottom-right": return { x: rightX, y: bottomY };
+        case "bottom-middle": return { x: centerX, y: bottomY };
+        default: return { x: rightX, y: topY };
+    }
+}
+
+export type LogoPosition =
+    | "top-left"
+    | "top-right"
+    | "top-middle"
+    | "bottom-left"
+    | "bottom-right"
+    | "bottom-middle";
+
 interface GenerateCarouselOptions {
     slides: string[];
     templateId: string;
     logoUrl?: string;
+    logoBase64?: string;
     brandColor?: string;
+    logoPosition?: LogoPosition;
 }
 
 interface CarouselResult {
@@ -29,7 +57,7 @@ interface CarouselResult {
 }
 
 export async function generateCarousel(options: GenerateCarouselOptions): Promise<CarouselResult> {
-    const { slides, templateId, logoUrl, brandColor } = options;
+    const { slides, templateId, logoUrl, logoBase64, brandColor, logoPosition = "top-right" } = options;
 
     const template = CAROUSEL_TEMPLATES[templateId];
     if (!template) {
@@ -53,13 +81,18 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         backgroundImage = null;
     }
 
-    // Load logo if provided
+    // Load logo if provided (URL or base64)
     let logoImage: any = null;
-    if (logoUrl) {
+    if (logoUrl || logoBase64) {
         try {
-            logoImage = await loadImage(logoUrl);
-        } catch {
-            console.warn("Could not load logo");
+            if (logoBase64) {
+                const buf = Buffer.from(logoBase64.replace(/^data:image\/\w+;base64,/, ""), "base64");
+                logoImage = await loadImage(buf);
+            } else if (logoUrl) {
+                logoImage = await loadImage(logoUrl);
+            }
+        } catch (e) {
+            console.warn("Could not load logo:", e);
         }
     }
 
@@ -72,6 +105,7 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
             accentColor,
             backgroundImage,
             logoImage,
+            logoPosition,
         });
         images.push(slideBuffer);
     }
@@ -87,10 +121,11 @@ interface GenerateSlideOptions {
     accentColor: string;
     backgroundImage: any;
     logoImage: any;
+    logoPosition: LogoPosition;
 }
 
 async function generateSlide(options: GenerateSlideOptions): Promise<Buffer> {
-    const { text, slideIndex, totalSlides, template, accentColor, backgroundImage, logoImage } = options;
+    const { text, slideIndex, totalSlides, template, accentColor, backgroundImage, logoImage, logoPosition } = options;
 
     const canvas = createCanvas(WIDTH, HEIGHT);
     const ctx = canvas.getContext("2d");
@@ -113,14 +148,13 @@ async function generateSlide(options: GenerateSlideOptions): Promise<Buffer> {
         ctx.fillRect(0, 0, WIDTH, HEIGHT);
     }
 
-    // 3. Draw text with protection box
-    drawProtectedText(ctx, text, template);
+    // 3. Draw text (no background box, with * highlight support)
+    drawTextWithHighlights(ctx, text, template);
 
     // 4. Draw logo
     if (logoImage) {
         const logoSize = 120;
-        const logoX = WIDTH - MARGIN - logoSize;
-        const logoY = 60;
+        const { x: logoX, y: logoY } = getLogoPosition(logoPosition, logoSize);
         ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize);
     }
 
@@ -133,38 +167,61 @@ async function generateSlide(options: GenerateSlideOptions): Promise<Buffer> {
     return canvas.toBuffer("image/png");
 }
 
-function drawProtectedText(ctx: CanvasRenderingContext2D, text: string, template: CarouselTemplate) {
-    ctx.font = "bold 85px Assistant, Arial, sans-serif";
+const HIGHLIGHT_COLOR = "#F8FF00"; // Yellow for *highlighted* text
+
+function drawTextWithHighlights(ctx: CanvasRenderingContext2D, text: string, template: CarouselTemplate) {
+    const defaultColor = template.text_color;
+    const fontSize = 85;
+    ctx.font = `bold ${fontSize}px Assistant, Arial, sans-serif`;
     ctx.textAlign = "right";
     ctx.textBaseline = "top";
     ctx.direction = "rtl";
 
     const maxWidth = WIDTH - MARGIN * 2 - 100;
-    const lines = wrapText(ctx, text, maxWidth);
+    const lines = wrapTextWithStars(ctx, text, maxWidth);
     const lineHeight = 110;
-    const totalTextHeight = lines.length * lineHeight;
-
     const x = WIDTH - MARGIN;
     const y = template.y_pos;
 
-    // Calculate text bounds for protection box
-    const boxPadding = 30;
-    const boxX = MARGIN - boxPadding;
-    const boxY = y - boxPadding;
-    const boxWidth = WIDTH - MARGIN * 2 + boxPadding * 2;
-    const boxHeight = totalTextHeight + boxPadding * 2;
-
-    // Draw protection box
-    const isWhiteText = template.text_color === "#FFFFFF";
-    ctx.fillStyle = isWhiteText ? "rgba(0, 0, 0, 0.5)" : "rgba(255, 255, 255, 0.7)";
-    roundRect(ctx, boxX, boxY, boxWidth, boxHeight, 20);
-    ctx.fill();
-
-    // Draw text
-    ctx.fillStyle = template.text_color;
-    lines.forEach((line, index) => {
-        ctx.fillText(line, x, y + index * lineHeight);
+    lines.forEach((line, lineIndex) => {
+        const segments = parseHighlightSegments(line);
+        let currentX = x;
+        for (let i = segments.length - 1; i >= 0; i--) {
+            const seg = segments[i];
+            ctx.fillStyle = seg.highlight ? HIGHLIGHT_COLOR : defaultColor;
+            const metrics = ctx.measureText(seg.text);
+            ctx.fillText(seg.text, currentX, y + lineIndex * lineHeight);
+            currentX -= metrics.width;
+        }
     });
+}
+
+function wrapTextWithStars(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+    const words = text.split(" ");
+    const lines: string[] = [];
+    let currentLine: string[] = [];
+    for (const word of words) {
+        const testLine = [...currentLine, word].join(" ").replace(/\*/g, "");
+        if (ctx.measureText(testLine).width <= maxWidth || currentLine.length === 0) {
+            currentLine.push(word);
+        } else {
+            lines.push(currentLine.join(" "));
+            currentLine = [word];
+        }
+    }
+    if (currentLine.length) lines.push(currentLine.join(" "));
+    return lines;
+}
+
+function parseHighlightSegments(line: string): { text: string; highlight: boolean }[] {
+    const parts = line.split("*");
+    const segments: { text: string; highlight: boolean }[] = [];
+    for (let i = 0; i < parts.length; i++) {
+        if (parts[i]) {
+            segments.push({ text: parts[i], highlight: i % 2 === 1 });
+        }
+    }
+    return segments;
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {

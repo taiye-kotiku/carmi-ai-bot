@@ -47,7 +47,7 @@ export async function POST(
     // Trigger Modal training
     if (process.env.MODAL_TRAINING_ENDPOINT) {
         try {
-            const response = await fetch(process.env.MODAL_TRAINING_ENDPOINT, {
+            const response = await fetch(process.env.MODAL_TRAINING_ENDPOINT!, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -55,6 +55,8 @@ export async function POST(
                     character_name: character.name,
                     reference_image_urls: character.reference_images,
                     webhook_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/training-complete`,
+                    supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+                    supabase_service_key: process.env.SUPABASE_SERVICE_ROLE_KEY,
                 }),
             });
 

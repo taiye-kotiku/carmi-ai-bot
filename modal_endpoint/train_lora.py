@@ -5,12 +5,12 @@ app = modal.App("lora-training")
 
 image = (
     modal.Image.debian_slim(python_version="3.10")
-    .apt_install("git", "libgl1-mesa-glx", "libglib2.0-0", "wget")
+    .apt_install("git", "libgl1-mesa-glx", "libglib2.0-0")
     .pip_install(
         "numpy<2",
+        "torch==2.1.2",
         "fastapi",
         "uvicorn",
-        "torch==2.1.2",
         "torchvision==0.16.2",
         "diffusers==0.25.1",
         "transformers==4.36.2",
@@ -20,6 +20,7 @@ image = (
         "Pillow==10.1.0",
         "requests",
         "peft==0.7.1",
+        "bitsandbytes==0.41.3",
     )
 )
 
@@ -34,19 +35,21 @@ def train_lora(
     character_name: str,
     image_urls: list[str],
     webhook_url: str,
-    supabase_url: str,
-    supabase_key: str,
+    supabase_url: str = "",
+    supabase_key: str = "",
 ):
     import torch
     import requests
+    import gc
     from pathlib import Path
     from PIL import Image
     from io import BytesIO
-    import json
     
     print(f"🚀 Starting training for: {character_name}")
     print(f"   Character ID: {character_id}")
     print(f"   Images: {len(image_urls)}")
+    print(f"   GPU: {torch.cuda.get_device_name(0)}")
+    print(f"   VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
     
     work_dir = Path("/tmp/training")
     work_dir.mkdir(exist_ok=True)
@@ -55,67 +58,90 @@ def train_lora(
     output_dir = work_dir / "output"
     output_dir.mkdir(exist_ok=True)
     
-    trigger_word = f"photo of {character_name.lower().replace(' ', '_')}_person"
+    trigger_word = f"ohwx {character_name.lower().replace(' ', '')}"
     
     try:
-        # Download images
+        # Download images at 512x512 to save memory
         print("\n📥 Downloading images...")
         for i, url in enumerate(image_urls):
             response = requests.get(url, timeout=30)
             img = Image.open(BytesIO(response.content)).convert("RGB")
-            img = img.resize((1024, 1024), Image.Resampling.LANCZOS)
+            # Resize to 512x512 for memory efficiency
+            img = img.resize((512, 512), Image.Resampling.LANCZOS)
             img.save(images_dir / f"image_{i:03d}.png")
             print(f"   ✓ Image {i+1}/{len(image_urls)}")
         
-        # Load model
-        print("\n🔧 Loading SDXL model...")
-        from diffusers import StableDiffusionXLPipeline
+        # Load SD 1.5 instead of SDXL (much lighter, fits in A10G)
+        print("\n🔧 Loading Stable Diffusion model...")
+        from diffusers import StableDiffusionPipeline, DDPMScheduler
         
-        pipe = StableDiffusionXLPipeline.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0",
+        model_id = "runwayml/stable-diffusion-v1-5"
+        
+        pipe = StableDiffusionPipeline.from_pretrained(
+            model_id,
             torch_dtype=torch.float16,
-            use_safetensors=True,
-            variant="fp16",
+            safety_checker=None,
         )
         pipe = pipe.to("cuda")
+        pipe.enable_attention_slicing()
         
-        # Setup LoRA
+        # Get components
+        vae = pipe.vae
+        unet = pipe.unet
+        text_encoder = pipe.text_encoder
+        tokenizer = pipe.tokenizer
+        noise_scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
+        
+        # Setup LoRA on UNet
         from peft import LoraConfig, get_peft_model
         
         lora_config = LoraConfig(
-            r=16,
+            r=8,
             lora_alpha=16,
             target_modules=["to_q", "to_v", "to_k", "to_out.0"],
-            lora_dropout=0.0,
+            lora_dropout=0.05,
         )
         
-        unet = pipe.unet
         unet.requires_grad_(False)
         unet = get_peft_model(unet, lora_config)
         unet.print_trainable_parameters()
+        
+        # Freeze VAE and text encoder
+        vae.requires_grad_(False)
+        text_encoder.requires_grad_(False)
         
         # Prepare training data
         from torchvision import transforms
         
         transform = transforms.Compose([
-            transforms.Resize((1024, 1024)),
+            transforms.Resize((512, 512)),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            transforms.Normalize([0.5], [0.5]),
         ])
         
-        training_images = []
+        # Load and encode images once
+        print("\n🖼️ Encoding training images...")
+        latents_list = []
+        
         for img_path in sorted(images_dir.glob("*.png")):
             img = Image.open(img_path).convert("RGB")
-            training_images.append(transform(img))
+            img_tensor = transform(img).unsqueeze(0).to("cuda", dtype=torch.float16)
+            
+            with torch.no_grad():
+                latent = vae.encode(img_tensor).latent_dist.sample()
+                latent = latent * vae.config.scaling_factor
+                latents_list.append(latent)
         
-        training_tensor = torch.stack(training_images).to("cuda", dtype=torch.float32)
+        training_latents = torch.cat(latents_list, dim=0)
+        print(f"   ✓ Encoded {len(latents_list)} images to latent space")
         
-        # Get text embeddings once
-        tokenizer = pipe.tokenizer
-        tokenizer_2 = pipe.tokenizer_2
-        text_encoder = pipe.text_encoder
-        text_encoder_2 = pipe.text_encoder_2
+        # Clear some memory
+        del latents_list
+        gc.collect()
+        torch.cuda.empty_cache()
         
+        # Get text embeddings
+        print("\n📝 Encoding trigger word...")
         text_input = tokenizer(
             trigger_word,
             padding="max_length",
@@ -124,124 +150,102 @@ def train_lora(
             return_tensors="pt"
         ).to("cuda")
         
-        text_input_2 = tokenizer_2(
-            trigger_word,
-            padding="max_length",
-            max_length=77,
-            truncation=True,
-            return_tensors="pt"
-        ).to("cuda")
-        
         with torch.no_grad():
-            prompt_embeds = text_encoder(text_input.input_ids)[0]
-            pooled_prompt_embeds = text_encoder_2(text_input_2.input_ids, output_hidden_states=True)
-            prompt_embeds_2 = pooled_prompt_embeds.hidden_states[-2]
-            pooled_prompt_embeds = pooled_prompt_embeds[0]
+            text_embeddings = text_encoder(text_input.input_ids)[0]
         
-        prompt_embeds = torch.cat([prompt_embeds, prompt_embeds_2], dim=-1).to(dtype=torch.float16)
-        
-        # Training
-        print(f"\n🔧 Training LoRA (500 steps)...")
-        
+        # Training setup
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, unet.parameters()),
             lr=1e-4,
             weight_decay=0.01
         )
         
-        scheduler = pipe.scheduler
-        vae = pipe.vae
-        
+        num_steps = 500
         unet.train()
         
-        for step in range(500):
+        print(f"\n🔧 Training LoRA ({num_steps} steps)...")
+        
+        for step in range(num_steps):
             optimizer.zero_grad()
             
-            # Get random image
-            idx = step % len(training_images)
-            pixel_values = training_tensor[idx:idx+1].to(dtype=torch.float16)
+            # Get random training latent
+            idx = step % len(training_latents)
+            latents = training_latents[idx:idx+1]
             
-            # Encode to latent space
-            with torch.no_grad():
-                latents = vae.encode(pixel_values).latent_dist.sample()
-                latents = latents * vae.config.scaling_factor
-            
-            # Sample noise and timestep
+            # Sample noise
             noise = torch.randn_like(latents)
-            timesteps = torch.randint(0, scheduler.config.num_train_timesteps, (1,), device="cuda").long()
             
-            # Add noise
-            noisy_latents = scheduler.add_noise(latents, noise, timesteps)
+            # Sample timestep
+            timesteps = torch.randint(
+                0, noise_scheduler.config.num_train_timesteps, 
+                (1,), device="cuda"
+            ).long()
             
-            # Time embeddings for SDXL
-            add_time_ids = torch.tensor([[1024, 1024, 0, 0, 1024, 1024]], device="cuda", dtype=torch.float16)
-            added_cond_kwargs = {
-                "text_embeds": pooled_prompt_embeds.to(dtype=torch.float16),
-                "time_ids": add_time_ids
-            }
+            # Add noise to latents
+            noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
             
             # Predict noise
-            with torch.autocast("cuda", dtype=torch.float16):
-                noise_pred = unet(
-                    noisy_latents,
-                    timesteps,
-                    encoder_hidden_states=prompt_embeds,
-                    added_cond_kwargs=added_cond_kwargs,
-                    return_dict=False,
-                )[0]
+            noise_pred = unet(
+                noisy_latents,
+                timesteps,
+                encoder_hidden_states=text_embeddings,
+            ).sample
             
-            # Calculate loss
-            loss = torch.nn.functional.mse_loss(noise_pred.float(), noise.float())
+            # MSE loss
+            loss = torch.nn.functional.mse_loss(noise_pred, noise)
             
-            # Skip if nan
-            if torch.isnan(loss):
-                print(f"   Warning: NaN loss at step {step}, skipping...")
+            if torch.isnan(loss) or torch.isinf(loss):
+                print(f"   ⚠️ Invalid loss at step {step}, skipping...")
                 continue
             
             loss.backward()
-            
-            # Gradient clipping
             torch.nn.utils.clip_grad_norm_(unet.parameters(), 1.0)
-            
             optimizer.step()
             
-            if step % 100 == 0:
-                print(f"   Step {step}/500, Loss: {loss.item():.4f}")
+            if step % 50 == 0:
+                print(f"   Step {step}/{num_steps}, Loss: {loss.item():.4f}")
         
-        # Save LoRA
+        # Save LoRA weights
         print("\n💾 Saving LoRA weights...")
+        
         lora_state_dict = {}
         for name, param in unet.named_parameters():
-            if "lora" in name.lower() and param.requires_grad:
-                lora_state_dict[name] = param.cpu()
+            if param.requires_grad:
+                # Clean up the name for compatibility
+                clean_name = name.replace("base_model.model.", "")
+                lora_state_dict[clean_name] = param.detach().cpu()
         
         from safetensors.torch import save_file
         lora_path = output_dir / "lora.safetensors"
         save_file(lora_state_dict, str(lora_path))
         
-        # Upload to Supabase via REST API
-        print("\n☁️ Uploading to Supabase Storage...")
+        print(f"   ✓ Saved {len(lora_state_dict)} tensors")
         
-        with open(lora_path, "rb") as f:
-            lora_bytes = f.read()
-        
-        upload_url = f"{supabase_url}/storage/v1/object/loras/{character_id}/lora.safetensors"
-        headers = {
-            "Authorization": f"Bearer {supabase_key}",
-            "Content-Type": "application/octet-stream",
-            "x-upsert": "true"
-        }
-        
-        upload_response = requests.post(upload_url, headers=headers, data=lora_bytes, timeout=120)
-        
-        if upload_response.status_code not in [200, 201]:
-            raise Exception(f"Upload failed: {upload_response.text}")
-        
-        model_url = f"{supabase_url}/storage/v1/object/public/loras/{character_id}/lora.safetensors"
+        # Upload to Supabase
+        model_url = ""
+        if supabase_url and supabase_key:
+            print("\n☁️ Uploading to Supabase Storage...")
+            
+            with open(lora_path, "rb") as f:
+                lora_bytes = f.read()
+            
+            upload_url = f"{supabase_url}/storage/v1/object/loras/{character_id}/lora.safetensors"
+            headers = {
+                "Authorization": f"Bearer {supabase_key}",
+                "Content-Type": "application/octet-stream",
+                "x-upsert": "true"
+            }
+            
+            upload_response = requests.post(upload_url, headers=headers, data=lora_bytes, timeout=120)
+            
+            if upload_response.status_code in [200, 201]:
+                model_url = f"{supabase_url}/storage/v1/object/public/loras/{character_id}/lora.safetensors"
+                print(f"   ✓ Uploaded to {model_url}")
+            else:
+                print(f"   ⚠️ Upload failed: {upload_response.status_code} - {upload_response.text}")
         
         print(f"\n✅ Training complete!")
-        print(f"   Model URL: {model_url}")
-        print(f"   Trigger: {trigger_word}")
+        print(f"   Trigger word: {trigger_word}")
         
         # Success webhook
         requests.post(webhook_url, json={
@@ -268,14 +272,14 @@ def train_lora(
 
 
 @app.function(image=image)
-@modal.web_endpoint(method="POST")
+@modal.fastapi_endpoint(method="POST")
 def start_training(request: dict):
     character_id = request.get("character_id")
     character_name = request.get("character_name")
     image_urls = request.get("reference_image_urls", [])
     webhook_url = request.get("webhook_url")
-    supabase_url = request.get("supabase_url")
-    supabase_key = request.get("supabase_service_key")
+    supabase_url = request.get("supabase_url", "")
+    supabase_key = request.get("supabase_service_key", "")
     
     if not all([character_id, character_name, image_urls, webhook_url]):
         return {"error": "Missing required fields"}
@@ -285,8 +289,8 @@ def start_training(request: dict):
         character_name=character_name,
         image_urls=image_urls,
         webhook_url=webhook_url,
-        supabase_url=supabase_url or "",
-        supabase_key=supabase_key or "",
+        supabase_url=supabase_url,
+        supabase_key=supabase_key,
     )
     
     return {"success": True, "message": "Training started"}

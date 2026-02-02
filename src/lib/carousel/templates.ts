@@ -190,6 +190,12 @@ export const CAROUSEL_TEMPLATES: Record<string, CarouselTemplate> = {
         y_pos: 400,
         category: "gradient"
     },
+    "b1": { id: "b1", style: "בניין 1", file: "b1.jpg", text_color: "#FFFFFF", accent: "#F8FF00", y_pos: 400, category: "abstract" },
+    "b2": { id: "b2", style: "בניין 2", file: "b2.jpg", text_color: "#FFFFFF", accent: "#F8FF00", y_pos: 400, category: "abstract" },
+    "b3": { id: "b3", style: "בניין 3", file: "b3.jpg", text_color: "#FFFFFF", accent: "#F8FF00", y_pos: 400, category: "abstract" },
+    "b4": { id: "b4", style: "בניין 4", file: "b4.jpg", text_color: "#FFFFFF", accent: "#F8FF00", y_pos: 400, category: "abstract" },
+    "b5": { id: "b5", style: "בניין 5", file: "b5.jpg", text_color: "#FFFFFF", accent: "#F8FF00", y_pos: 400, category: "abstract" },
+    "b6": { id: "b6", style: "בניין 6", file: "b6.jpg", text_color: "#FFFFFF", accent: "#F8FF00", y_pos: 400, category: "abstract" },
 };
 
 export function getTemplatesByCategory(category?: string): CarouselTemplate[] {

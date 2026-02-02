@@ -22,6 +22,9 @@ export default function HomePage() {
             <span className="text-xl font-bold text-white">קוסם</span>
           </Link>
           <div className="flex items-center gap-4">
+            <Link href="/carousel-test" className="text-slate-400 hover:text-white text-sm transition-colors">
+              בדיקת קרוסלה
+            </Link>
             <Link href="#examples" className="text-slate-400 hover:text-white text-sm transition-colors">
               דוגמאות
             </Link>

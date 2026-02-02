@@ -23,8 +23,8 @@ export async function generateCarouselContent(options: GenerateContentOptions): 
     };
 
     const languageInstructions = language === "he"
-        ? "Write in Hebrew. Use natural Hebrew phrasing."
-        : "Write in English.";
+        ? "Write in Hebrew. Use natural Hebrew phrasing. Use *word* to mark words that should appear in bold yellow."
+        : "Write in English. Use *word* to mark words that should appear in bold yellow.";
 
     const prompt = `Create content for a ${slideCount}-slide carousel about: "${topic}"
 
@@ -36,10 +36,11 @@ Rules:
 2. Each slide should have 1-2 short sentences (max 25 words per slide)
 3. Last slide should have a call-to-action or memorable conclusion
 4. Keep text concise - it needs to fit on a visual slide
-5. Make each slide flow naturally to the next
+5. Use *asterisks* around 1-2 key words per slide for emphasis (they will display in bold yellow)
+6. Make each slide flow naturally to the next
 
 Return ONLY a JSON array of strings, one per slide. No markdown, no explanation.
-Example: ["Slide 1 text", "Slide 2 text", "Slide 3 text"]`;
+Example: ["הנה *ההזדמנות* שלך", "Slide 2 text", "Slide 3 text"]`;
 
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();

@@ -1,7 +1,6 @@
-// src/app/(dashboard)/generate/carousel/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
     LayoutGrid,
     Wand2,
@@ -15,6 +14,9 @@ import {
     X,
     Plus,
     Trash2,
+    Upload,
+    MessageSquare,
+    Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +24,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CAROUSEL_TEMPLATES, CarouselTemplate, getTemplatesByCategory } from "@/lib/carousel/templates";
+import { CAROUSEL_TEMPLATES, getTemplatesByCategory } from "@/lib/carousel/templates";
+
+const LOGO_POSITIONS = [
+    { value: "top-left", label: "פינה עליונה שמאל", grid: "col-start-1 row-start-1" },
+    { value: "top-middle", label: "מרכז עליון", grid: "col-start-2 row-start-1" },
+    { value: "top-right", label: "פינה עליונה ימין", grid: "col-start-3 row-start-1" },
+    { value: "bottom-left", label: "פינה תחתונה שמאל", grid: "col-start-1 row-start-2" },
+    { value: "bottom-middle", label: "מרכז תחתון", grid: "col-start-2 row-start-2" },
+    { value: "bottom-right", label: "פינה תחתונה ימין", grid: "col-start-3 row-start-2" },
+] as const;
 
 const STYLES = [
     { value: "educational", label: "חינוכי", icon: "📚" },
@@ -37,40 +48,102 @@ const CATEGORIES = [
     { value: "dark", label: "כהה" },
     { value: "tech", label: "טכנולוגי" },
     { value: "office", label: "משרדי" },
+    { value: "abstract", label: "בניינים" },
 ];
 
 const SLIDE_COUNTS = [3, 4, 5, 6, 7, 8];
 
 export default function CarouselGenerationPage() {
-    // Form state
     const [topic, setTopic] = useState("");
     const [customSlides, setCustomSlides] = useState<string[]>([]);
-    const [isCustomMode, setIsCustomMode] = useState(false);
-    const [selectedTemplate, setSelectedTemplate] = useState<string>("T_02");
+    const [contentMode, setContentMode] = useState<"ai" | "custom" | "chat">("ai");
+    const [selectedTemplate, setSelectedTemplate] = useState("b1");
     const [slideCount, setSlideCount] = useState(5);
     const [style, setStyle] = useState("educational");
-    const [useBrand, setUseBrand] = useState(false);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [logoPosition, setLogoPosition] = useState<string>("top-right");
     const [categoryFilter, setCategoryFilter] = useState("all");
 
-    // Generation state
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState<string[]>([]);
     const [currentSlide, setCurrentSlide] = useState(0);
 
-    // Custom slides editing
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editText, setEditText] = useState("");
 
+    const [chatMessage, setChatMessage] = useState("");
+    const [chatLoading, setChatLoading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const filteredTemplates = getTemplatesByCategory(categoryFilter);
 
-    async function handleGenerate() {
-        if (!isCustomMode && !topic.trim()) {
-            toast.error("נא להזין נושא לקרוסלה");
+    async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            toast.error("נא להעלות קובץ תמונה (PNG, JPG)");
             return;
         }
+        setLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append("logo", file);
+            const res = await fetch("/api/upload/logo", {
+                method: "POST",
+                body: formData,
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "שגיאה בהעלאה");
+            }
+            const { url } = await res.json();
+            setLogoUrl(url);
+            toast.success("הלוגו הועלה בהצלחה");
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : "שגיאה בהעלאת הלוגו");
+        } finally {
+            setLoading(false);
+        }
+    }
 
-        if (isCustomMode && customSlides.length < 2) {
-            toast.error("נא להזין לפחות 2 שקופיות");
+    async function handleChatGenerate() {
+        if (!chatMessage.trim()) {
+            toast.error("נא להזין תוכן");
+            return;
+        }
+        setChatLoading(true);
+        try {
+            const res = await fetch("/api/generate/carousel-chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    message: chatMessage,
+                    slideCount,
+                    previousSlides: customSlides.length ? customSlides : undefined,
+                }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "שגיאה");
+            }
+            const { slides } = await res.json();
+            setCustomSlides(slides);
+            setContentMode("custom");
+            setChatMessage("");
+            toast.success("התוכן נוצר! ניתן לערוך לפני יצירת הקרוסלה");
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : "שגיאה ביצירת תוכן");
+        } finally {
+            setChatLoading(false);
+        }
+    }
+
+    async function handleGenerate() {
+        const slides = contentMode === "custom" ? customSlides : null;
+        const useTopic = contentMode === "ai" && topic.trim();
+
+        if (!useTopic && (!slides || slides.length < 2)) {
+            toast.error("נא להזין נושא או לפחות 2 שקופיות");
             return;
         }
 
@@ -83,12 +156,14 @@ export default function CarouselGenerationPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    topic: isCustomMode ? undefined : topic,
-                    slides: isCustomMode ? customSlides : undefined,
+                    topic: useTopic ? topic : undefined,
+                    slides: slides || undefined,
                     template_id: selectedTemplate,
-                    slide_count: isCustomMode ? customSlides.length : slideCount,
+                    slide_count: slides ? slides.length : slideCount,
                     style,
-                    use_brand: useBrand,
+                    use_brand: !!logoUrl,
+                    logo_url: logoUrl || undefined,
+                    logo_position: logoPosition,
                 }),
             });
 
@@ -98,12 +173,9 @@ export default function CarouselGenerationPage() {
             }
 
             const { jobId } = await response.json();
-
-            // Poll for result
             let attempts = 0;
             while (attempts < 60) {
                 await new Promise((r) => setTimeout(r, 2000));
-
                 const statusRes = await fetch(`/api/jobs/${jobId}`);
                 const status = await statusRes.json();
 
@@ -112,15 +184,11 @@ export default function CarouselGenerationPage() {
                     toast.success("הקרוסלה נוצרה בהצלחה! 🎨");
                     break;
                 }
-
-                if (status.status === "failed") {
-                    throw new Error(status.error);
-                }
-
+                if (status.status === "failed") throw new Error(status.error);
                 attempts++;
             }
-        } catch (err: any) {
-            toast.error(err.message);
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : "שגיאה");
         } finally {
             setLoading(false);
         }
@@ -128,7 +196,6 @@ export default function CarouselGenerationPage() {
 
     async function handleDownloadAll() {
         if (!results.length) return;
-
         for (let i = 0; i < results.length; i++) {
             try {
                 const response = await fetch(results[i]);
@@ -171,9 +238,13 @@ export default function CarouselGenerationPage() {
         setEditingIndex(null);
     }
 
+    const canGenerate =
+        (contentMode === "ai" && topic.trim()) ||
+        (contentMode === "custom" && customSlides.length >= 2) ||
+        (contentMode === "chat" && customSlides.length >= 2);
+
     return (
-        <div className="max-w-6xl mx-auto">
-            {/* Header */}
+        <div className="max-w-6xl mx-auto" dir="rtl">
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="h-12 w-12 bg-pink-100 rounded-xl flex items-center justify-center">
@@ -181,68 +252,133 @@ export default function CarouselGenerationPage() {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold">יצירת קרוסלה</h1>
-                        <p className="text-gray-600">
-                            צור קרוסלה מרהיבה לרשתות החברתיות
-                        </p>
+                        <p className="text-gray-600">צור קרוסלה מרהיבה עם הלוגו שלך</p>
                     </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Input Column */}
                 <div className="space-y-6">
+                    {/* לוגו */}
+                    <Card>
+                        <CardContent className="p-6">
+                            <Label className="text-base font-medium">העלאת לוגו</Label>
+                            <div className="mt-3 flex items-center gap-4">
+                                <div
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-pink-400 hover:bg-pink-50/50 transition-colors"
+                                >
+                                    {logoUrl ? (
+                                        <img
+                                            src={logoUrl}
+                                            alt="לוגו"
+                                            className="w-full h-full object-contain rounded-xl"
+                                        />
+                                    ) : (
+                                        <>
+                                            <Upload className="h-8 w-8 text-gray-400" />
+                                            <span className="text-xs text-gray-500 mt-1">לחץ להעלאה</span>
+                                        </>
+                                    )}
+                                </div>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleLogoUpload}
+                                />
+                                <div className="flex-1">
+                                    <p className="text-sm text-gray-500">PNG או JPG, עד 5MB</p>
+                                    {logoUrl && (
+                                        <button
+                                            onClick={() => setLogoUrl(null)}
+                                            className="text-sm text-red-500 hover:underline mt-1"
+                                        >
+                                            הסר לוגו
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {logoUrl && (
+                                <div className="mt-4">
+                                    <Label className="text-base font-medium">מיקום הלוגו</Label>
+                                    <div className="grid grid-cols-3 gap-2 mt-2">
+                                        {LOGO_POSITIONS.map((pos) => (
+                                            <button
+                                                key={pos.value}
+                                                onClick={() => setLogoPosition(pos.value)}
+                                                className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                    logoPosition === pos.value
+                                                        ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                        : "border-gray-200 hover:border-gray-300"
+                                                }`}
+                                            >
+                                                {pos.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* תוכן */}
                     <Card>
                         <CardContent className="p-6 space-y-6">
-                            {/* Mode Toggle */}
                             <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
                                 <button
-                                    onClick={() => setIsCustomMode(false)}
-                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${!isCustomMode
-                                            ? "bg-white shadow text-purple-700"
-                                            : "text-gray-600 hover:text-gray-900"
-                                        }`}
+                                    onClick={() => setContentMode("ai")}
+                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                                        contentMode === "ai" ? "bg-white shadow text-purple-700" : "text-gray-600"
+                                    }`}
                                 >
                                     <Sparkles className="inline-block w-4 h-4 ml-1" />
                                     יצירה עם AI
                                 </button>
                                 <button
-                                    onClick={() => setIsCustomMode(true)}
-                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${isCustomMode
-                                            ? "bg-white shadow text-purple-700"
-                                            : "text-gray-600 hover:text-gray-900"
-                                        }`}
+                                    onClick={() => setContentMode("chat")}
+                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                                        contentMode === "chat" ? "bg-white shadow text-purple-700" : "text-gray-600"
+                                    }`}
+                                >
+                                    <MessageSquare className="inline-block w-4 h-4 ml-1" />
+                                    סוכן תוכן
+                                </button>
+                                <button
+                                    onClick={() => setContentMode("custom")}
+                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                                        contentMode === "custom" ? "bg-white shadow text-purple-700" : "text-gray-600"
+                                    }`}
                                 >
                                     <Edit3 className="inline-block w-4 h-4 ml-1" />
                                     כתיבה ידנית
                                 </button>
                             </div>
 
-                            {/* AI Mode */}
-                            {!isCustomMode && (
+                            {contentMode === "ai" && (
                                 <>
                                     <div>
-                                        <Label className="text-base">נושא הקרוסלה</Label>
+                                        <Label>נושא הקרוסלה</Label>
                                         <Textarea
                                             value={topic}
                                             onChange={(e) => setTopic(e.target.value)}
-                                            placeholder="לדוגמה: 5 טיפים לחיסכון בהוצאות העסק, היתרונות של התחדשות עירונית..."
+                                            placeholder="לדוגמה: 5 טיפים לחיסכון, ליווי משפטי בהתחדשות עירונית..."
                                             rows={3}
                                             className="mt-2"
                                         />
                                     </div>
-
-                                    {/* Style */}
                                     <div>
-                                        <Label className="text-base">סגנון תוכן</Label>
+                                        <Label>סגנון תוכן</Label>
                                         <div className="grid grid-cols-2 gap-2 mt-2">
                                             {STYLES.map((s) => (
                                                 <button
                                                     key={s.value}
                                                     onClick={() => setStyle(s.value)}
-                                                    className={`p-3 rounded-lg border text-sm flex items-center gap-2 transition-colors ${style === s.value
-                                                            ? "border-purple-500 bg-purple-50 text-purple-700"
-                                                            : "border-gray-200 hover:border-gray-300"
-                                                        }`}
+                                                    className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${
+                                                        style === s.value ? "border-purple-500 bg-purple-50" : "border-gray-200"
+                                                    }`}
                                                 >
                                                     <span>{s.icon}</span>
                                                     <span>{s.label}</span>
@@ -250,21 +386,18 @@ export default function CarouselGenerationPage() {
                                             ))}
                                         </div>
                                     </div>
-
-                                    {/* Slide Count */}
                                     <div>
-                                        <Label className="text-base">מספר שקופיות</Label>
+                                        <Label>מספר שקופיות</Label>
                                         <div className="flex gap-2 mt-2">
-                                            {SLIDE_COUNTS.map((count) => (
+                                            {SLIDE_COUNTS.map((c) => (
                                                 <button
-                                                    key={count}
-                                                    onClick={() => setSlideCount(count)}
-                                                    className={`w-10 h-10 rounded-lg border text-sm font-medium transition-colors ${slideCount === count
-                                                            ? "border-purple-500 bg-purple-50 text-purple-700"
-                                                            : "border-gray-200 hover:border-gray-300"
-                                                        }`}
+                                                    key={c}
+                                                    onClick={() => setSlideCount(c)}
+                                                    className={`w-10 h-10 rounded-lg border text-sm font-medium ${
+                                                        slideCount === c ? "border-purple-500 bg-purple-50" : "border-gray-200"
+                                                    }`}
                                                 >
-                                                    {count}
+                                                    {c}
                                                 </button>
                                             ))}
                                         </div>
@@ -272,27 +405,64 @@ export default function CarouselGenerationPage() {
                                 </>
                             )}
 
-                            {/* Custom Mode */}
-                            {isCustomMode && (
+                            {contentMode === "chat" && (
+                                <div>
+                                    <Label>שוחח עם סוכן התוכן</Label>
+                                    <p className="text-sm text-gray-500 mb-2">
+                                        תאר את התוכן הרצוי בעברית – הסוכן ייצור את השקופיות עבורך
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <Textarea
+                                            value={chatMessage}
+                                            onChange={(e) => setChatMessage(e.target.value)}
+                                            placeholder="למשל: צור קרוסלה על ליווי משפטי בהתחדשות עירונית, 5 שקופיות"
+                                            rows={2}
+                                            className="flex-1"
+                                        />
+                                        <Button
+                                            onClick={handleChatGenerate}
+                                            disabled={chatLoading || !chatMessage.trim()}
+                                        >
+                                            {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                        </Button>
+                                    </div>
+                                    <div className="mt-2">
+                                        <Label>מספר שקופיות</Label>
+                                        <div className="flex gap-2 mt-1">
+                                            {SLIDE_COUNTS.map((c) => (
+                                                <button
+                                                    key={c}
+                                                    onClick={() => setSlideCount(c)}
+                                                    className={`w-8 h-8 rounded border text-xs ${
+                                                        slideCount === c ? "border-purple-500 bg-purple-50" : "border-gray-200"
+                                                    }`}
+                                                >
+                                                    {c}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {customSlides.length > 0 && (
+                                        <p className="text-sm text-green-600 mt-2">
+                                            נוצרו {customSlides.length} שקופיות – ניתן לערוך למטה
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {(contentMode === "custom" || (contentMode === "chat" && customSlides.length > 0)) && (
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
-                                        <Label className="text-base">שקופיות ({customSlides.length})</Label>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={addSlide}
-                                        >
+                                        <Label>שקופיות ({customSlides.length})</Label>
+                                        <Button size="sm" variant="outline" onClick={addSlide}>
                                             <Plus className="w-4 h-4 ml-1" />
                                             הוסף שקופית
                                         </Button>
                                     </div>
-                                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                    <div className="space-y-2 max-h-[280px] overflow-y-auto">
                                         {customSlides.map((slide, index) => (
-                                            <div
-                                                key={index}
-                                                className="flex items-start gap-2 bg-gray-50 rounded-lg p-2"
-                                            >
-                                                <span className="w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 mt-1">
+                                            <div key={index} className="flex items-start gap-2 bg-gray-50 rounded-lg p-2">
+                                                <span className="w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-1">
                                                     {index + 1}
                                                 </span>
                                                 {editingIndex === index ? (
@@ -305,19 +475,10 @@ export default function CarouselGenerationPage() {
                                                             autoFocus
                                                         />
                                                         <div className="flex flex-col gap-1">
-                                                            <button
-                                                                onClick={() => saveSlide(index)}
-                                                                className="p-1.5 bg-green-100 text-green-600 rounded hover:bg-green-200"
-                                                            >
+                                                            <button onClick={() => saveSlide(index)} className="p-1.5 bg-green-100 text-green-600 rounded hover:bg-green-200">
                                                                 <Check className="w-4 h-4" />
                                                             </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingIndex(null);
-                                                                    if (!slide) removeSlide(index);
-                                                                }}
-                                                                className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                                                            >
+                                                            <button onClick={() => { setEditingIndex(null); if (!slide) removeSlide(index); }} className="p-1.5 bg-gray-100 rounded hover:bg-gray-200">
                                                                 <X className="w-4 h-4" />
                                                             </button>
                                                         </div>
@@ -326,19 +487,10 @@ export default function CarouselGenerationPage() {
                                                     <>
                                                         <p className="flex-1 text-sm py-1">{slide || "שקופית ריקה"}</p>
                                                         <div className="flex gap-1">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingIndex(index);
-                                                                    setEditText(slide);
-                                                                }}
-                                                                className="p-1.5 text-gray-400 hover:text-gray-600"
-                                                            >
+                                                            <button onClick={() => { setEditingIndex(index); setEditText(slide); }} className="p-1.5 text-gray-400 hover:text-gray-600">
                                                                 <Edit3 className="w-4 h-4" />
                                                             </button>
-                                                            <button
-                                                                onClick={() => removeSlide(index)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-500"
-                                                            >
+                                                            <button onClick={() => removeSlide(index)} className="p-1.5 text-gray-400 hover:text-red-500">
                                                                 <Trash2 className="w-4 h-4" />
                                                             </button>
                                                         </div>
@@ -346,28 +498,19 @@ export default function CarouselGenerationPage() {
                                                 )}
                                             </div>
                                         ))}
-                                        {customSlides.length === 0 && (
-                                            <div className="text-center py-8 text-gray-400">
-                                                <p>לחץ על "הוסף שקופית" כדי להתחיל</p>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             )}
 
-                            {/* Template Selection */}
                             <div>
-                                <div className="flex items-center justify-between mb-2">
-                                    <Label className="text-base">תבנית עיצוב</Label>
+                                <div className="flex justify-between mb-2">
+                                    <Label>תבנית עיצוב</Label>
                                     <div className="flex gap-1">
                                         {CATEGORIES.map((cat) => (
                                             <button
                                                 key={cat.value}
                                                 onClick={() => setCategoryFilter(cat.value)}
-                                                className={`px-2 py-1 text-xs rounded transition-colors ${categoryFilter === cat.value
-                                                        ? "bg-purple-100 text-purple-700"
-                                                        : "text-gray-500 hover:bg-gray-100"
-                                                    }`}
+                                                className={`px-2 py-1 text-xs rounded ${categoryFilter === cat.value ? "bg-purple-100 text-purple-700" : "text-gray-500"}`}
                                             >
                                                 {cat.label}
                                             </button>
@@ -379,47 +522,28 @@ export default function CarouselGenerationPage() {
                                         <button
                                             key={template.id}
                                             onClick={() => setSelectedTemplate(template.id)}
-                                            className={`relative aspect-[4/5] rounded-lg overflow-hidden border-2 transition-all ${selectedTemplate === template.id
-                                                    ? "border-purple-500 ring-2 ring-purple-200"
-                                                    : "border-transparent hover:border-gray-300"
-                                                }`}
+                                            className={`relative aspect-[4/5] rounded-lg overflow-hidden border-2 ${
+                                                selectedTemplate === template.id ? "border-purple-500 ring-2 ring-purple-200" : "border-transparent"
+                                            }`}
                                         >
                                             <img
                                                 src={`/carousel-templates/${template.file}`}
                                                 alt={template.style}
                                                 className="w-full h-full object-cover"
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).src = "/placeholder-template.jpg";
-                                                }}
                                             />
                                             {selectedTemplate === template.id && (
                                                 <div className="absolute inset-0 bg-purple-500/20 flex items-center justify-center">
-                                                    <Check className="w-6 h-6 text-white drop-shadow-lg" />
+                                                    <Check className="w-6 h-6 text-white" />
                                                 </div>
                                             )}
                                         </button>
                                     ))}
                                 </div>
-                                <p className="text-xs text-gray-500 mt-2">
-                                    {CAROUSEL_TEMPLATES[selectedTemplate]?.style}
-                                </p>
                             </div>
 
-                            {/* Brand Toggle */}
-                            <label className="flex items-center gap-3 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={useBrand}
-                                    onChange={(e) => setUseBrand(e.target.checked)}
-                                    className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                <span className="text-sm">הוסף לוגו ומיתוג</span>
-                            </label>
-
-                            {/* Generate Button */}
                             <Button
                                 onClick={handleGenerate}
-                                disabled={loading || (!isCustomMode && !topic.trim()) || (isCustomMode && customSlides.length < 2)}
+                                disabled={loading || !canGenerate}
                                 className="w-full"
                                 size="lg"
                             >
@@ -437,111 +561,83 @@ export default function CarouselGenerationPage() {
                             </Button>
 
                             <p className="text-sm text-pink-600 text-center">
-                                עלות: {isCustomMode ? customSlides.length : slideCount} קרדיטים קרוסלה
+                                עלות: {contentMode === "custom" || contentMode === "chat" ? customSlides.length : slideCount} קרדיטים
                             </p>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Result Column */}
-                <div>
-                    <Card className="h-full">
-                        <CardContent className="p-6 h-full flex flex-col">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-medium">תצוגה מקדימה</h3>
-                                {results.length > 0 && (
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={handleDownloadAll}
-                                    >
-                                        <Download className="w-4 h-4 ml-1" />
-                                        הורד הכל
-                                    </Button>
-                                )}
+                <Card className="h-fit">
+                    <CardContent className="p-6">
+                        <div className="flex justify-between mb-4">
+                            <h3 className="text-lg font-medium">תצוגה מקדימה</h3>
+                            {results.length > 0 && (
+                                <Button size="sm" variant="outline" onClick={handleDownloadAll}>
+                                    <Download className="w-4 h-4 ml-1" />
+                                    הורד הכל
+                                </Button>
+                            )}
+                        </div>
+
+                        {loading && (
+                            <div className="bg-gray-100 rounded-lg flex items-center justify-center min-h-[500px]">
+                                <div className="text-center">
+                                    <Loader2 className="h-12 w-12 animate-spin text-pink-500 mx-auto mb-4" />
+                                    <p className="text-gray-600">יוצר את הקרוסלה...</p>
+                                </div>
                             </div>
+                        )}
 
-                            {loading && (
-                                <div className="flex-1 bg-gray-100 rounded-lg flex items-center justify-center min-h-[500px]">
-                                    <div className="text-center">
-                                        <Loader2 className="h-12 w-12 animate-spin text-pink-500 mx-auto mb-4" />
-                                        <p className="text-gray-600">יוצר את הקרוסלה שלך...</p>
-                                        <p className="text-sm text-gray-400 mt-1">
-                                            זה יכול לקחת עד דקה
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {results.length > 0 && !loading && (
-                                <div className="space-y-4">
-                                    {/* Main Preview */}
-                                    <div className="relative">
-                                        <img
-                                            src={results[currentSlide]}
-                                            alt={`Slide ${currentSlide + 1}`}
-                                            className="w-full rounded-lg border"
-                                        />
-
-                                        {/* Navigation Arrows */}
-                                        {results.length > 1 && (
-                                            <>
-                                                <button
-                                                    onClick={() => setCurrentSlide((prev) => (prev + 1) % results.length)}
-                                                    disabled={currentSlide === results.length - 1}
-                                                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg hover:bg-white disabled:opacity-50"
-                                                >
-                                                    <ChevronLeft className="w-5 h-5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => setCurrentSlide((prev) => (prev - 1 + results.length) % results.length)}
-                                                    disabled={currentSlide === 0}
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg hover:bg-white disabled:opacity-50"
-                                                >
-                                                    <ChevronRight className="w-5 h-5" />
-                                                </button>
-                                            </>
-                                        )}
-
-                                        {/* Slide Counter */}
-                                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1 rounded-full text-sm">
-                                            {currentSlide + 1} / {results.length}
-                                        </div>
-                                    </div>
-
-                                    {/* Thumbnails */}
-                                    <div className="flex gap-2 overflow-x-auto pb-2">
-                                        {results.map((url, index) => (
+                        {results.length > 0 && !loading && (
+                            <div className="space-y-4">
+                                <div className="relative">
+                                    <img src={results[currentSlide]} alt={`Slide ${currentSlide + 1}`} className="w-full rounded-lg border" />
+                                    {results.length > 1 && (
+                                        <>
                                             <button
-                                                key={index}
-                                                onClick={() => setCurrentSlide(index)}
-                                                className={`flex-shrink-0 w-16 h-20 rounded-lg overflow-hidden border-2 transition-all ${currentSlide === index
-                                                        ? "border-purple-500"
-                                                        : "border-transparent opacity-60 hover:opacity-100"
-                                                    }`}
+                                                onClick={() => setCurrentSlide((p) => (p + 1) % results.length)}
+                                                className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg"
                                             >
-                                                <img
-                                                    src={url}
-                                                    alt={`Thumbnail ${index + 1}`}
-                                                    className="w-full h-full object-cover"
-                                                />
+                                                <ChevronLeft className="w-5 h-5" />
                                             </button>
-                                        ))}
+                                            <button
+                                                onClick={() => setCurrentSlide((p) => (p - 1 + results.length) % results.length)}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg"
+                                            >
+                                                <ChevronRight className="w-5 h-5" />
+                                            </button>
+                                        </>
+                                    )}
+                                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1 rounded-full text-sm">
+                                        {currentSlide + 1} / {results.length}
                                     </div>
                                 </div>
-                            )}
+                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {results.map((url, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => setCurrentSlide(i)}
+                                            className={`flex-shrink-0 w-16 h-20 rounded-lg overflow-hidden border-2 ${
+                                                currentSlide === i ? "border-purple-500" : "border-transparent opacity-60"
+                                            }`}
+                                        >
+                                            <img src={url} alt="" className="w-full h-full object-cover" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
-                            {!loading && results.length === 0 && (
-                                <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center border-2 border-dashed min-h-[500px]">
-                                    <div className="text-center text-gray-400">
-                                        <LayoutGrid className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                                        <p>הקרוסלה תופיע כאן</p>
-                                    </div>
+                        {!loading && results.length === 0 && (
+                            <div className="bg-gray-50 rounded-lg flex items-center justify-center border-2 border-dashed min-h-[500px]">
+                                <div className="text-center text-gray-400">
+                                    <LayoutGrid className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                    <p>הקרוסלה תופיע כאן</p>
                                 </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );

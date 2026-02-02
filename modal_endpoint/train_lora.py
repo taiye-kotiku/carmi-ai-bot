@@ -21,7 +21,6 @@ image = (
         "Pillow==10.1.0",
         "requests",
         "peft==0.7.1",
-        "bitsandbytes==0.41.3",
     )
 )
 
@@ -67,26 +66,23 @@ def train_lora(
         for i, url in enumerate(image_urls):
             response = requests.get(url, timeout=30)
             img = Image.open(BytesIO(response.content)).convert("RGB")
-            # Resize to 512x512 for memory efficiency
             img = img.resize((512, 512), Image.Resampling.LANCZOS)
             img.save(images_dir / f"image_{i:03d}.png")
             print(f"   ✓ Image {i+1}/{len(image_urls)}")
         
-        # Load SD 1.5 instead of SDXL (much lighter, fits in A10G)
         print("\n🔧 Loading Stable Diffusion model...")
         from diffusers import StableDiffusionPipeline, DDPMScheduler
         
         model_id = "runwayml/stable-diffusion-v1-5"
         
+        # Load in float32 for stable training
         pipe = StableDiffusionPipeline.from_pretrained(
             model_id,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,  # Changed to float32
             safety_checker=None,
         )
         pipe = pipe.to("cuda")
-        pipe.enable_attention_slicing()
         
-        # Get components
         vae = pipe.vae
         unet = pipe.unet
         text_encoder = pipe.text_encoder
@@ -100,14 +96,13 @@ def train_lora(
             r=8,
             lora_alpha=16,
             target_modules=["to_q", "to_v", "to_k", "to_out.0"],
-            lora_dropout=0.05,
+            lora_dropout=0.0,  # Reduced dropout
         )
         
         unet.requires_grad_(False)
         unet = get_peft_model(unet, lora_config)
         unet.print_trainable_parameters()
         
-        # Freeze VAE and text encoder
         vae.requires_grad_(False)
         text_encoder.requires_grad_(False)
         
@@ -120,13 +115,14 @@ def train_lora(
             transforms.Normalize([0.5], [0.5]),
         ])
         
-        # Load and encode images once
+        # Load and encode images
         print("\n🖼️ Encoding training images...")
         latents_list = []
         
+        vae.eval()
         for img_path in sorted(images_dir.glob("*.png")):
             img = Image.open(img_path).convert("RGB")
-            img_tensor = transform(img).unsqueeze(0).to("cuda", dtype=torch.float16)
+            img_tensor = transform(img).unsqueeze(0).to("cuda", dtype=torch.float32)
             
             with torch.no_grad():
                 latent = vae.encode(img_tensor).latent_dist.sample()
@@ -136,7 +132,6 @@ def train_lora(
         training_latents = torch.cat(latents_list, dim=0)
         print(f"   ✓ Encoded {len(latents_list)} images to latent space")
         
-        # Clear some memory
         del latents_list
         gc.collect()
         torch.cuda.empty_cache()
@@ -154,11 +149,12 @@ def train_lora(
         with torch.no_grad():
             text_embeddings = text_encoder(text_input.input_ids)[0]
         
-        # Training setup
+        # Training setup - lower learning rate for stability
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, unet.parameters()),
-            lr=1e-4,
-            weight_decay=0.01
+            lr=5e-5,  # Lower learning rate
+            weight_decay=0.01,
+            eps=1e-8
         )
         
         num_steps = 500
@@ -166,11 +162,12 @@ def train_lora(
         
         print(f"\n🔧 Training LoRA ({num_steps} steps)...")
         
+        successful_steps = 0
         for step in range(num_steps):
             optimizer.zero_grad()
             
             # Get random training latent
-            idx = step % len(training_latents)
+            idx = torch.randint(0, len(training_latents), (1,)).item()
             latents = training_latents[idx:idx+1]
             
             # Sample noise
@@ -203,8 +200,12 @@ def train_lora(
             torch.nn.utils.clip_grad_norm_(unet.parameters(), 1.0)
             optimizer.step()
             
+            successful_steps += 1
+            
             if step % 50 == 0:
                 print(f"   Step {step}/{num_steps}, Loss: {loss.item():.4f}")
+        
+        print(f"\n   ✓ Completed {successful_steps} successful training steps")
         
         # Save LoRA weights
         print("\n💾 Saving LoRA weights...")
@@ -212,9 +213,8 @@ def train_lora(
         lora_state_dict = {}
         for name, param in unet.named_parameters():
             if param.requires_grad:
-                # Clean up the name for compatibility
                 clean_name = name.replace("base_model.model.", "")
-                lora_state_dict[clean_name] = param.detach().cpu()
+                lora_state_dict[clean_name] = param.detach().cpu().half()  # Save as float16
         
         from safetensors.torch import save_file
         lora_path = output_dir / "lora.safetensors"
@@ -248,7 +248,6 @@ def train_lora(
         print(f"\n✅ Training complete!")
         print(f"   Trigger word: {trigger_word}")
         
-        # Success webhook
         requests.post(webhook_url, json={
             "character_id": character_id,
             "status": "ready",

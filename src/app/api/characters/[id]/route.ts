@@ -80,6 +80,19 @@ export async function PUT(
     }
 }
 
+
+// Add this after your PUT function:
+
+// PATCH - Update character (alias for PUT)
+export async function PATCH(
+    request: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    return PUT(request, { params });
+}
+
+
+
 // DELETE - Delete character
 export async function DELETE(
     request: Request,

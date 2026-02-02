@@ -10,6 +10,7 @@ image = (
         "numpy<2",
         "torch==2.1.2",
         "fastapi",
+        "scipy",
         "uvicorn",
         "torchvision==0.16.2",
         "diffusers==0.25.1",

@@ -8,6 +8,8 @@ image = (
     .apt_install("git", "libgl1-mesa-glx", "libglib2.0-0", "wget")
     .pip_install(
         "numpy<2",
+        "fastapi",
+        "uvicorn",
         "torch==2.1.2",
         "torchvision==0.16.2",
         "diffusers==0.25.1",

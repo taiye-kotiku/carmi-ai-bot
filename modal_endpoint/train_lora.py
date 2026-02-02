@@ -10,13 +10,14 @@ image = (
     modal.Image.debian_slim(python_version="3.10")
     .apt_install("git", "wget", "libgl1-mesa-glx", "libglib2.0-0")
     .pip_install(
+        "numpy<2",
         "fastapi",
         "uvicorn",
         "torch==2.1.2",
         "torchvision==0.16.2", 
         "diffusers==0.25.0",
         "transformers==4.36.2",
-        "huggingface_hub==0.21.4",
+        "huggingface_hub==0.20.3",
         "accelerate==0.25.0",
         "safetensors==0.4.1",
         "peft==0.7.1",

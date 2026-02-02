@@ -16,6 +16,7 @@ image = (
         "torchvision==0.16.2", 
         "diffusers==0.25.0",
         "transformers==4.36.2",
+        "huggingface_hub==0.21.4",
         "accelerate==0.25.0",
         "safetensors==0.4.1",
         "peft==0.7.1",

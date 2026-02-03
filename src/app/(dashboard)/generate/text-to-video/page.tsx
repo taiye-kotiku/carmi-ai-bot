@@ -1,173 +1,230 @@
-export const runtime = "nodejs";
-export const maxDuration = 300;
+"use client";
 
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, Download, Sparkles, Video } from "lucide-react";
 
-const apiKey = process.env.GOOGLE_AI_API_KEY!;
+export default function TextToVideoPage() {
+    const [prompt, setPrompt] = useState("");
+    const [duration, setDuration] = useState<4 | 8>(8);
+    const [aspectRatio, setAspectRatio] = useState("16:9");
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [result, setResult] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-export async function POST(request: NextRequest) {
-    try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+    const handleGenerate = async () => {
+        if (!prompt.trim()) return;
 
-        if (!user) {
-            return NextResponse.json(
-                { error: "יש להתחבר כדי ליצור וידאו" },
-                { status: 401 }
-            );
-        }
+        setIsGenerating(true);
+        setProgress(0);
+        setError(null);
+        setResult(null);
 
-        const body = await request.json();
-        const prompt = body.prompt;
+        const progressInterval = setInterval(() => {
+            setProgress((prev) => Math.min(prev + 1, 95));
+        }, 2000);
 
-        // Veo only supports 16:9 and 9:16
-        const aspectRatio = body.aspectRatio === "9:16" ? "9:16" : "16:9";
-
-        // Veo only accepts 4 or 8 seconds
-        const duration = body.duration === 4 ? 4 : 8;
-
-        if (!prompt) {
-            return NextResponse.json(
-                { error: "נא להזין תיאור לוידאו" },
-                { status: 400 }
-            );
-        }
-
-        console.log("Veo request:", { prompt, aspectRatio, duration });
-
-        // Start video generation
-        const startResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
-            {
+        try {
+            const response = await fetch("/api/generate/text-to-video", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    instances: [{ prompt }],
-                    parameters: {
-                        aspectRatio,
-                        durationSeconds: duration,
-                        sampleCount: 1,
-                    },
-                }),
-            }
-        );
-
-        if (!startResponse.ok) {
-            const errorText = await startResponse.text();
-            console.error("Veo start error:", errorText);
-            return NextResponse.json(
-                { error: "יצירת הוידאו נכשלה" },
-                { status: 400 }
-            );
-        }
-
-        const operation = await startResponse.json();
-        console.log("Operation started:", operation.name);
-
-        // Poll for completion
-        const googleVideoUrl = await pollForVideo(operation.name);
-        console.log("Google video URL:", googleVideoUrl);
-
-        // Download the video with API key authentication
-        const videoResponse = await fetch(`${googleVideoUrl}&key=${apiKey}`);
-
-        if (!videoResponse.ok) {
-            // Try alternate URL format
-            const altUrl = googleVideoUrl.includes('?')
-                ? `${googleVideoUrl}&key=${apiKey}`
-                : `${googleVideoUrl}?key=${apiKey}`;
-
-            const altResponse = await fetch(altUrl);
-            if (!altResponse.ok) {
-                throw new Error("Failed to download video from Google");
-            }
-        }
-
-        const videoBuffer = await videoResponse.arrayBuffer();
-        const videoSize = videoBuffer.byteLength;
-
-        console.log("Downloaded video size:", videoSize);
-
-        if (videoSize < 10000) {
-            // Video too small, probably an error
-            throw new Error("Video file is invalid or too small");
-        }
-
-        // Upload to Supabase Storage
-        const fileName = `videos/${user.id}/${Date.now()}.mp4`;
-
-        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-            .from("generations")
-            .upload(fileName, videoBuffer, {
-                contentType: "video/mp4",
-                upsert: true,
+                body: JSON.stringify({ prompt, duration, aspectRatio }),
             });
 
-        if (uploadError) {
-            console.error("Upload error:", uploadError);
-            throw new Error("Failed to upload video");
-        }
+            const data = await response.json();
 
-        // Get public URL
-        const { data: { publicUrl } } = supabaseAdmin.storage
-            .from("generations")
-            .getPublicUrl(fileName);
-
-        console.log("Public URL:", publicUrl);
-
-        return NextResponse.json({
-            success: true,
-            videoUrl: publicUrl,
-        });
-    } catch (error: any) {
-        console.error("Video error:", error);
-        return NextResponse.json(
-            { error: error.message || "יצירת הוידאו נכשלה" },
-            { status: 500 }
-        );
-    }
-}
-
-async function pollForVideo(operationName: string): Promise<string> {
-    const maxAttempts = 120;
-
-    for (let i = 0; i < maxAttempts; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${process.env.GOOGLE_AI_API_KEY}`
-        );
-
-        if (!response.ok) {
-            console.log("Poll response not ok:", response.status);
-            continue;
-        }
-
-        const data = await response.json();
-        console.log("Poll response:", JSON.stringify(data).slice(0, 500));
-
-        if (data.done) {
-            if (data.error) {
-                throw new Error(data.error.message || "Video generation failed");
+            if (!response.ok) {
+                throw new Error(data.error || "שגיאה ביצירת הסרטון");
             }
 
-            // Try multiple paths to find the video URL
-            const videoUri =
-                data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
-                data.response?.generatedSamples?.[0]?.video?.uri ||
-                data.response?.videos?.[0]?.uri ||
-                data.result?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
-
-            if (videoUri) {
-                return videoUri;
-            }
-
-            console.error("Full response:", JSON.stringify(data));
-            throw new Error("No video URL in response");
+            setProgress(100);
+            setResult(data.videoUrl);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            clearInterval(progressInterval);
+            setIsGenerating(false);
         }
-    }
+    };
 
-    throw new Error("Video generation timed out");
+    const handleDownload = async () => {
+        if (!result) return;
+
+        try {
+            const response = await fetch(result);
+            const blob = await response.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = `video-${Date.now()}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+        } catch (err) {
+            // Direct download fallback
+            window.open(result, "_blank");
+        }
+    };
+
+    return (
+        <div className="container mx-auto py-8 px-4" dir="rtl">
+            <div className="max-w-4xl mx-auto">
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+                        <Video className="h-8 w-8 text-blue-500" />
+                        יצירת סרטון מטקסט
+                    </h1>
+                    <p className="text-gray-600">
+                        תאר את הסרטון שברצונך ליצור ו-AI ייצור אותו עבורך
+                    </p>
+                </div>
+
+                <Card className="mb-6">
+                    <CardHeader>
+                        <CardTitle>תיאור הסרטון</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Textarea
+                            placeholder="תאר את הסרטון שברצונך ליצור... לדוגמה: גלים שוברים על חוף סלעי בשקיעה, מבט מלמעלה"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            rows={4}
+                            className="text-right"
+                            disabled={isGenerating}
+                        />
+
+                        {/* Duration Selector */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700">
+                                משך הסרטון
+                            </label>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setDuration(4)}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 4
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    4 שניות
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDuration(8)}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 8
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    8 שניות
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Aspect Ratio Selector - Only 16:9 and 9:16 for Veo */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700">
+                                יחס תצוגה
+                            </label>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setAspectRatio("16:9")}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "16:9"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    16:9 (רוחבי)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAspectRatio("9:16")}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "9:16"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    9:16 (אנכי)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
+                            💡 יצירת סרטון עולה 3 קרדיטים ואורכת כ-2-3 דקות
+                        </div>
+
+                        <Button
+                            onClick={handleGenerate}
+                            disabled={!prompt.trim() || isGenerating}
+                            className="w-full"
+                            size="lg"
+                        >
+                            {isGenerating ? (
+                                <>
+                                    <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                                    יוצר סרטון...
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="ml-2 h-5 w-5" />
+                                    צור סרטון (3 קרדיטים)
+                                </>
+                            )}
+                        </Button>
+
+                        {isGenerating && (
+                            <div className="space-y-2">
+                                <Progress value={progress} />
+                                <p className="text-sm text-center text-gray-500">
+                                    {progress}% הושלם - יצירת סרטון לוקחת זמן, אנא המתן
+                                </p>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+                                {error}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {result && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>הסרטון שלך מוכן!</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <video
+                                src={result}
+                                controls
+                                className="w-full rounded-lg shadow-lg"
+                                autoPlay
+                                loop
+                            />
+                            <Button
+                                onClick={handleDownload}
+                                variant="secondary"
+                                className="w-full"
+                            >
+                                <Download className="ml-2 h-5 w-5" />
+                                הורד סרטון
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+        </div>
+    );
 }

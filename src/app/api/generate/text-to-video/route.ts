@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Ensure duration is valid (Veo accepts 4-8 seconds only!)
+        const validDuration = Math.min(8, Math.max(4, Number(duration) || 5));
+
         // Start video generation with Veo 3.0 Fast
         const startResponse = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
                     instances: [{ prompt }],
                     parameters: {
                         aspectRatio: aspectRatio,
-                        durationSeconds: duration,
+                        durationSeconds: validDuration, // Must be 4-8
                         sampleCount: 1,
                     },
                 }),
@@ -45,18 +48,13 @@ export async function POST(request: NextRequest) {
         );
 
         if (!startResponse.ok) {
-            const errorText = await startResponse.text();
-            console.error("Veo start error:", errorText);
+            const errorData = await startResponse.json().catch(() => ({}));
+            console.error("Veo start error:", JSON.stringify(errorData));
 
-            // Check if it's a billing/quota issue
-            if (startResponse.status === 402 || startResponse.status === 429) {
-                return NextResponse.json(
-                    { error: "חריגה ממכסת השימוש. נסה שוב מאוחר יותר." },
-                    { status: 429 }
-                );
-            }
-
-            throw new Error(`Veo error: ${startResponse.status}`);
+            return NextResponse.json(
+                { error: errorData.error?.message || "יצירת הוידאו נכשלה" },
+                { status: startResponse.status }
+            );
         }
 
         const operation = await startResponse.json();
@@ -71,14 +69,14 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error("Video generation error:", error);
         return NextResponse.json(
-            { error: "יצירת הוידאו נכשלה. נסה שוב." },
+            { error: error.message || "יצירת הוידאו נכשלה. נסה שוב." },
             { status: 500 }
         );
     }
 }
 
 async function pollForVideo(operationName: string): Promise<string> {
-    const maxAttempts = 120; // 10 minutes max (5s * 120)
+    const maxAttempts = 120;
 
     for (let i = 0; i < maxAttempts; i++) {
         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -87,10 +85,7 @@ async function pollForVideo(operationName: string): Promise<string> {
             `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
         );
 
-        if (!response.ok) {
-            console.error("Poll error:", await response.text());
-            continue;
-        }
+        if (!response.ok) continue;
 
         const data = await response.json();
 
@@ -99,22 +94,17 @@ async function pollForVideo(operationName: string): Promise<string> {
                 throw new Error(data.error.message || "Video generation failed");
             }
 
-            // Extract video URL from response
             const videoUri =
                 data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
                 data.response?.videos?.[0]?.uri ||
-                data.response?.videoUri ||
-                data.result?.videos?.[0]?.uri;
+                data.response?.videoUri;
 
             if (!videoUri) {
-                console.error("No video URI in response:", JSON.stringify(data));
                 throw new Error("No video URL in response");
             }
 
             return videoUri;
         }
-
-        console.log(`Video generation progress: ${data.metadata?.progress || 'processing'}...`);
     }
 
     throw new Error("Video generation timed out");

@@ -10,7 +10,7 @@ const heebo = Heebo({
 
 export const metadata: Metadata = {
   title: "קוסם | פלטפורמה מבוססת AI ליצירת תוכן",
-  description: "צור תמונות, סרטונים, קרוסלות – פלטפורמה אינטרנטית מבוססת בינה מלאכותית ליצירת תוכן ויזואלי",
+  description: "צור תמונות, סרטונים, קרוסלות",
 };
 
 export default function RootLayout({
@@ -19,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="he" dir="rtl">
-      <body className={heebo.className}>
+    <html lang="he" dir="rtl" suppressHydrationWarning>
+      <body className={heebo.className} suppressHydrationWarning>
         {children}
         <Toaster position="top-center" richColors />
       </body>

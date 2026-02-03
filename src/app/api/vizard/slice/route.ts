@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 const VIZARD_API_KEY = process.env.VIZARD_API_KEY!;
+const VIZARD_BASE_URL = "https://elb-api.vizard.ai/hvizard-server-front/open-api/v1";
 
 export async function POST(request: NextRequest) {
     try {
@@ -15,7 +16,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { videoUrl, language = "he" } = await request.json();
+        const {
+            videoUrl,
+            videoType = 1,  // 1=remote file, 2=YouTube, etc.
+            language = "auto",
+            preferLength = [0],  // 0=auto, 1=<30s, 2=30-60s, 3=60-90s, 4=90s-3min
+            ext = "mp4"
+        } = await request.json();
 
         if (!videoUrl) {
             return NextResponse.json(
@@ -24,35 +31,43 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Step 1: Create project with video
-        const createResponse = await fetch("https://api.vizard.ai/v2/project", {
+        // Create project with Vizard
+        const createBody: any = {
+            videoUrl,
+            videoType,
+            lang: language,
+            preferLength: Array.isArray(preferLength) ? preferLength : [preferLength],
+        };
+
+        // ext is required only for videoType 1 (remote file)
+        if (videoType === 1) {
+            createBody.ext = ext;
+        }
+
+        const createResponse = await fetch(`${VIZARD_BASE_URL}/project/create`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${VIZARD_API_KEY}`,
+                "VIZARDAI_API_KEY": VIZARD_API_KEY,
             },
-            body: JSON.stringify({
-                video_url: videoUrl,
-                language: language,
-                auto_clip: true, // Auto-generate clips
-            }),
+            body: JSON.stringify(createBody),
         });
 
         if (!createResponse.ok) {
-            const error = await createResponse.text();
-            console.error("Vizard create error:", error);
-            throw new Error("Failed to create Vizard project");
+            const errorText = await createResponse.text();
+            console.error("Vizard create error:", errorText);
+            return NextResponse.json(
+                { error: "יצירת הפרויקט נכשלה" },
+                { status: createResponse.status }
+            );
         }
 
         const project = await createResponse.json();
 
-        // Step 2: Poll for clips
-        const clips = await pollForClips(project.project_id);
-
         return NextResponse.json({
             success: true,
-            projectId: project.project_id,
-            clips,
+            projectId: project.projectId || project.data?.projectId,
+            message: "הפרויקט נוצר בהצלחה. הקליפים יהיו מוכנים בקרוב.",
         });
     } catch (error: any) {
         console.error("Vizard slice error:", error);
@@ -61,41 +76,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-}
-
-async function pollForClips(projectId: string): Promise<any[]> {
-    const maxAttempts = 60; // 5 minutes
-
-    for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-
-        const response = await fetch(`https://api.vizard.ai/v2/project/${projectId}`, {
-            headers: {
-                "Authorization": `Bearer ${VIZARD_API_KEY}`,
-            },
-        });
-
-        if (!response.ok) continue;
-
-        const data = await response.json();
-
-        if (data.status === "completed" && data.clips?.length > 0) {
-            return data.clips.map((clip: any) => ({
-                id: clip.clip_id,
-                title: clip.title,
-                startTime: clip.start_time,
-                endTime: clip.end_time,
-                duration: clip.duration,
-                downloadUrl: clip.download_url,
-                thumbnailUrl: clip.thumbnail_url,
-                transcript: clip.transcript,
-            }));
-        }
-
-        if (data.status === "failed") {
-            throw new Error("Vizard processing failed");
-        }
-    }
-
-    throw new Error("Vizard processing timed out");
 }

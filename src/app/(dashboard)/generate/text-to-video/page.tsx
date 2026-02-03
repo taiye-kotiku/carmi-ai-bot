@@ -9,6 +9,8 @@ import { Loader2, Download, Sparkles, Video } from "lucide-react";
 
 export default function TextToVideoPage() {
     const [prompt, setPrompt] = useState("");
+    const [duration, setDuration] = useState<4 | 8>(8);
+    const [aspectRatio, setAspectRatio] = useState("16:9");
     const [isGenerating, setIsGenerating] = useState(false);
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<string | null>(null);
@@ -22,40 +24,30 @@ export default function TextToVideoPage() {
         setError(null);
         setResult(null);
 
+        // Simulate progress while waiting
+        const progressInterval = setInterval(() => {
+            setProgress((prev) => Math.min(prev + 2, 90));
+        }, 3000);
+
         try {
             const response = await fetch("/api/generate/text-to-video", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({ prompt, duration, aspectRatio }),
             });
 
+            const data = await response.json();
+
             if (!response.ok) {
-                const data = await response.json();
                 throw new Error(data.error || "שגיאה ביצירת הסרטון");
             }
 
-            const { jobId } = await response.json();
-
-            // Poll for job status
-            const pollInterval = setInterval(async () => {
-                const jobResponse = await fetch(`/api/jobs/${jobId}`);
-                const job = await jobResponse.json();
-
-                setProgress(job.progress);
-
-                if (job.status === "completed") {
-                    clearInterval(pollInterval);
-                    setResult(job.result.videoUrl);
-                    setIsGenerating(false);
-                } else if (job.status === "failed") {
-                    clearInterval(pollInterval);
-                    setError(job.error || "שגיאה ביצירת הסרטון");
-                    setIsGenerating(false);
-                }
-            }, 2000);
-
+            setProgress(100);
+            setResult(data.videoUrl);
         } catch (err: any) {
             setError(err.message);
+        } finally {
+            clearInterval(progressInterval);
             setIsGenerating(false);
         }
     };
@@ -98,6 +90,79 @@ export default function TextToVideoPage() {
                             className="text-right"
                             disabled={isGenerating}
                         />
+
+                        {/* Duration Selector - Veo only supports 4 or 8 */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700">
+                                משך הסרטון
+                            </label>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setDuration(4)}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 4
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    4 שניות
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDuration(8)}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 8
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    8 שניות
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Aspect Ratio Selector */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700">
+                                יחס תצוגה
+                            </label>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setAspectRatio("16:9")}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "16:9"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    16:9 (רוחבי)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAspectRatio("9:16")}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "9:16"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    9:16 (אנכי)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAspectRatio("1:1")}
+                                    disabled={isGenerating}
+                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "1:1"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        }`}
+                                >
+                                    1:1 (ריבוע)
+                                </button>
+                            </div>
+                        </div>
 
                         <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
                             💡 יצירת סרטון עולה 3 קרדיטים ואורכת כ-2-3 דקות

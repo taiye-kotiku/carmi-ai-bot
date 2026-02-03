@@ -18,7 +18,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { prompt, aspectRatio = "16:9", duration = 5 } = await request.json();
+        const body = await request.json();
+        const prompt = body.prompt;
+        const aspectRatio = body.aspectRatio || "16:9";
+
+        // Veo ONLY accepts 4 or 8 seconds
+        const requestedDuration = Number(body.duration) || 8;
+        const duration = requestedDuration <= 5 ? 4 : 8;
 
         if (!prompt) {
             return NextResponse.json(
@@ -27,10 +33,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Ensure duration is valid (Veo accepts 4-8 seconds only!)
-        const validDuration = Math.min(8, Math.max(4, Number(duration) || 5));
-
-        // Start video generation with Veo 3.0 Fast
         const startResponse = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
             {
@@ -39,8 +41,8 @@ export async function POST(request: NextRequest) {
                 body: JSON.stringify({
                     instances: [{ prompt }],
                     parameters: {
-                        aspectRatio: aspectRatio,
-                        durationSeconds: validDuration, // Must be 4-8
+                        aspectRatio,
+                        durationSeconds: duration,
                         sampleCount: 1,
                     },
                 }),
@@ -48,41 +50,33 @@ export async function POST(request: NextRequest) {
         );
 
         if (!startResponse.ok) {
-            const errorData = await startResponse.json().catch(() => ({}));
-            console.error("Veo start error:", JSON.stringify(errorData));
-
+            const errorText = await startResponse.text();
+            console.error("Veo error:", errorText);
             return NextResponse.json(
-                { error: errorData.error?.message || "יצירת הוידאו נכשלה" },
-                { status: startResponse.status }
+                { error: "יצירת הוידאו נכשלה" },
+                { status: 400 }
             );
         }
 
         const operation = await startResponse.json();
-
-        // Poll for completion
         const videoUrl = await pollForVideo(operation.name);
 
-        return NextResponse.json({
-            success: true,
-            videoUrl,
-        });
+        return NextResponse.json({ success: true, videoUrl });
     } catch (error: any) {
-        console.error("Video generation error:", error);
+        console.error("Video error:", error);
         return NextResponse.json(
-            { error: error.message || "יצירת הוידאו נכשלה. נסה שוב." },
+            { error: error.message || "יצירת הוידאו נכשלה" },
             { status: 500 }
         );
     }
 }
 
 async function pollForVideo(operationName: string): Promise<string> {
-    const maxAttempts = 120;
-
-    for (let i = 0; i < maxAttempts; i++) {
+    for (let i = 0; i < 120; i++) {
         await new Promise(resolve => setTimeout(resolve, 5000));
 
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
+            `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${process.env.GOOGLE_AI_API_KEY}`
         );
 
         if (!response.ok) continue;
@@ -90,22 +84,15 @@ async function pollForVideo(operationName: string): Promise<string> {
         const data = await response.json();
 
         if (data.done) {
-            if (data.error) {
-                throw new Error(data.error.message || "Video generation failed");
-            }
+            if (data.error) throw new Error(data.error.message);
 
             const videoUri =
                 data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
-                data.response?.videos?.[0]?.uri ||
-                data.response?.videoUri;
+                data.response?.videos?.[0]?.uri;
 
-            if (!videoUri) {
-                throw new Error("No video URL in response");
-            }
-
-            return videoUri;
+            if (videoUri) return videoUri;
+            throw new Error("No video URL");
         }
     }
-
-    throw new Error("Video generation timed out");
+    throw new Error("Timeout");
 }

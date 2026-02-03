@@ -8,21 +8,15 @@ interface VizardOptions {
     maxClips?: number;
 }
 
-// Map clip length to Vizard preferLength values
 function getPreferLength(clipLength?: string): number[] {
     switch (clipLength) {
-        case "short":
-            return [1]; // <30s
-        case "medium":
-            return [2, 3]; // 30-90s
-        case "long":
-            return [4]; // 90s-3min
-        default:
-            return [0]; // auto
+        case "short": return [1];
+        case "medium": return [2, 3];
+        case "long": return [4];
+        default: return [0];
     }
 }
 
-// Detect video type from URL
 function detectVideoType(url: string): { videoType: number; ext?: string } {
     const lowerUrl = url.toLowerCase();
 
@@ -41,14 +35,13 @@ function detectVideoType(url: string): { videoType: number; ext?: string } {
     if (lowerUrl.includes("twitter.com") || lowerUrl.includes("x.com")) {
         return { videoType: 7 };
     }
-    if (lowerUrl.includes("facebook.com") || lowerUrl.includes("fb.com")) {
+    if (lowerUrl.includes("facebook.com")) {
         return { videoType: 11 };
     }
     if (lowerUrl.includes("linkedin.com")) {
         return { videoType: 12 };
     }
 
-    // Default: remote file
     const ext = lowerUrl.match(/\.(mp4|mov|avi|3gp)(\?|$)/)?.[1] || "mp4";
     return { videoType: 1, ext };
 }
@@ -57,6 +50,10 @@ export async function createProjectFromUrl(
     videoUrl: string,
     options: VizardOptions = {}
 ): Promise<string> {
+    if (!VIZARD_API_KEY) {
+        throw new Error("VIZARD_API_KEY not configured");
+    }
+
     const { videoType, ext } = detectVideoType(videoUrl);
 
     const body: any = {
@@ -66,12 +63,13 @@ export async function createProjectFromUrl(
         preferLength: getPreferLength(options.clipLength),
     };
 
-    // ext required only for videoType 1 (remote file)
     if (videoType === 1 && ext) {
         body.ext = ext;
     }
 
-    console.log("Vizard create request:", body);
+    console.log("=== VIZARD CREATE ===");
+    console.log("URL:", `${VIZARD_BASE_URL}/project/create`);
+    console.log("Body:", JSON.stringify(body, null, 2));
 
     const response = await fetch(`${VIZARD_BASE_URL}/project/create`, {
         method: "POST",
@@ -83,17 +81,28 @@ export async function createProjectFromUrl(
     });
 
     const responseText = await response.text();
-    console.log("Vizard create response:", responseText);
+    console.log("Response status:", response.status);
+    console.log("Response body:", responseText);
 
     if (!response.ok) {
-        throw new Error(`Vizard API error: ${responseText}`);
+        throw new Error(`Vizard error ${response.status}: ${responseText}`);
     }
 
     const data = JSON.parse(responseText);
-    const projectId = data.projectId || data.data?.projectId || data.project_id;
+
+    // Try different response structures
+    const projectId =
+        data.projectId ||
+        data.project_id ||
+        data.data?.projectId ||
+        data.data?.project_id ||
+        data.id;
+
+    console.log("Project ID:", projectId);
 
     if (!projectId) {
-        throw new Error("No project ID returned from Vizard");
+        console.error("Full response:", JSON.stringify(data, null, 2));
+        throw new Error("No project ID in response");
     }
 
     return projectId;
@@ -104,68 +113,102 @@ export async function createProjectFromFile(
     fileName: string,
     options: VizardOptions = {}
 ): Promise<string> {
-    // For file uploads, we need to use the upload endpoint
-    // First check if Vizard has a file upload endpoint, or if we need to
-    // upload to our storage first and then use the URL
-
-    // Based on docs, Vizard works with URLs, so we'll need the caller
-    // to upload the file first and provide a URL
-    throw new Error("Direct file upload not supported - please provide a URL");
+    throw new Error("Direct file upload not supported - upload to storage first");
 }
 
 export async function waitForProject(
     projectId: string,
     onProgress?: (progress: number) => Promise<void>
 ): Promise<any[]> {
-    const maxAttempts = 120; // 10 minutes
+    console.log("=== WAITING FOR PROJECT ===");
+    console.log("Project ID:", projectId);
+
+    const maxAttempts = 120;
 
     for (let i = 0; i < maxAttempts; i++) {
         await new Promise((r) => setTimeout(r, 5000));
 
         try {
-            const response = await fetch(`${VIZARD_BASE_URL}/project/${projectId}`, {
-                headers: {
-                    "VIZARDAI_API_KEY": VIZARD_API_KEY,
-                },
-            });
+            // Try different endpoint formats
+            const endpoints = [
+                `${VIZARD_BASE_URL}/project/${projectId}`,
+                `${VIZARD_BASE_URL}/project/status/${projectId}`,
+                `${VIZARD_BASE_URL}/project?projectId=${projectId}`,
+            ];
 
-            if (!response.ok) {
-                console.log(`Poll ${i}: status ${response.status}`);
+            let data: any = null;
+            let responseOk = false;
+
+            for (const endpoint of endpoints) {
+                if (responseOk) break;
+
+                console.log(`Poll ${i} - trying: ${endpoint}`);
+
+                const response = await fetch(endpoint, {
+                    headers: {
+                        "VIZARDAI_API_KEY": VIZARD_API_KEY,
+                    },
+                });
+
+                if (response.ok) {
+                    const text = await response.text();
+                    console.log(`Poll ${i} response:`, text.slice(0, 500));
+
+                    try {
+                        data = JSON.parse(text);
+                        responseOk = true;
+                    } catch (e) {
+                        console.log("Parse error:", e);
+                    }
+                }
+            }
+
+            if (!data) {
+                console.log(`Poll ${i}: No valid response`);
                 continue;
             }
 
-            const data = await response.json();
             const projectData = data.data || data;
+            const status = projectData.status || projectData.state;
+            const progress = projectData.progress || projectData.percent || 0;
 
-            console.log(`Poll ${i}: status=${projectData.status}, progress=${projectData.progress}`);
+            console.log(`Poll ${i}: status=${status}, progress=${progress}`);
 
-            // Update progress
-            if (onProgress && projectData.progress) {
-                await onProgress(projectData.progress);
+            if (onProgress) {
+                await onProgress(progress);
             }
 
-            // Check if completed
-            if (projectData.status === "completed" || projectData.status === "done") {
-                const clips = projectData.clips || projectData.videos || [];
+            // Check for completion
+            if (status === "completed" || status === "done" || status === "finished" || status === "success") {
+                const clips =
+                    projectData.clips ||
+                    projectData.videos ||
+                    projectData.results ||
+                    projectData.data?.clips ||
+                    [];
+
+                console.log("Clips found:", clips.length);
 
                 if (clips.length === 0) {
-                    throw new Error("No clips generated");
+                    // Maybe clips are in a different format
+                    console.log("Full projectData:", JSON.stringify(projectData, null, 2));
+                    throw new Error("No clips in completed project");
                 }
 
                 return clips.map((clip: any) => ({
-                    video_url: clip.video_url || clip.videoUrl || clip.url,
-                    thumbnail_url: clip.thumbnail_url || clip.thumbnailUrl || clip.thumbnail,
-                    title: clip.title || clip.name,
-                    duration: clip.duration,
-                    start_time: clip.start_time || clip.startTime,
-                    end_time: clip.end_time || clip.endTime,
-                    transcript: clip.transcript,
+                    video_url: clip.video_url || clip.videoUrl || clip.url || clip.video,
+                    thumbnail_url: clip.thumbnail_url || clip.thumbnailUrl || clip.thumbnail || clip.cover,
+                    title: clip.title || clip.name || clip.headline,
+                    duration: clip.duration || clip.length,
+                    start_time: clip.start_time || clip.startTime || clip.start,
+                    end_time: clip.end_time || clip.endTime || clip.end,
+                    transcript: clip.transcript || clip.text || clip.subtitle,
                     virality_score: clip.virality_score || clip.viralityScore || clip.score,
                 }));
             }
 
-            if (projectData.status === "failed" || projectData.status === "error") {
-                throw new Error(projectData.error || "Vizard processing failed");
+            if (status === "failed" || status === "error") {
+                throw new Error(projectData.error || projectData.message || "Processing failed");
             }
 
         } catch (error: any) {
@@ -176,25 +219,24 @@ export async function waitForProject(
         }
     }
 
-    throw new Error("Vizard processing timed out");
+    throw new Error("Processing timed out after 10 minutes");
 }
 
-export async function getProjectStatus(projectId: string): Promise<{
-    status: string;
-    progress: number;
-    clips?: any[];
-}> {
+export async function getProjectStatus(projectId: string) {
     const response = await fetch(`${VIZARD_BASE_URL}/project/${projectId}`, {
         headers: {
             "VIZARDAI_API_KEY": VIZARD_API_KEY,
         },
     });
 
+    const text = await response.text();
+    console.log("Status response:", text);
+
     if (!response.ok) {
-        throw new Error(`Failed to get project status: ${response.status}`);
+        throw new Error(`Status check failed: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = JSON.parse(text);
     const projectData = data.data || data;
 
     return {

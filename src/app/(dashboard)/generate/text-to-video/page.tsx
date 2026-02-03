@@ -35,15 +35,29 @@ export default function TextToVideoPage() {
                 body: JSON.stringify({ prompt, duration, aspectRatio }),
             });
 
-            const data = await response.json();
+            const text = await response.text();
+            console.log("Response text:", text);
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("Failed to parse response:", text);
+                throw new Error("תגובה לא תקינה מהשרת");
+            }
 
             if (!response.ok) {
                 throw new Error(data.error || "שגיאה ביצירת הסרטון");
             }
 
-            setProgress(100);
-            setResult(data.videoUrl);
+            if (data.videoUrl) {
+                setProgress(100);
+                setResult(data.videoUrl);
+            } else {
+                throw new Error("לא התקבל קישור לוידאו");
+            }
         } catch (err: any) {
+            console.error("Generate error:", err);
             setError(err.message);
         } finally {
             clearInterval(progressInterval);
@@ -109,8 +123,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setDuration(4)}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 4
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        ? "bg-blue-500 border-blue-500 text-white"
+                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     4 שניות
@@ -120,8 +134,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setDuration(8)}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 8
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        ? "bg-blue-500 border-blue-500 text-white"
+                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     8 שניות
@@ -140,8 +154,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setAspectRatio("16:9")}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "16:9"
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        ? "bg-blue-500 border-blue-500 text-white"
+                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     16:9 (רוחבי)
@@ -151,8 +165,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setAspectRatio("9:16")}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "9:16"
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                        ? "bg-blue-500 border-blue-500 text-white"
+                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     9:16 (אנכי)

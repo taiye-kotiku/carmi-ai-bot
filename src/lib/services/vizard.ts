@@ -61,6 +61,7 @@ export async function createProjectFromUrl(
         videoType,
         lang: options.language || "auto",
         preferLength: getPreferLength(options.clipLength),
+        maxClipNumber: options.maxClips || 10,
     };
 
     if (videoType === 1 && ext) {
@@ -68,7 +69,6 @@ export async function createProjectFromUrl(
     }
 
     console.log("=== VIZARD CREATE ===");
-    console.log("URL:", `${VIZARD_BASE_URL}/project/create`);
     console.log("Body:", JSON.stringify(body, null, 2));
 
     const response = await fetch(`${VIZARD_BASE_URL}/project/create`, {
@@ -81,30 +81,20 @@ export async function createProjectFromUrl(
     });
 
     const responseText = await response.text();
-    console.log("Response status:", response.status);
-    console.log("Response body:", responseText);
+    console.log("Create response:", responseText);
 
     if (!response.ok) {
-        throw new Error(`Vizard error ${response.status}: ${responseText}`);
+        throw new Error(`Vizard create error: ${responseText}`);
     }
 
     const data = JSON.parse(responseText);
-
-    // Try different response structures
-    const projectId =
-        data.projectId ||
-        data.project_id ||
-        data.data?.projectId ||
-        data.data?.project_id ||
-        data.id;
-
-    console.log("Project ID:", projectId);
+    const projectId = data.projectId || data.project_id || data.data?.projectId;
 
     if (!projectId) {
-        console.error("Full response:", JSON.stringify(data, null, 2));
-        throw new Error("No project ID in response");
+        throw new Error("No project ID returned");
     }
 
+    console.log("Project ID:", projectId);
     return projectId;
 }
 
@@ -120,128 +110,107 @@ export async function waitForProject(
     projectId: string,
     onProgress?: (progress: number) => Promise<void>
 ): Promise<any[]> {
-    console.log("=== WAITING FOR PROJECT ===");
-    console.log("Project ID:", projectId);
+    console.log("=== WAITING FOR PROJECT ===", projectId);
 
-    const maxAttempts = 120;
+    const maxAttempts = 120; // 10 minutes (5s * 120)
 
     for (let i = 0; i < maxAttempts; i++) {
-        await new Promise((r) => setTimeout(r, 5000));
+        // Wait 20 seconds between checks (like n8n workflow)
+        await new Promise((r) => setTimeout(r, 20000));
 
         try {
-            // Try different endpoint formats
-            const endpoints = [
-                `${VIZARD_BASE_URL}/project/${projectId}`,
-                `${VIZARD_BASE_URL}/project/status/${projectId}`,
-                `${VIZARD_BASE_URL}/project?projectId=${projectId}`,
-            ];
+            // Use the correct endpoint: /project/query/{projectId}
+            const queryUrl = `${VIZARD_BASE_URL}/project/query/${projectId}`;
+            console.log(`Poll ${i}: ${queryUrl}`);
 
-            let data: any = null;
-            let responseOk = false;
+            const response = await fetch(queryUrl, {
+                headers: {
+                    "VIZARDAI_API_KEY": VIZARD_API_KEY,
+                },
+            });
 
-            for (const endpoint of endpoints) {
-                if (responseOk) break;
+            const responseText = await response.text();
+            console.log(`Poll ${i} response:`, responseText.slice(0, 500));
 
-                console.log(`Poll ${i} - trying: ${endpoint}`);
-
-                const response = await fetch(endpoint, {
-                    headers: {
-                        "VIZARDAI_API_KEY": VIZARD_API_KEY,
-                    },
-                });
-
-                if (response.ok) {
-                    const text = await response.text();
-                    console.log(`Poll ${i} response:`, text.slice(0, 500));
-
-                    try {
-                        data = JSON.parse(text);
-                        responseOk = true;
-                    } catch (e) {
-                        console.log("Parse error:", e);
-                    }
-                }
-            }
-
-            if (!data) {
-                console.log(`Poll ${i}: No valid response`);
+            if (!response.ok) {
+                console.log(`Poll ${i}: HTTP error ${response.status}`);
                 continue;
             }
 
-            const projectData = data.data || data;
-            const status = projectData.status || projectData.state;
-            const progress = projectData.progress || projectData.percent || 0;
+            const data = JSON.parse(responseText);
+            const code = data.code;
 
-            console.log(`Poll ${i}: status=${status}, progress=${progress}`);
+            console.log(`Poll ${i}: code=${code}`);
 
+            // Update progress estimate
             if (onProgress) {
-                await onProgress(progress);
+                const estimatedProgress = Math.min(10 + (i * 2), 80);
+                await onProgress(estimatedProgress);
             }
 
-            // Check for completion
-            if (status === "completed" || status === "done" || status === "finished" || status === "success") {
-                const clips =
-                    projectData.clips ||
-                    projectData.videos ||
-                    projectData.results ||
-                    projectData.data?.clips ||
-                    [];
+            // Check response codes based on n8n workflow
+            if (code === 2000) {
+                // SUCCESS - videos are ready
+                console.log("=== COMPLETED ===");
+                const videos = data.videos || data.data?.videos || [];
 
-                console.log("Clips found:", clips.length);
-
-                if (clips.length === 0) {
-                    // Maybe clips are in a different format
-                    console.log("Full projectData:", JSON.stringify(projectData, null, 2));
-                    throw new Error("No clips in completed project");
+                if (videos.length === 0) {
+                    console.log("Full response:", JSON.stringify(data, null, 2));
+                    throw new Error("No videos in completed response");
                 }
 
-                return clips.map((clip: any) => ({
-                    video_url: clip.video_url || clip.videoUrl || clip.url || clip.video,
-                    thumbnail_url: clip.thumbnail_url || clip.thumbnailUrl || clip.thumbnail || clip.cover,
-                    title: clip.title || clip.name || clip.headline,
-                    duration: clip.duration || clip.length,
-                    start_time: clip.start_time || clip.startTime || clip.start,
-                    end_time: clip.end_time || clip.endTime || clip.end,
-                    transcript: clip.transcript || clip.text || clip.subtitle,
-                    virality_score: clip.virality_score || clip.viralityScore || clip.score,
+                console.log(`Found ${videos.length} videos`);
+
+                return videos.map((video: any) => ({
+                    video_url: video.videoUrl || video.video_url || video.url,
+                    thumbnail_url: video.coverUrl || video.thumbnail_url || video.cover,
+                    title: video.title || video.name,
+                    duration: video.duration,
+                    start_time: video.startTime || video.start_time,
+                    end_time: video.endTime || video.end_time,
+                    transcript: video.transcript || video.subtitle,
+                    virality_score: video.viralScore || video.virality_score || video.score,
                 }));
             }
 
-            if (status === "failed" || status === "error") {
-                throw new Error(projectData.error || projectData.message || "Processing failed");
+            if (code === 1000) {
+                // STILL PROCESSING - continue waiting
+                console.log(`Poll ${i}: Still processing...`);
+                continue;
             }
 
+            if (code === 4008) {
+                // ERROR
+                throw new Error(data.message || data.msg || "Vizard processing error (4008)");
+            }
+
+            // Unknown code - log and continue
+            console.log(`Poll ${i}: Unknown code ${code}, continuing...`);
+
         } catch (error: any) {
-            if (error.message.includes("failed") || error.message.includes("No clips")) {
+            if (error.message.includes("No videos") || error.message.includes("error")) {
                 throw error;
             }
             console.error(`Poll ${i} error:`, error.message);
         }
     }
 
-    throw new Error("Processing timed out after 10 minutes");
+    throw new Error("Vizard processing timed out after 40 minutes");
 }
 
 export async function getProjectStatus(projectId: string) {
-    const response = await fetch(`${VIZARD_BASE_URL}/project/${projectId}`, {
+    const response = await fetch(`${VIZARD_BASE_URL}/project/query/${projectId}`, {
         headers: {
             "VIZARDAI_API_KEY": VIZARD_API_KEY,
         },
     });
 
     const text = await response.text();
-    console.log("Status response:", text);
-
-    if (!response.ok) {
-        throw new Error(`Status check failed: ${response.status}`);
-    }
-
     const data = JSON.parse(text);
-    const projectData = data.data || data;
 
     return {
-        status: projectData.status,
-        progress: projectData.progress || 0,
-        clips: projectData.clips,
+        code: data.code,
+        status: data.code === 2000 ? "completed" : data.code === 1000 ? "processing" : "error",
+        videos: data.videos,
     };
 }

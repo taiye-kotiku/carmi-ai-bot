@@ -1,163 +1,121 @@
-import { createClient } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { NextResponse } from "next/server";
-import { nanoid } from "nanoid";
-import { generateVideo, enhancePrompt } from "@/lib/services/gemini";
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
-export async function POST(req: Request) {
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+const apiKey = process.env.GOOGLE_AI_API_KEY!;
+
+export async function POST(request: NextRequest) {
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json(
+                { error: "יש להתחבר כדי ליצור וידאו" },
+                { status: 401 }
+            );
         }
 
-        const { prompt, duration = 5, aspectRatio = "9:16" } = await req.json();
+        const { prompt, aspectRatio = "16:9", duration = 5 } = await request.json();
 
-        if (!prompt || prompt.trim().length === 0) {
+        if (!prompt) {
             return NextResponse.json(
-                { error: "נא להזין תיאור לסרטון" },
+                { error: "נא להזין תיאור לוידאו" },
                 { status: 400 }
             );
         }
 
-        // Check credits (videos cost more)
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("reel_credits")
-            .eq("user_id", user.id)
-            .single();
+        // Start video generation with Veo 3.0 Fast
+        const startResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    instances: [{ prompt }],
+                    parameters: {
+                        aspectRatio: aspectRatio,
+                        durationSeconds: duration,
+                        sampleCount: 1,
+                    },
+                }),
+            }
+        );
 
-        const videoCost = 3; // Videos cost 3 credits
-        if (!credits || credits.reel_credits < videoCost) {
-            return NextResponse.json(
-                { error: `נדרשים ${videoCost} קרדיטים ליצירת סרטון` },
-                { status: 402 }
-            );
+        if (!startResponse.ok) {
+            const errorText = await startResponse.text();
+            console.error("Veo start error:", errorText);
+
+            // Check if it's a billing/quota issue
+            if (startResponse.status === 402 || startResponse.status === 429) {
+                return NextResponse.json(
+                    { error: "חריגה ממכסת השימוש. נסה שוב מאוחר יותר." },
+                    { status: 429 }
+                );
+            }
+
+            throw new Error(`Veo error: ${startResponse.status}`);
         }
 
-        // Create job
-        const jobId = nanoid();
-        await supabaseAdmin.from("jobs").insert({
-            id: jobId,
-            user_id: user.id,
-            type: "text_to_video",
-            status: "pending",
-            progress: 0,
+        const operation = await startResponse.json();
+
+        // Poll for completion
+        const videoUrl = await pollForVideo(operation.name);
+
+        return NextResponse.json({
+            success: true,
+            videoUrl,
         });
-
-        // Process in background
-        processTextToVideo(jobId, user.id, prompt, duration, aspectRatio, videoCost);
-
-        return NextResponse.json({ jobId });
-    } catch (error) {
-        console.error("Text-to-video error:", error);
-        return NextResponse.json({ error: "שגיאה בשרת" }, { status: 500 });
+    } catch (error: any) {
+        console.error("Video generation error:", error);
+        return NextResponse.json(
+            { error: "יצירת הוידאו נכשלה. נסה שוב." },
+            { status: 500 }
+        );
     }
 }
 
-async function processTextToVideo(
-    jobId: string,
-    userId: string,
-    prompt: string,
-    duration: number,
-    aspectRatio: string,
-    videoCost: number
-) {
-    try {
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "processing", progress: 10 })
-            .eq("id", jobId);
+async function pollForVideo(operationName: string): Promise<string> {
+    const maxAttempts = 120; // 10 minutes max (5s * 120)
 
-        // Enhance prompt
-        const enhancedPrompt = await enhancePrompt(prompt, "video");
+    for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 20 })
-            .eq("id", jobId);
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
+        );
 
-        // Generate video
-        const videoUrl = await generateVideo(enhancedPrompt);
+        if (!response.ok) {
+            console.error("Poll error:", await response.text());
+            continue;
+        }
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 80 })
-            .eq("id", jobId);
+        const data = await response.json();
 
-        // Download and upload to our storage
-        const videoResponse = await fetch(videoUrl);
-        const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+        if (data.done) {
+            if (data.error) {
+                throw new Error(data.error.message || "Video generation failed");
+            }
 
-        const fileName = `${userId}/${jobId}/video.mp4`;
+            // Extract video URL from response
+            const videoUri =
+                data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
+                data.response?.videos?.[0]?.uri ||
+                data.response?.videoUri ||
+                data.result?.videos?.[0]?.uri;
 
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from("content")
-            .upload(fileName, videoBuffer, {
-                contentType: "video/mp4",
-                upsert: true,
-            });
+            if (!videoUri) {
+                console.error("No video URI in response:", JSON.stringify(data));
+                throw new Error("No video URL in response");
+            }
 
-        if (uploadError) throw uploadError;
+            return videoUri;
+        }
 
-        const { data: urlData } = supabaseAdmin.storage
-            .from("content")
-            .getPublicUrl(fileName);
-
-        // Save generation
-        const generationId = nanoid();
-        await supabaseAdmin.from("generations").insert({
-            id: generationId,
-            user_id: userId,
-            type: "video",
-            feature: "text_to_video",
-            prompt: prompt,
-            result_urls: [urlData.publicUrl],
-            thumbnail_url: urlData.publicUrl,
-            status: "completed",
-            job_id: jobId,
-            completed_at: new Date().toISOString(),
-        });
-
-        // Deduct credits
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("reel_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const newBalance = (currentCredits?.reel_credits || videoCost) - videoCost;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ reel_credits: newBalance })
-            .eq("user_id", userId);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: userId,
-            credit_type: "reel",
-            amount: -videoCost,
-            balance_after: newBalance,
-            reason: "text_to_video",
-            related_id: generationId,
-        });
-
-        await supabaseAdmin
-            .from("jobs")
-            .update({
-                status: "completed",
-                progress: 100,
-                result: { videoUrl: urlData.publicUrl, prompt: enhancedPrompt },
-            })
-            .eq("id", jobId);
-
-    } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "failed", error: errorMessage })
-            .eq("id", jobId);
+        console.log(`Video generation progress: ${data.metadata?.progress || 'processing'}...`);
     }
+
+    throw new Error("Video generation timed out");
 }

@@ -20,6 +20,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="he" dir="rtl" suppressHydrationWarning>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body className={heebo.className} suppressHydrationWarning>
         {children}
         <Toaster position="top-center" richColors />

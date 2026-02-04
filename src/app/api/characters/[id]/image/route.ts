@@ -42,7 +42,9 @@ export async function POST(
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (!character.lora_url) {
+        const loraUrl = character.lora_url || character.model_url;
+
+        if (!loraUrl) {
             return NextResponse.json(
                 { error: "Character not trained yet" },
                 { status: 400 }
@@ -65,7 +67,7 @@ export async function POST(
 
         console.log("=== CHARACTER IMAGE ===");
         console.log("Character:", character.name);
-        console.log("LoRA:", character.lora_url);
+        console.log("LoRA:", loraUrl);
         console.log("Prompt:", fullPrompt);
 
         // Generate with FLUX + LoRA (SYNCHRONOUS - waits for result)

@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
 
-        console.log("📞 Training webhook received:", body);
+        console.log("📞 Training webhook received:", JSON.stringify(body, null, 2));
 
         const { character_id, status, model_url, trigger_word, error } = body;
 
@@ -14,13 +14,21 @@ export async function POST(request: NextRequest) {
         }
 
         if (status === "ready") {
-            // Training succeeded
+            if (!model_url) {
+                console.error("❌ No model_url provided!");
+                return NextResponse.json({ error: "No model_url" }, { status: 400 });
+            }
+
+            // Save to BOTH lora_url and model_url for compatibility
             const { error: updateError } = await supabaseAdmin
                 .from("characters")
                 .update({
                     model_status: "ready",
                     model_url: model_url,
+                    lora_url: model_url,  // ← ADD THIS!
+                    trigger_word: trigger_word,  // ← Save to column too!
                     training_completed_at: new Date().toISOString(),
+                    trained_at: new Date().toISOString(),
                     settings: {
                         trigger_word: trigger_word,
                     },
@@ -32,11 +40,12 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ error: updateError.message }, { status: 500 });
             }
 
-            console.log("✅ Character updated to ready:", character_id);
+            console.log("✅ Character ready:", character_id);
+            console.log("   LoRA URL:", model_url);
+            console.log("   Trigger:", trigger_word);
 
         } else if (status === "failed") {
-            // Training failed
-            const { error: updateError } = await supabaseAdmin
+            await supabaseAdmin
                 .from("characters")
                 .update({
                     model_status: "failed",
@@ -44,11 +53,7 @@ export async function POST(request: NextRequest) {
                 })
                 .eq("id", character_id);
 
-            if (updateError) {
-                console.error("❌ Failed to update character:", updateError);
-            }
-
-            console.log("❌ Character training failed:", character_id, error);
+            console.log("❌ Training failed:", character_id, error);
         }
 
         return NextResponse.json({ success: true });

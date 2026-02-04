@@ -22,6 +22,7 @@
     "axios": "^1.13.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",
     "nanoid": "^5.1.6",
     "next": "16.1.4",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/estree": "^1.0.8",
+    "@types/jszip": "^3.4.0",
     "@types/node": "^20.19.30",
     "@types/phoenix": "^1.6.7",
     "@types/react": "^19.2.9",

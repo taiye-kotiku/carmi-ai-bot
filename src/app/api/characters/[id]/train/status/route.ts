@@ -6,75 +6,114 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { id: characterId } = await params;
+    try {
+        const { id: characterId } = await params;
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
 
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-    if (!user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+        const { data: character } = await supabaseAdmin
+            .from("characters")
+            .select("*")
+            .eq("id", characterId)
+            .eq("user_id", user.id)
+            .single();
 
-    const { data: character } = await supabaseAdmin
-        .from("characters")
-        .select("status, lora_url, error_message, job_id")
-        .eq("id", characterId)
-        .eq("user_id", user.id)
-        .single();
+        if (!character) {
+            return NextResponse.json({ error: "Not found" }, { status: 404 });
+        }
 
-    if (!character) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
+        // If already done, return immediately
+        if (character.status === "ready") {
+            return NextResponse.json({
+                status: "ready",
+                lora_url: character.lora_url,
+                trigger_word: character.trigger_word,
+            });
+        }
 
-    // If still training, check FAL status
-    if (character.status === "training" && character.job_id) {
-        try {
-            const res = await fetch(
+        if (character.status === "failed") {
+            return NextResponse.json({
+                status: "failed",
+                error: character.error_message,
+            });
+        }
+
+        // If training, check FAL status
+        if (character.status === "training" && character.job_id) {
+            const statusRes = await fetch(
                 `https://queue.fal.run/fal-ai/flux-lora-fast-training/requests/${character.job_id}/status`,
-                { headers: { "Authorization": `Key ${process.env.FAL_KEY}` } }
+                {
+                    headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
+                }
             );
-            const falStatus = await res.json();
 
-            if (falStatus.status === "COMPLETED") {
-                // Get result
+            const statusData = await statusRes.json();
+            console.log("FAL Status:", statusData);
+
+            // Training completed
+            if (statusData.status === "COMPLETED") {
+                // Get the result
                 const resultRes = await fetch(
                     `https://queue.fal.run/fal-ai/flux-lora-fast-training/requests/${character.job_id}`,
-                    { headers: { "Authorization": `Key ${process.env.FAL_KEY}` } }
+                    {
+                        headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
+                    }
                 );
-                const result = await resultRes.json();
+                const resultData = await resultRes.json();
+                console.log("FAL Result:", JSON.stringify(resultData, null, 2));
 
-                if (result.diffusers_lora_file?.url) {
+                const loraUrl = resultData.diffusers_lora_file?.url;
+
+                if (loraUrl) {
                     await supabaseAdmin
                         .from("characters")
                         .update({
                             status: "ready",
-                            lora_url: result.diffusers_lora_file.url,
+                            lora_url: loraUrl,
                             trained_at: new Date().toISOString(),
                         })
                         .eq("id", characterId);
 
-                    return NextResponse.json({ status: "ready", lora_url: result.diffusers_lora_file.url });
+                    return NextResponse.json({
+                        status: "ready",
+                        lora_url: loraUrl,
+                        trigger_word: character.trigger_word,
+                    });
                 }
             }
 
-            if (falStatus.status === "FAILED") {
+            // Training failed
+            if (statusData.status === "FAILED") {
                 await supabaseAdmin
                     .from("characters")
-                    .update({ status: "failed" })
+                    .update({
+                        status: "failed",
+                        error_message: statusData.error || "Training failed",
+                    })
                     .eq("id", characterId);
-                return NextResponse.json({ status: "failed" });
+
+                return NextResponse.json({
+                    status: "failed",
+                    error: statusData.error || "Training failed",
+                });
             }
 
-            return NextResponse.json({ status: "training", progress: falStatus.progress || 0 });
-
-        } catch (e) {
-            console.error("Status check error:", e);
+            // Still processing
+            return NextResponse.json({
+                status: "training",
+                progress: statusData.progress || 0,
+                logs: statusData.logs || [],
+            });
         }
-    }
 
-    return NextResponse.json({
-        status: character.status,
-        lora_url: character.lora_url,
-        error: character.error_message,
-    });
+        return NextResponse.json({ status: character.status });
+
+    } catch (error: any) {
+        console.error("Status check error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }

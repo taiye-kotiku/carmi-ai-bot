@@ -1,4 +1,4 @@
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -10,7 +10,6 @@ export async function POST(
 ) {
     try {
         const { id: characterId } = await params;
-
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -18,8 +17,13 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { prompt, aspectRatio = "1:1" } = await request.json();
+        const { prompt, aspectRatio = "1:1", numImages = 1 } = await request.json();
 
+        if (!prompt) {
+            return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+        }
+
+        // Get character
         const { data: character } = await supabaseAdmin
             .from("characters")
             .select("*")
@@ -31,26 +35,31 @@ export async function POST(
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        const loraUrl = character.lora_url || character.model_url;
-        if (!loraUrl) {
-            return NextResponse.json({ error: "Not trained" }, { status: 400 });
+        if (character.status !== "ready" || !character.lora_url) {
+            return NextResponse.json({ error: "הדמות עוד לא מאומנת" }, { status: 400 });
         }
 
-        const triggerWord = character.trigger_word || "";
-        const fullPrompt = triggerWord ? `${triggerWord}, ${prompt}` : prompt;
+        // Build prompt with trigger word
+        const fullPrompt = character.trigger_word
+            ? `${character.trigger_word} ${prompt}`
+            : prompt;
 
-        const imageSizeMap: Record<string, string> = {
+        // Map aspect ratio to FAL format
+        const sizeMap: Record<string, string> = {
             "1:1": "square",
             "16:9": "landscape_16_9",
             "9:16": "portrait_16_9",
+            "4:3": "landscape_4_3",
+            "3:4": "portrait_4_3",
         };
 
-        console.log("Submitting to FAL...");
-        console.log("LoRA URL:", loraUrl);
+        console.log("=== Generating Character Image ===");
         console.log("Prompt:", fullPrompt);
+        console.log("LoRA:", character.lora_url);
+        console.log("Aspect:", aspectRatio);
 
-        // Submit to FAL
-        const response = await fetch("https://queue.fal.run/fal-ai/stable-diffusion-v15", {
+        // Call FAL Flux LoRA
+        const response = await fetch("https://fal.run/fal-ai/flux-lora", {
             method: "POST",
             headers: {
                 "Authorization": `Key ${process.env.FAL_KEY}`,
@@ -58,31 +67,32 @@ export async function POST(
             },
             body: JSON.stringify({
                 prompt: fullPrompt,
-                negative_prompt: "ugly, blurry, low quality, distorted",
-                loras: [{ path: loraUrl, scale: 0.8 }],
-                image_size: imageSizeMap[aspectRatio] || "square",
-                num_images: 1,
-                num_inference_steps: 20,
-                guidance_scale: 7.5,
+                loras: [{ path: character.lora_url, scale: 1 }],
+                image_size: sizeMap[aspectRatio] || "square",
+                num_images: Math.min(numImages, 4),
+                output_format: "jpeg",
+                guidance_scale: 3.5,
+                num_inference_steps: 28,
                 enable_safety_checker: false,
             }),
         });
 
-        const falData = await response.json();
-        console.log("FAL Response:", JSON.stringify(falData, null, 2));
+        const result = await response.json();
+        console.log("FAL Result:", JSON.stringify(result, null, 2));
 
         if (!response.ok) {
-            console.error("FAL Error:", falData);
-            return NextResponse.json({
-                error: falData.detail || falData.message || "FAL error"
-            }, { status: 500 });
+            throw new Error(result.detail || "Image generation failed");
         }
 
-        // Generate unique ID
-        const generationId = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        const images = result.images?.map((img: any) => img.url) || [];
 
-        // Create generation record
-        const { error: dbError } = await supabaseAdmin
+        if (images.length === 0) {
+            throw new Error("No images generated");
+        }
+
+        // Save to generations
+        const generationId = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        await supabaseAdmin
             .from("generations")
             .insert({
                 id: generationId,
@@ -91,25 +101,19 @@ export async function POST(
                 feature: "character_image",
                 prompt: fullPrompt,
                 character_id: characterId,
-                status: "processing",
-                job_id: falData.request_id,  // Store FAL request ID here
+                status: "completed",
+                result_urls: images,
+                thumbnail_url: images[0],
             });
-
-        if (dbError) {
-            console.error("DB Error:", dbError);
-            return NextResponse.json({ error: "Database error: " + dbError.message }, { status: 500 });
-        }
-
-        console.log("Created generation:", generationId);
 
         return NextResponse.json({
             success: true,
-            generationId: generationId,
-            status: "processing"
+            images,
+            generationId,
         });
 
     } catch (error: any) {
-        console.error("Error:", error);
+        console.error("Image generation error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

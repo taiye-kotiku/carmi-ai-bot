@@ -106,9 +106,14 @@ export default function CharacterGeneratePage() {
             });
 
             const data = await res.json();
+            console.log("Submit response:", data);
 
             if (!res.ok) {
                 throw new Error(data.error || "Failed to submit");
+            }
+
+            if (!data.generationId) {
+                throw new Error("No generation ID returned");
             }
 
             const generationId = data.generationId;
@@ -116,15 +121,15 @@ export default function CharacterGeneratePage() {
 
             // Step 2: Poll for results
             let attempts = 0;
-            const maxAttempts = 60; // 2 minutes max
+            const maxAttempts = 60;
 
             while (attempts < maxAttempts) {
-                await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds
+                await new Promise(r => setTimeout(r, 2000));
 
                 const statusRes = await fetch(`/api/generations/${generationId}/status`);
                 const status = await statusRes.json();
 
-                console.log(`Poll ${attempts + 1}:`, status.status);
+                console.log(`Poll ${attempts + 1}:`, status);
 
                 if (status.status === "completed" && status.images?.length > 0) {
                     setImageResults(status.images);
@@ -142,6 +147,7 @@ export default function CharacterGeneratePage() {
             throw new Error("Timeout - נסה שוב");
 
         } catch (err: any) {
+            console.error("Generation error:", err);
             toast.error(err.message);
         } finally {
             setGeneratingImage(false);

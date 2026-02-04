@@ -45,6 +45,10 @@ export async function POST(
             "9:16": "portrait_16_9",
         };
 
+        console.log("Submitting to FAL...");
+        console.log("LoRA URL:", loraUrl);
+        console.log("Prompt:", fullPrompt);
+
         // Submit to FAL
         const response = await fetch("https://queue.fal.run/fal-ai/stable-diffusion-v15", {
             method: "POST",
@@ -64,15 +68,18 @@ export async function POST(
             }),
         });
 
-        const data = await response.json();
-        console.log("FAL Submit Response:", data);
+        const falData = await response.json();
+        console.log("FAL Response:", JSON.stringify(falData, null, 2));
 
         if (!response.ok) {
-            return NextResponse.json({ error: data.detail || "FAL error" }, { status: 500 });
+            console.error("FAL Error:", falData);
+            return NextResponse.json({
+                error: falData.detail || falData.message || "FAL error"
+            }, { status: 500 });
         }
 
-        // Save generation with FAL request ID
-        const { data: generation } = await supabaseAdmin
+        // Create generation record
+        const { data: generation, error: dbError } = await supabaseAdmin
             .from("generations")
             .insert({
                 user_id: user.id,
@@ -82,18 +89,24 @@ export async function POST(
                 character_id: characterId,
                 status: "processing",
                 metadata: {
-                    fal_request_id: data.request_id,
+                    fal_request_id: falData.request_id,
                     aspectRatio,
                     loraUrl
                 },
             })
-            .select()
+            .select("id")
             .single();
 
-        // Return immediately
+        if (dbError) {
+            console.error("DB Error:", dbError);
+            return NextResponse.json({ error: "Database error: " + dbError.message }, { status: 500 });
+        }
+
+        console.log("Created generation:", generation?.id);
+
         return NextResponse.json({
             success: true,
-            generationId: generation?.id,
+            generationId: generation.id,
             status: "processing"
         });
 

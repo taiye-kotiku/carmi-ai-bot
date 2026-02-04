@@ -1,8 +1,6 @@
 // src/lib/services/carousel-content.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
-
 interface GenerateContentOptions {
     topic: string;
     slideCount: number;
@@ -13,6 +11,12 @@ interface GenerateContentOptions {
 export async function generateCarouselContent(options: GenerateContentOptions): Promise<string[]> {
     const { topic, slideCount, style, language } = options;
 
+    const apiKey = process.env.GOOGLE_AI_API_KEY?.trim();
+    if (!apiKey) {
+        throw new Error("GOOGLE_AI_API_KEY חסר ב-.env.local. הפעל מחדש את השרת (npm run dev).");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
     const styleInstructions = {

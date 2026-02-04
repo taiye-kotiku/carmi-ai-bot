@@ -37,9 +37,12 @@ export async function POST(req: Request) {
 
         let slides = customSlides;
         if (!slides?.length && topic) {
-            if (!process.env.GOOGLE_AI_API_KEY) {
+            const apiKey = process.env.GOOGLE_AI_API_KEY?.trim();
+            if (!apiKey) {
                 return NextResponse.json(
-                    { error: "GOOGLE_AI_API_KEY חסר ב-.env.local. השתמש ב'טען דוגמה' או במצב כתיבה ידנית." },
+                    {
+                        error: "GOOGLE_AI_API_KEY חסר. הוסף אותו ל-.env.local בתיקיית השורש והפעל מחדש את השרת (npm run dev). כרגע השתמש ב'טען דוגמה' או בכתיבה ידנית.",
+                    },
                     { status: 500 }
                 );
             }

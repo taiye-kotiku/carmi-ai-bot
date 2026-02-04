@@ -52,8 +52,8 @@ export default async function DashboardPage() {
             color: "bg-purple-50 text-purple-600 hover:bg-purple-100",
         },
         {
-            name: "המרת ריל",
-            description: "הפוך ריל לקרוסלה",
+            name: "המרת רילז",
+            description: "הפוך רילז לקרוסלה",
             href: "/generate/reel-converter",
             icon: Film,
             color: "bg-blue-50 text-blue-600 hover:bg-blue-100",
@@ -108,7 +108,7 @@ export default async function DashboardPage() {
                             color="bg-purple-500"
                         />
                         <CreditItem
-                            label="ריילים"
+                            label="רילז"
                             value={credits?.reel_credits || 0}
                             max={2}
                             color="bg-blue-500"
@@ -177,7 +177,7 @@ export default async function DashboardPage() {
                                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <Badge variant="secondary">
                                             {gen.type === "image" && "תמונה"}
-                                            {gen.type === "reel" && "ריל"}
+                                            {gen.type === "reel" && "רילז"}
                                             {gen.type === "carousel" && "קרוסלה"}
                                         </Badge>
                                     </div>

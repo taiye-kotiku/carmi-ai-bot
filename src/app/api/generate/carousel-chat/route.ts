@@ -2,10 +2,16 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
-
 export async function POST(req: Request) {
     try {
+        const apiKey = process.env.GOOGLE_AI_API_KEY?.trim();
+        if (!apiKey) {
+            return NextResponse.json(
+                { error: "GOOGLE_AI_API_KEY חסר. הוסף ל-.env.local והפעל מחדש את השרת. השתמש בכתיבה ידנית או בטען דוגמה." },
+                { status: 500 }
+            );
+        }
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -23,6 +29,7 @@ export async function POST(req: Request) {
             );
         }
 
+        const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
         const systemPrompt = `אתה סוכן תוכן מקצועי ליצירת קרוסלות לרשתות חברתיות.

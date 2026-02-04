@@ -67,7 +67,7 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
         if (gen.feature === "text_to_video") return "וידאו AI";
         if (gen.type === "video") return "וידאו";
         if (gen.type === "image") return "תמונה";
-        if (gen.type === "reel") return `ריל (${gen.result_urls?.length || 0})`;
+        if (gen.type === "reel") return `רילז (${gen.result_urls?.length || 0})`;
         if (gen.type === "carousel") return "קרוסלה";
         return gen.type;
     };
@@ -96,7 +96,7 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                         {f === "all" && "הכל"}
                         {f === "image" && "תמונות"}
                         {f === "video" && "וידאו"}
-                        {f === "reel" && "ריילים"}
+                        {f === "reel" && "רילז"}
                         {f === "carousel" && "קרוסלות"}
                     </Button>
                 ))}

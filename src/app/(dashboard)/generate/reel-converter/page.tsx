@@ -25,7 +25,7 @@ export default function ReelConverterPage() {
 
     const handleConvert = async () => {
         if (!isValidInstagramUrl(url)) {
-            toast.error("נא להזין קישור תקין לריל מאינסטגרם");
+            toast.error("נא להזין קישור תקין לרילז מאינסטגרם");
             return;
         }
 
@@ -143,11 +143,11 @@ export default function ReelConverterPage() {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold">המרת ריל לקרוסלה</h1>
+                            <h1 className="text-2xl font-bold">המרת רילז לקרוסלה</h1>
                             <Badge variant="warning">⭐ הכי פופולרי</Badge>
                         </div>
                         <p className="text-gray-600">
-                            הדבק קישור לריל מאינסטגרם וקבל 10 תמונות מושלמות
+                            הדבק קישור לרילז מאינסטגרם וקבל 10 תמונות מושלמות
                         </p>
                     </div>
                 </div>
@@ -156,7 +156,7 @@ export default function ReelConverterPage() {
             {/* Input Section */}
             <Card className="mb-8">
                 <CardContent className="p-6">
-                    <label className="block text-sm font-medium mb-2">קישור לריל</label>
+                    <label className="block text-sm font-medium mb-2">קישור לרילז</label>
                     <div className="flex gap-3">
                         <Input
                             type="url"
@@ -180,10 +180,10 @@ export default function ReelConverterPage() {
                     </div>
                     <div className="flex items-center justify-between mt-3">
                         <p className="text-sm text-gray-500">
-                            ✓ עובד עם ריילים ופוסטים ציבוריים
+                            ✓ עובד עם רילז ופוסטים ציבוריים
                         </p>
                         <p className="text-sm text-primary font-medium">
-                            עלות: 1 קרדיט ריל → 10 תמונות
+                            עלות: 1 קרדיט רילז → 10 תמונות
                         </p>
                     </div>
                 </CardContent>
@@ -267,7 +267,7 @@ export default function ReelConverterPage() {
                     <CardContent className="p-6">
                         <h3 className="font-medium mb-2">💡 טיפים</h3>
                         <ul className="text-sm text-gray-600 space-y-1">
-                            <li>• וודא שהריל הוא ציבורי (לא מחשבון פרטי)</li>
+                            <li>• וודא שהרילז הוא ציבורי (לא מחשבון פרטי)</li>
                             <li>• העתק את הקישור המלא מאפליקציית אינסטגרם</li>
                             <li>• ההמרה לוקחת בין 30 שניות ל-2 דקות</li>
                         </ul>

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
 
         if (!credits || credits.reel_credits < 1) {
             return NextResponse.json(
-                { error: "אין מספיק קרדיטים להמרת ריל" },
+                { error: "אין מספיק קרדיטים להמרת רילז" },
                 { status: 402 }
             );
         }

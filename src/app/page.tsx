@@ -25,6 +25,12 @@ export default function HomePage() {
             <Link href="/carousel-test" className="text-slate-400 hover:text-white text-sm transition-colors">
               בדיקת קרוסלה
             </Link>
+            <Link href="/brand" className="text-slate-400 hover:text-white text-sm transition-colors">
+              מיתוג
+            </Link>
+            <Link href="/credits" className="text-slate-400 hover:text-white text-sm transition-colors">
+              מנוי וקרדיטים
+            </Link>
             <Link href="#examples" className="text-slate-400 hover:text-white text-sm transition-colors">
               דוגמאות
             </Link>
@@ -72,7 +78,7 @@ export default function HomePage() {
           </div>
 
           <p className="text-sm text-slate-500 mt-4">
-            ✓ ללא כרטיס אשראי  ✓ 10 תמונות חינם  ✓ 2 המרות ריילים
+            ✓ ללא כרטיס אשראי  ✓ 10 תמונות חינם  ✓ 2 המרות רילז
           </p>
         </div>
       </section>
@@ -139,12 +145,12 @@ export default function HomePage() {
               <div className="h-12 w-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mb-4">
                 <Film className="h-6 w-6 text-indigo-400" />
               </div>
-              <h3 className="text-lg font-semibold mb-2 text-white">המרת ריל לקרוסלה</h3>
+              <h3 className="text-lg font-semibold mb-2 text-white">המרת רילז לקרוסלה</h3>
               <p className="text-slate-400 text-sm mb-4">
-                הדבק קישור לריל מאינסטגרם – הבוט יבחר את הפריימים הטובים ביותר וייצור 10 תמונות מוכנות לפוסט.
+                הדבק קישור לרילז מאינסטגרם – הבוט יבחר את הפריימים הטובים ביותר וייצור 10 תמונות מוכנות לפוסט.
               </p>
               <div className="bg-slate-800/50 rounded-lg p-3 text-sm text-slate-300 font-mono border border-white/5">
-                &quot;המר את הריל הזה לקרוסלה&quot;
+                &quot;המר את הרילז הזה לקרוסלה&quot;
               </div>
             </div>
 
@@ -190,9 +196,9 @@ export default function HomePage() {
               <div className="h-12 w-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mb-4">
                 <Film className="h-6 w-6 text-indigo-400" />
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-white">המרת ריל לקרוסלה</h3>
+              <h3 className="text-xl font-semibold mb-2 text-white">המרת רילז לקרוסלה</h3>
               <p className="text-slate-400">
-                הדבק קישור לריל מאינסטגרם וקבל 10 תמונות מושלמות לקרוסלה.
+                הדבק קישור לרילז מאינסטגרם וקבל 10 תמונות מושלמות לקרוסלה.
                 הAI בוחר את הפריימים הטובים ביותר.
               </p>
             </div>
@@ -247,7 +253,7 @@ export default function HomePage() {
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>2 המרות ריל</span>
+                  <span>2 המרות רילז</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />

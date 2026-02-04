@@ -49,7 +49,7 @@ export function Header() {
                             תמונות: <strong className="text-gray-900">{credits.image_credits}</strong>
                         </span>
                         <span className="text-gray-500">
-                            ריילים: <strong className="text-gray-900">{credits.reel_credits}</strong>
+                            רילז: <strong className="text-gray-900">{credits.reel_credits}</strong>
                         </span>
                     </>
                 )}

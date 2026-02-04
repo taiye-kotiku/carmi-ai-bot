@@ -35,7 +35,7 @@ const navigation: NavItem[] = [
     { type: "link", name: "יצירת תמונה", href: "/generate/text-to-image", icon: Image },
     { type: "link", name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
     { type: "link", name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
-    { type: "link", name: "המרת ריל", href: "/generate/reel-converter", icon: Film },
+    { type: "link", name: "המרת רילז", href: "/generate/reel-converter", icon: Film },
     { type: "link", name: "חיתוך סרטון", href: "/generate/video-clips", icon: Scissors },
     { type: "link", name: "יצירת קרוסלה", href: "/generate/carousel", icon: LayoutGrid },
 
@@ -51,8 +51,8 @@ const navigation: NavItem[] = [
 
     // Settings
     { type: "divider", label: "הגדרות" },
-    { type: "link", name: "מיתוג", href: "/settings/brand", icon: Settings },
-    { type: "link", name: "מנוי וקרדיטים", href: "/settings/billing", icon: CreditCard },
+    { type: "link", name: "מיתוג", href: "/brand", icon: Settings },
+    { type: "link", name: "מנוי וקרדיטים", href: "/credits", icon: CreditCard },
 ];
 
 export function Sidebar() {

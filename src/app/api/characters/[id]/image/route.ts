@@ -8,8 +8,6 @@ import { fal } from "@fal-ai/client";
 
 fal.config({ credentials: process.env.FAL_KEY });
 
-type ImageSize = "square" | "square_hd" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
-
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -30,7 +28,7 @@ export async function POST(
             return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
         }
 
-        // Get character with LoRA
+        // Get character
         const { data: character, error: charError } = await supabaseAdmin
             .from("characters")
             .select("*")
@@ -42,6 +40,7 @@ export async function POST(
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
+        // Get LoRA URL
         const loraUrl = character.lora_url || character.model_url;
 
         if (!loraUrl) {
@@ -51,13 +50,17 @@ export async function POST(
             );
         }
 
+        // Get trigger word
+        const settings = typeof character.settings === 'string'
+            ? JSON.parse(character.settings)
+            : character.settings;
+        const triggerWord = character.trigger_word || settings?.trigger_word || "";
+
         // Build prompt with trigger word
-        const fullPrompt = character.trigger_word
-            ? `${character.trigger_word}, ${prompt}`
-            : prompt;
+        const fullPrompt = triggerWord ? `${triggerWord}, ${prompt}` : prompt;
 
         // Map aspect ratio to image size
-        const imageSizeMap: Record<string, ImageSize> = {
+        const imageSizeMap: Record<string, string> = {
             "1:1": "square",
             "16:9": "landscape_16_9",
             "9:16": "portrait_16_9",
@@ -65,32 +68,34 @@ export async function POST(
             "3:4": "portrait_4_3",
         };
 
-        console.log("=== CHARACTER IMAGE ===");
+        console.log("=== GENERATING IMAGE ===");
         console.log("Character:", character.name);
-        console.log("LoRA:", loraUrl);
-        console.log("Prompt:", fullPrompt);
+        console.log("LoRA URL:", loraUrl);
+        console.log("Trigger Word:", triggerWord);
+        console.log("Full Prompt:", fullPrompt);
 
-        // Generate with FLUX + LoRA (SYNCHRONOUS - waits for result)
-        const result = await fal.subscribe("fal-ai/flux-lora", {
+        // Use SD 1.5 model (compatible with your Modal-trained LoRA)
+        const result = await fal.subscribe("fal-ai/stable-diffusion-v15", {
             input: {
                 prompt: fullPrompt,
+                negative_prompt: "ugly, blurry, low quality, distorted, deformed",
                 loras: [
                     {
-                        path: character.lora_url,
-                        scale: 0.9,
+                        path: loraUrl,
+                        scale: 0.8,
                     },
                 ],
                 image_size: imageSizeMap[aspectRatio] || "square",
                 num_images: Math.min(numImages, 4),
-                output_format: "jpeg",
-                guidance_scale: 3.5,
-                num_inference_steps: 28,
+                num_inference_steps: 30,
+                guidance_scale: 7.5,
+                format: "jpeg",
                 enable_safety_checker: false,
             },
             logs: true,
             onQueueUpdate: (update) => {
                 if (update.status === "IN_PROGRESS") {
-                    console.log("FAL progress:", update.logs?.map(l => l.message).join(", "));
+                    update.logs?.map((log) => log.message).forEach(console.log);
                 }
             },
         });
@@ -100,8 +105,6 @@ export async function POST(
         if (images.length === 0) {
             throw new Error("No images generated");
         }
-
-        console.log("Generated", images.length, "images");
 
         // Save to generations table
         await supabaseAdmin.from("generations").insert({
@@ -114,8 +117,10 @@ export async function POST(
             character_id: characterId,
             metadata: {
                 aspectRatio,
-                loraScale: 0.9,
+                loraScale: 0.8,
                 seed: result.data.seed,
+                triggerWord,
+                model: "stable-diffusion-v15",
             },
             status: "completed",
         });
@@ -127,7 +132,7 @@ export async function POST(
         });
 
     } catch (error: any) {
-        console.error("Character image error:", error);
+        console.error("Image generation error:", error);
         return NextResponse.json(
             { error: error.message || "Generation failed" },
             { status: 500 }

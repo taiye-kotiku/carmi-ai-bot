@@ -94,6 +94,7 @@ export default function CharacterGeneratePage() {
         setImageResults([]);
 
         try {
+            // Step 1: Submit the job
             const res = await fetch(`/api/characters/${character.id}/image`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -107,11 +108,39 @@ export default function CharacterGeneratePage() {
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.error || "Generation failed");
+                throw new Error(data.error || "Failed to submit");
             }
 
-            setImageResults(data.images);
-            toast.success("התמונות נוצרו בהצלחה!");
+            const generationId = data.generationId;
+            toast.info("התמונה נשלחה לעיבוד...");
+
+            // Step 2: Poll for results
+            let attempts = 0;
+            const maxAttempts = 60; // 2 minutes max
+
+            while (attempts < maxAttempts) {
+                await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds
+
+                const statusRes = await fetch(`/api/generations/${generationId}/status`);
+                const status = await statusRes.json();
+
+                console.log(`Poll ${attempts + 1}:`, status.status);
+
+                if (status.status === "completed" && status.images?.length > 0) {
+                    setImageResults(status.images);
+                    toast.success("התמונות נוצרו בהצלחה!");
+                    return;
+                }
+
+                if (status.status === "failed") {
+                    throw new Error(status.error || "Generation failed");
+                }
+
+                attempts++;
+            }
+
+            throw new Error("Timeout - נסה שוב");
+
         } catch (err: any) {
             toast.error(err.message);
         } finally {
@@ -261,8 +290,8 @@ export default function CharacterGeneratePage() {
                                                 onClick={() => setImageAspect(a.value)}
                                                 disabled={generatingImage}
                                                 className={`px-3 py-2 rounded-lg border text-sm ${imageAspect === a.value
-                                                        ? "bg-purple-500 border-purple-500 text-white"
-                                                        : "hover:border-purple-300"
+                                                    ? "bg-purple-500 border-purple-500 text-white"
+                                                    : "hover:border-purple-300"
                                                     }`}
                                             >
                                                 {a.label}
@@ -364,8 +393,8 @@ export default function CharacterGeneratePage() {
                                                 onClick={() => setVideoAspect(a.value)}
                                                 disabled={generatingVideo}
                                                 className={`flex-1 px-3 py-2 rounded-lg border text-sm ${videoAspect === a.value
-                                                        ? "bg-purple-500 border-purple-500 text-white"
-                                                        : "hover:border-purple-300"
+                                                    ? "bg-purple-500 border-purple-500 text-white"
+                                                    : "hover:border-purple-300"
                                                     }`}
                                             >
                                                 {a.label}
@@ -383,8 +412,8 @@ export default function CharacterGeneratePage() {
                                                 onClick={() => setVideoResolution(r.value)}
                                                 disabled={generatingVideo}
                                                 className={`flex-1 px-3 py-2 rounded-lg border text-sm ${videoResolution === r.value
-                                                        ? "bg-purple-500 border-purple-500 text-white"
-                                                        : "hover:border-purple-300"
+                                                    ? "bg-purple-500 border-purple-500 text-white"
+                                                    : "hover:border-purple-300"
                                                     }`}
                                             >
                                                 {r.label}

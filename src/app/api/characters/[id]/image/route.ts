@@ -1,4 +1,4 @@
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -20,11 +20,6 @@ export async function POST(
 
         const { prompt, aspectRatio = "1:1" } = await request.json();
 
-        if (!prompt?.trim()) {
-            return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
-        }
-
-        // Get character
         const { data: character } = await supabaseAdmin
             .from("characters")
             .select("*")
@@ -37,9 +32,8 @@ export async function POST(
         }
 
         const loraUrl = character.lora_url || character.model_url;
-
         if (!loraUrl) {
-            return NextResponse.json({ error: "Character not trained" }, { status: 400 });
+            return NextResponse.json({ error: "Not trained" }, { status: 400 });
         }
 
         const triggerWord = character.trigger_word || "";
@@ -51,22 +45,7 @@ export async function POST(
             "9:16": "portrait_16_9",
         };
 
-        // Create a generation record first
-        const { data: generation } = await supabaseAdmin
-            .from("generations")
-            .insert({
-                user_id: user.id,
-                type: "image",
-                feature: "character_image",
-                prompt: fullPrompt,
-                character_id: characterId,
-                status: "processing",
-                metadata: { aspectRatio, loraUrl },
-            })
-            .select()
-            .single();
-
-        // Submit to FAL queue (non-blocking)
+        // Submit to FAL
         const response = await fetch("https://queue.fal.run/fal-ai/stable-diffusion-v15", {
             method: "POST",
             headers: {
@@ -86,60 +65,37 @@ export async function POST(
         });
 
         const data = await response.json();
+        console.log("FAL Submit Response:", data);
 
         if (!response.ok) {
-            console.error("FAL Error:", data);
-            await supabaseAdmin
-                .from("generations")
-                .update({ status: "failed", metadata: { error: data } })
-                .eq("id", generation?.id);
             return NextResponse.json({ error: data.detail || "FAL error" }, { status: 500 });
         }
 
-        // FAL returns request_id for queue - poll for result
-        const requestId = data.request_id;
-
-        // Poll for result (with timeout)
-        let result: any = null;
-        for (let i = 0; i < 30; i++) {  // 30 attempts, ~30 seconds max
-            await new Promise(r => setTimeout(r, 1000));
-
-            const statusRes = await fetch(`https://queue.fal.run/fal-ai/stable-diffusion-v15/requests/${requestId}/status`, {
-                headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
-            });
-            const status = await statusRes.json();
-
-            console.log(`Poll ${i + 1}: ${status.status}`);
-
-            if (status.status === "COMPLETED") {
-                // Get the result
-                const resultRes = await fetch(`https://queue.fal.run/fal-ai/stable-diffusion-v15/requests/${requestId}`, {
-                    headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
-                });
-                result = await resultRes.json();
-                break;
-            } else if (status.status === "FAILED") {
-                throw new Error("Generation failed");
-            }
-        }
-
-        if (!result?.images?.[0]?.url) {
-            throw new Error("Timeout waiting for image");
-        }
-
-        const images = result.images.map((img: any) => img.url);
-
-        // Update generation record
-        await supabaseAdmin
+        // Save generation with FAL request ID
+        const { data: generation } = await supabaseAdmin
             .from("generations")
-            .update({
-                status: "completed",
-                result_urls: images,
-                thumbnail_url: images[0],
+            .insert({
+                user_id: user.id,
+                type: "image",
+                feature: "character_image",
+                prompt: fullPrompt,
+                character_id: characterId,
+                status: "processing",
+                metadata: {
+                    fal_request_id: data.request_id,
+                    aspectRatio,
+                    loraUrl
+                },
             })
-            .eq("id", generation?.id);
+            .select()
+            .single();
 
-        return NextResponse.json({ success: true, images });
+        // Return immediately
+        return NextResponse.json({
+            success: true,
+            generationId: generation?.id,
+            status: "processing"
+        });
 
     } catch (error: any) {
         console.error("Error:", error);

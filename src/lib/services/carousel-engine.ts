@@ -6,7 +6,7 @@
 import path from "path";
 import fs from "fs";
 import sharp from "sharp";
-import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts, SKRSContext2D } from "@napi-rs/canvas";
 import type { CarouselTemplate } from "@/lib/carousel/templates";
 
 const WIDTH = 1080;
@@ -99,7 +99,7 @@ async function applyBackgroundEffects(
 
 /** Draw text with adaptive font size and *highlight* support. Uses logical Hebrew + ctx.direction RTL for correct display. */
 function drawCleanText(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     text: string,
     x: number,
     y: number,
@@ -190,7 +190,7 @@ function drawCleanText(
 
 /** Draw progress bar (original Python style) */
 function drawProgressBar(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     current: number,
     total: number,
     accentColor: string
@@ -213,7 +213,7 @@ function drawProgressBar(
 }
 
 function roundRect(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     x: number,
     y: number,
     w: number,

@@ -2,6 +2,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Ensure GOOGLE_AI_API_KEY is available to API routes (loaded from .env.local)
+  env: {
+    GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY,
+  },
+
   // Mark native packages as external - they'll be loaded at runtime, not bundled
   serverExternalPackages: ["@napi-rs/canvas"],
 

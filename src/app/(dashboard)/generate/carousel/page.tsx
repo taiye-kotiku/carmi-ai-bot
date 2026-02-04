@@ -61,10 +61,12 @@ export default function CarouselGenerationPage() {
     const [slideCount, setSlideCount] = useState(5);
     const [style, setStyle] = useState("educational");
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [logoBase64, setLogoBase64] = useState<string | null>(null);
     const [logoPosition, setLogoPosition] = useState<string>("top-right");
     const [categoryFilter, setCategoryFilter] = useState("all");
 
     const [loading, setLoading] = useState(false);
+    const [logoUploading, setLogoUploading] = useState(false);
     const [results, setResults] = useState<string[]>([]);
     const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -73,9 +75,14 @@ export default function CarouselGenerationPage() {
 
     const [chatMessage, setChatMessage] = useState("");
     const [chatLoading, setChatLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [templateDesc, setTemplateDesc] = useState("");
+    const [templateSuggestLoading, setTemplateSuggestLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const filteredTemplates = getTemplatesByCategory(categoryFilter);
+
+    const hasLogo = !!logoUrl || !!logoBase64;
 
     async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
@@ -84,7 +91,12 @@ export default function CarouselGenerationPage() {
             toast.error("נא להעלות קובץ תמונה (PNG, JPG)");
             return;
         }
-        setLoading(true);
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("גודל מקסימלי 5MB");
+            return;
+        }
+        setLogoUploading(true);
+        setError(null);
         try {
             const formData = new FormData();
             formData.append("logo", file);
@@ -98,12 +110,60 @@ export default function CarouselGenerationPage() {
             }
             const { url } = await res.json();
             setLogoUrl(url);
+            setLogoBase64(null);
             toast.success("הלוגו הועלה בהצלחה");
         } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : "שגיאה בהעלאת הלוגו");
+            const msg = err instanceof Error ? err.message : "שגיאה בהעלאת הלוגו";
+            toast.error(msg);
+            const reader = new FileReader();
+            reader.onload = () => {
+                setLogoBase64(reader.result as string);
+                setLogoUrl(null);
+                toast.success("הלוגו מוכן לשימוש (העלאה ישירה)");
+            };
+            reader.readAsDataURL(file);
         } finally {
-            setLoading(false);
+            setLogoUploading(false);
         }
+        e.target.value = "";
+    }
+
+    async function handleSuggestTemplate() {
+        const desc = templateDesc.trim() || topic;
+        if (!desc) {
+            toast.error("הזן תיאור לבחירת תבנית");
+            return;
+        }
+        setTemplateSuggestLoading(true);
+        try {
+            const res = await fetch("/api/generate/template-suggest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ topic: desc, content: desc }),
+            });
+            const data = await res.json();
+            if (data.template_id) {
+                setSelectedTemplate(data.template_id);
+                toast.success(`נבחרה תבנית: ${CAROUSEL_TEMPLATES[data.template_id]?.style || data.template_id}`);
+            }
+        } catch {
+            toast.error("שגיאה בבחירת תבנית");
+        } finally {
+            setTemplateSuggestLoading(false);
+        }
+    }
+
+    function loadExampleSlides() {
+        setCustomSlides([
+            "התחדשות עירונית היא *הזדמנות* לשדרג את איכות החיים",
+            "התהליך דורש ליווי *משפטי מקצועי* שיגן על הזכויות שלכם",
+            "אנו דואגים להסכמים *ברורים ומאוזנים* מול היזם",
+            "ביטחון מלא, שקיפות וזמינות לאורך כל חיי הפרויקט",
+            "צרו קשר ל*שיחת ייעוץ* ראשונית ללא התחייבות",
+        ]);
+        setContentMode("custom");
+        setError(null);
+        toast.success("נטענה דוגמה");
     }
 
     async function handleChatGenerate() {
@@ -143,6 +203,7 @@ export default function CarouselGenerationPage() {
         const useTopic = contentMode === "ai" && topic.trim();
 
         if (!useTopic && (!slides || slides.length < 2)) {
+            setError("נא להזין נושא או לפחות 2 שקופיות. ניתן ללחוץ על 'טען דוגמה' לבדיקה.");
             toast.error("נא להזין נושא או לפחות 2 שקופיות");
             return;
         }
@@ -150,6 +211,7 @@ export default function CarouselGenerationPage() {
         setLoading(true);
         setResults([]);
         setCurrentSlide(0);
+        setError(null);
 
         try {
             const response = await fetch("/api/generate/carousel", {
@@ -161,15 +223,18 @@ export default function CarouselGenerationPage() {
                     template_id: selectedTemplate,
                     slide_count: slides ? slides.length : slideCount,
                     style,
-                    use_brand: !!logoUrl,
+                    use_brand: false,
                     logo_url: logoUrl || undefined,
+                    logo_base64: logoBase64 || undefined,
                     logo_position: logoPosition,
                 }),
             });
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error);
+                const errMsg = data.error || "שגיאה";
+                setError(errMsg);
+                throw new Error(errMsg);
             }
 
             const { jobId } = await response.json();
@@ -184,11 +249,16 @@ export default function CarouselGenerationPage() {
                     toast.success("הקרוסלה נוצרה בהצלחה! 🎨");
                     break;
                 }
-                if (status.status === "failed") throw new Error(status.error);
+                if (status.status === "failed") {
+                    setError(status.error || "הקרוסלה נכשלה");
+                    throw new Error(status.error);
+                }
                 attempts++;
             }
         } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : "שגיאה");
+            const msg = err instanceof Error ? err.message : "שגיאה";
+            setError(msg);
+            toast.error(msg);
         } finally {
             setLoading(false);
         }
@@ -265,12 +335,16 @@ export default function CarouselGenerationPage() {
                             <Label className="text-base font-medium">העלאת לוגו</Label>
                             <div className="mt-3 flex items-center gap-4">
                                 <div
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-pink-400 hover:bg-pink-50/50 transition-colors"
+                                    onClick={() => !logoUploading && fileInputRef.current?.click()}
+                                    className={`w-24 h-24 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-colors ${
+                                        logoUploading ? "border-gray-200 bg-gray-50 cursor-wait" : "border-gray-300 cursor-pointer hover:border-pink-400 hover:bg-pink-50/50"
+                                    }`}
                                 >
-                                    {logoUrl ? (
+                                    {logoUploading ? (
+                                        <Loader2 className="h-8 w-8 text-pink-500 animate-spin" />
+                                    ) : hasLogo ? (
                                         <img
-                                            src={logoUrl}
+                                            src={logoUrl || logoBase64 || ""}
                                             alt="לוגו"
                                             className="w-full h-full object-contain rounded-xl"
                                         />
@@ -290,9 +364,9 @@ export default function CarouselGenerationPage() {
                                 />
                                 <div className="flex-1">
                                     <p className="text-sm text-gray-500">PNG או JPG, עד 5MB</p>
-                                    {logoUrl && (
+                                    {hasLogo && (
                                         <button
-                                            onClick={() => setLogoUrl(null)}
+                                            onClick={() => { setLogoUrl(null); setLogoBase64(null); }}
                                             className="text-sm text-red-500 hover:underline mt-1"
                                         >
                                             הסר לוגו
@@ -301,7 +375,7 @@ export default function CarouselGenerationPage() {
                                 </div>
                             </div>
 
-                            {logoUrl && (
+                            {hasLogo && (
                                 <div className="mt-4">
                                     <Label className="text-base font-medium">מיקום הלוגו</Label>
                                     <div className="grid grid-cols-3 gap-2 mt-2">
@@ -327,9 +401,17 @@ export default function CarouselGenerationPage() {
                     {/* תוכן */}
                     <Card>
                         <CardContent className="p-6 space-y-6">
+                            <Button type="button" variant="outline" size="sm" onClick={loadExampleSlides} className="mb-2">
+                                טען דוגמה
+                            </Button>
+                            {error && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                    {error}
+                                </div>
+                            )}
                             <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
                                 <button
-                                    onClick={() => setContentMode("ai")}
+                                    onClick={() => { setContentMode("ai"); setError(null); }}
                                     className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                                         contentMode === "ai" ? "bg-white shadow text-purple-700" : "text-gray-600"
                                     }`}
@@ -338,7 +420,7 @@ export default function CarouselGenerationPage() {
                                     יצירה עם AI
                                 </button>
                                 <button
-                                    onClick={() => setContentMode("chat")}
+                                    onClick={() => { setContentMode("chat"); setError(null); }}
                                     className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                                         contentMode === "chat" ? "bg-white shadow text-purple-700" : "text-gray-600"
                                     }`}
@@ -347,7 +429,7 @@ export default function CarouselGenerationPage() {
                                     סוכן תוכן
                                 </button>
                                 <button
-                                    onClick={() => setContentMode("custom")}
+                                    onClick={() => { setContentMode("custom"); setError(null); }}
                                     className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                                         contentMode === "custom" ? "bg-white shadow text-purple-700" : "text-gray-600"
                                     }`}
@@ -503,8 +585,21 @@ export default function CarouselGenerationPage() {
                             )}
 
                             <div>
-                                <div className="flex justify-between mb-2">
+                                <div className="mb-2">
                                     <Label>תבנית עיצוב</Label>
+                                    <div className="flex gap-2 mt-2 mb-2">
+                                        <input
+                                            type="text"
+                                            placeholder="תאר עיצוב (למשל: בניין, טכנולוגי)"
+                                            className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                                            value={templateDesc}
+                                            onChange={(e) => setTemplateDesc(e.target.value)}
+                                        />
+                                        <Button type="button" variant="outline" size="sm" onClick={handleSuggestTemplate} disabled={templateSuggestLoading}>
+                                            {templateSuggestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                                            בחר עם Gemini
+                                        </Button>
+                                    </div>
                                     <div className="flex gap-1">
                                         {CATEGORIES.map((cat) => (
                                             <button

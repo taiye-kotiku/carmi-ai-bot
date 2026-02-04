@@ -35,7 +35,7 @@ const allLinks = [
             { name: "יצירת תמונה", href: "/generate/text-to-image", icon: Image },
             { name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
             { name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
-            { name: "המרת ריל", href: "/generate/reel-converter", icon: Film },
+            { name: "המרת רילז", href: "/generate/reel-converter", icon: Film },
             { name: "חיתוך סרטון", href: "/generate/video-clips", icon: Scissors },
             { name: "יצירת קרוסלה", href: "/generate/carousel", icon: LayoutGrid },
         ]

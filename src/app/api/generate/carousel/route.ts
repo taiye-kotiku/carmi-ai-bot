@@ -30,6 +30,7 @@ export async function POST(req: Request) {
             style = "educational",
             use_brand = false,
             logo_url: customLogoUrl,
+            logo_base64: logoBase64,
             logo_position = "top-right",
         } = body;
 
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
             );
         }
 
-        // Get logo: custom upload, or from brand
+        // Get logo: custom upload (URL or base64), or from brand
         let brandLogo: string | undefined = customLogoUrl;
         let brandColor: string | undefined;
         let logoPosition = logo_position;
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
             slideCount: slide_count,
             style,
             brandLogo,
+            logoBase64,
             brandColor,
             logoPosition,
             requiredCredits,
@@ -120,6 +122,7 @@ interface ProcessOptions {
     slideCount: number;
     style: string;
     brandLogo?: string;
+    logoBase64?: string;
     brandColor?: string;
     logoPosition?: string;
     requiredCredits: number;
@@ -163,6 +166,7 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
             slides,
             templateId: options.templateId,
             logoUrl: options.brandLogo,
+            logoBase64: options.logoBase64,
             brandColor: options.brandColor,
             logoPosition: options.logoPosition as any,
         });

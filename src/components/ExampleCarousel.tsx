@@ -28,14 +28,23 @@ export function ExampleCarousel() {
 
   return (
     <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-800/50">
-      <Image
-        src={CAROUSEL_IMAGES[currentIndex]}
-        alt={`דוגמא קרוסלה ${currentIndex + 1} מתוך ${CAROUSEL_IMAGES.length}`}
-        fill
-        className="object-contain"
-        sizes="(max-width: 768px) 100vw, 400px"
-        priority
-      />
+      <div
+        className="flex h-full transition-transform duration-300 ease-out"
+        style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+      >
+        {CAROUSEL_IMAGES.map((src, i) => (
+          <div key={i} className="min-w-full flex-shrink-0 relative">
+            <Image
+              src={src}
+              alt={`דוגמא קרוסלה ${i + 1} מתוך ${CAROUSEL_IMAGES.length}`}
+              fill
+              className="object-contain"
+              sizes="(max-width: 768px) 100vw, 400px"
+              priority={i === 0}
+            />
+          </div>
+        ))}
+      </div>
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-900/90 backdrop-blur-sm rounded-full px-4 py-2">
         <button
           onClick={goToNext}

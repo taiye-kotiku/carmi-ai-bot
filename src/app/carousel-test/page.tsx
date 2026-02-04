@@ -392,22 +392,56 @@ export default function CarouselTestPage() {
                             {loading && <div className="h-96 flex items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-indigo-500" /></div>}
                             {results.length > 0 && !loading && (
                                 <div>
-                                    <img src={results[currentSlide]} alt="" className="w-full rounded-lg border" />
+                                    <div className="relative overflow-hidden rounded-lg border bg-gray-900" style={{ aspectRatio: "1080/1350", minHeight: 320 }}>
+                                        {results.map((url, i) => (
+                                            <div
+                                                key={i}
+                                                className="absolute inset-0 flex items-center justify-center transition-opacity duration-300"
+                                                style={{
+                                                    opacity: currentSlide === i ? 1 : 0,
+                                                    pointerEvents: currentSlide === i ? "auto" : "none",
+                                                }}
+                                            >
+                                                <img src={url} alt={`שקף ${i + 1}`} className="w-full h-full object-contain" loading="eager" />
+                                            </div>
+                                        ))}
+                                        {results.length > 1 && (
+                                            <>
+                                                <button
+                                                    onClick={() => setCurrentSlide((p) => (p - 1 + results.length) % results.length)}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow"
+                                                    aria-label="תמונה קודמת"
+                                                >
+                                                    <ChevronRight className="h-5 w-5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCurrentSlide((p) => (p + 1) % results.length)}
+                                                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow"
+                                                    aria-label="תמונה הבאה"
+                                                >
+                                                    <ChevronLeft className="h-5 w-5" />
+                                                </button>
+                                                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1 rounded-full text-sm">
+                                                    {currentSlide + 1} / {results.length}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                     {results.length > 1 && (
-                                        <>
-                                            <div className="flex justify-center gap-2 mt-2">
-                                                <button onClick={() => setCurrentSlide((p) => (p - 1 + results.length) % results.length)} className="p-2 bg-white rounded-full shadow"><ChevronRight className="h-5 w-5" /></button>
-                                                <span className="py-2">{currentSlide + 1} / {results.length}</span>
-                                                <button onClick={() => setCurrentSlide((p) => (p + 1) % results.length)} className="p-2 bg-white rounded-full shadow"><ChevronLeft className="h-5 w-5" /></button>
-                                            </div>
-                                            <div className="flex gap-1 mt-2 overflow-x-auto">
-                                                {results.map((url, i) => (
-                                                    <button key={i} onClick={() => setCurrentSlide(i)} className={`flex-shrink-0 w-14 h-16 rounded overflow-hidden border-2 ${currentSlide === i ? "border-indigo-500" : ""}`}>
-                                                        <img src={url} alt="" className="w-full h-full object-cover" />
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </>
+                                        <div className="flex justify-center gap-2 mt-2">
+                                            <button onClick={() => setCurrentSlide((p) => (p - 1 + results.length) % results.length)} className="p-2 bg-white rounded-full shadow"><ChevronRight className="h-5 w-5" /></button>
+                                            <span className="py-2">{currentSlide + 1} / {results.length}</span>
+                                            <button onClick={() => setCurrentSlide((p) => (p + 1) % results.length)} className="p-2 bg-white rounded-full shadow"><ChevronLeft className="h-5 w-5" /></button>
+                                        </div>
+                                    )}
+                                    {results.length > 1 && (
+                                        <div className="flex gap-1 mt-2 overflow-x-auto justify-center">
+                                            {results.map((url, i) => (
+                                                <button key={i} onClick={() => setCurrentSlide(i)} className={`flex-shrink-0 w-14 h-16 rounded overflow-hidden border-2 ${currentSlide === i ? "border-indigo-500" : ""}`}>
+                                                    <img src={url} alt="" className="w-full h-full object-cover" />
+                                                </button>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                             )}

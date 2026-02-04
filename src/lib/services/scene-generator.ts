@@ -15,7 +15,7 @@ interface GenerateScenesOptions {
 export async function generateCharacterScenes(options: GenerateScenesOptions): Promise<string[]> {
     const { topic, characterName, characterDescription, sceneCount, style, language } = options;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const styleInstructions = {
         storytelling: "Create a narrative arc with beginning, middle, and end. Each scene should flow naturally to the next.",

@@ -685,19 +685,32 @@ export default function CarouselGenerationPage() {
 
                         {results.length > 0 && !loading && (
                             <div className="space-y-4">
-                                <div className="relative">
-                                    <img src={results[currentSlide]} alt={`Slide ${currentSlide + 1}`} className="w-full rounded-lg border" />
+                                <div className="relative overflow-hidden rounded-lg border bg-gray-900" style={{ aspectRatio: "1080/1350", minHeight: 320 }}>
+                                    {results.map((url, i) => (
+                                        <div
+                                            key={i}
+                                            className="absolute inset-0 flex items-center justify-center transition-opacity duration-300"
+                                            style={{
+                                                opacity: currentSlide === i ? 1 : 0,
+                                                pointerEvents: currentSlide === i ? "auto" : "none",
+                                            }}
+                                        >
+                                            <img src={url} alt={`שקף ${i + 1}`} className="w-full h-full object-contain" loading="eager" />
+                                        </div>
+                                    ))}
                                     {results.length > 1 && (
                                         <>
                                             <button
                                                 onClick={() => setCurrentSlide((p) => (p + 1) % results.length)}
                                                 className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg"
+                                                aria-label="תמונה הבאה"
                                             >
                                                 <ChevronLeft className="w-5 h-5" />
                                             </button>
                                             <button
                                                 onClick={() => setCurrentSlide((p) => (p - 1 + results.length) % results.length)}
                                                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg"
+                                                aria-label="תמונה קודמת"
                                             >
                                                 <ChevronRight className="w-5 h-5" />
                                             </button>

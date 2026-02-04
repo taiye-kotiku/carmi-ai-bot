@@ -3,8 +3,12 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { ExampleCarousel } from "@/components/ExampleCarousel";
 import { Film, Image as ImageIcon, Sparkles, Zap, Check, LayoutGrid, Wand2, Video } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-slate-950" dir="rtl">
       {/* Futuristic Background */}
@@ -22,15 +26,19 @@ export default function HomePage() {
             <span className="text-xl font-bold text-white">קוסם</span>
           </Link>
           <div className="flex items-center gap-4">
-            <Link href="/carousel-test" className="text-slate-400 hover:text-white text-sm transition-colors">
-              בדיקת קרוסלה
-            </Link>
-            <Link href="/brand" className="text-slate-400 hover:text-white text-sm transition-colors">
-              מיתוג
-            </Link>
-            <Link href="/credits" className="text-slate-400 hover:text-white text-sm transition-colors">
-              מנוי וקרדיטים
-            </Link>
+            {user && (
+              <>
+                <Link href="/generate/carousel" className="text-slate-400 hover:text-white text-sm transition-colors">
+                  קרוסלה
+                </Link>
+                <Link href="/brand" className="text-slate-400 hover:text-white text-sm transition-colors">
+                  מיתוג
+                </Link>
+                <Link href="/credits" className="text-slate-400 hover:text-white text-sm transition-colors">
+                  מנוי וקרדיטים
+                </Link>
+              </>
+            )}
             <Link href="#examples" className="text-slate-400 hover:text-white text-sm transition-colors">
               דוגמאות
             </Link>

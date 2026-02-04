@@ -13,7 +13,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "נא להזין תוכן" }, { status: 400 });
         }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const systemPrompt = `אתה סוכן תוכן מקצועי ליצירת קרוסלות. המשתמש נותן תוכן בעברית ואתה מייצר תוכן לשקופיות.
 כל שקופית קצרה (1-2 משפטים, עד 25 מילים). סמן מילים להדגשה עם *כוכביות* - הן יוצגו במודגש ובצהוב.

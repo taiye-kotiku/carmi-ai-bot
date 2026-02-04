@@ -30,7 +30,7 @@ export async function POST(req: Request) {
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const systemPrompt = `אתה סוכן תוכן מקצועי ליצירת קרוסלות לרשתות חברתיות.
 המשתמש נותן לך תוכן בעברית ואתה מייצר תוכן לשקופיות קרוסלה.

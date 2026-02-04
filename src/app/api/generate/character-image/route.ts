@@ -1,10 +1,14 @@
-// src/app/api/generate/character-image/route.ts
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
-import { generateWithCharacter, downloadImage } from "@/lib/services/fal";
+import { fal } from "@fal-ai/client";
 import { enhancePrompt } from "@/lib/services/gemini";
+
+fal.config({ credentials: process.env.FAL_KEY });
 
 export async function POST(req: Request) {
     try {
@@ -19,7 +23,8 @@ export async function POST(req: Request) {
             character_id,
             prompt,
             aspect_ratio = "1:1",
-            enhance_prompt = true,
+            enhance_prompt: shouldEnhance = false,
+            num_images = 1,
         } = await req.json();
 
         if (!character_id) {
@@ -65,141 +70,109 @@ export async function POST(req: Request) {
             );
         }
 
-        // Create job
-        const jobId = nanoid();
-        await supabaseAdmin.from("jobs").insert({
-            id: jobId,
-            user_id: user.id,
-            type: "character_image",
-            status: "pending",
-            progress: 0,
-        });
+        if (!character.lora_url) {
+            return NextResponse.json(
+                { error: "הדמות עדיין לא מאומנת" },
+                { status: 400 }
+            );
+        }
 
-        // Process in background
-        processCharacterImage(
-            jobId,
-            user.id,
-            character,
-            prompt,
-            aspect_ratio,
-            enhance_prompt
-        );
-
-        return NextResponse.json({ jobId });
-    } catch (error) {
-        console.error("Character image error:", error);
-        return NextResponse.json({ error: "שגיאה בשרת" }, { status: 500 });
-    }
-}
-
-async function processCharacterImage(
-    jobId: string,
-    userId: string,
-    character: any,
-    prompt: string,
-    aspectRatio: string,
-    enhanceWithAI: boolean
-) {
-    try {
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "processing", progress: 10 })
-            .eq("id", jobId);
+        console.log("=== CHARACTER IMAGE GENERATION ===");
+        console.log("Character:", character.name);
+        console.log("LoRA:", character.lora_url);
 
         // Enhance prompt if requested
         let finalPrompt = prompt;
-        if (enhanceWithAI) {
-            finalPrompt = await enhancePrompt(prompt, "image");
-            // Add character context
-            if (character.description) {
-                finalPrompt = `${finalPrompt}. The person is: ${character.description}`;
+        if (shouldEnhance) {
+            try {
+                finalPrompt = await enhancePrompt(prompt, "image");
+            } catch (e) {
+                console.log("Prompt enhancement failed, using original");
             }
         }
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 20 })
-            .eq("id", jobId);
+        // Add trigger word
+        const fullPrompt = character.trigger_word
+            ? `${character.trigger_word}, ${finalPrompt}`
+            : finalPrompt;
 
-        // Generate with character consistency
-        const settings = character.settings || { ip_adapter_scale: 0.8, model: "pulid" };
+        console.log("Full prompt:", fullPrompt);
 
-        const result = await generateWithCharacter({
-            prompt: finalPrompt,
-            referenceImages: character.reference_images,
-            model: settings.model || "pulid",
-            aspectRatio,
-            ipAdapterScale: settings.ip_adapter_scale || 0.8,
+        // Map aspect ratio
+        type ImageSize = "square" | "square_hd" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
+        const imageSizeMap: Record<string, ImageSize> = {
+            "1:1": "square",
+            "16:9": "landscape_16_9",
+            "9:16": "portrait_16_9",
+            "4:3": "landscape_4_3",
+            "3:4": "portrait_4_3",
+        };
+
+        // Generate with FLUX LoRA - SYNCHRONOUS (waits for result)
+        const result = await fal.subscribe("fal-ai/flux-lora", {
+            input: {
+                prompt: fullPrompt,
+                loras: [
+                    {
+                        path: character.lora_url,
+                        scale: 0.9,
+                    },
+                ],
+                image_size: imageSizeMap[aspect_ratio] || "square",
+                num_images: Math.min(num_images, 4),
+                output_format: "jpeg",
+                guidance_scale: 3.5,
+                num_inference_steps: 28,
+                enable_safety_checker: false,
+            },
+            logs: true,
+            onQueueUpdate: (update) => {
+                if (update.status === "IN_PROGRESS") {
+                    console.log("FAL:", update.logs?.map(l => l.message).join(", "));
+                }
+            },
         });
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 70 })
-            .eq("id", jobId);
+        const images = result.data.images?.map((img: any) => img.url) || [];
 
-        if (!result.images.length) {
-            throw new Error("No images generated");
+        if (images.length === 0) {
+            throw new Error("לא נוצרו תמונות");
         }
 
-        // Download and upload to Supabase Storage
-        const uploadedUrls: string[] = [];
-
-        for (let i = 0; i < result.images.length; i++) {
-            const imageBuffer = await downloadImage(result.images[i]);
-            const fileName = `${userId}/${jobId}/character_${i + 1}.png`;
-
-            const { error: uploadError } = await supabaseAdmin.storage
-                .from("content")
-                .upload(fileName, imageBuffer, {
-                    contentType: "image/png",
-                    upsert: true,
-                });
-
-            if (!uploadError) {
-                const { data: urlData } = supabaseAdmin.storage
-                    .from("content")
-                    .getPublicUrl(fileName);
-                uploadedUrls.push(urlData.publicUrl);
-            }
-        }
-
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 90 })
-            .eq("id", jobId);
+        console.log("Generated", images.length, "images");
 
         // Save generation record
         const generationId = nanoid();
         await supabaseAdmin.from("generations").insert({
             id: generationId,
-            user_id: userId,
+            user_id: user.id,
             type: "image",
             feature: "character_image",
-            prompt,
-            result_urls: uploadedUrls,
-            thumbnail_url: uploadedUrls[0],
+            prompt: fullPrompt,
+            result_urls: images,
+            thumbnail_url: images[0],
             status: "completed",
-            job_id: jobId,
             character_id: character.id,
+            metadata: {
+                aspect_ratio,
+                lora_scale: 0.9,
+                seed: result.data.seed,
+                original_prompt: prompt,
+                enhanced: shouldEnhance,
+            },
             completed_at: new Date().toISOString(),
         });
 
-        // Deduct 2 credits (character images cost more)
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const newBalance = (currentCredits?.image_credits || 2) - 2;
+        // Deduct 2 credits
+        const newBalance = (credits.image_credits || 2) - 2;
 
         await supabaseAdmin
             .from("credits")
             .update({ image_credits: newBalance })
-            .eq("user_id", userId);
+            .eq("user_id", user.id);
 
         await supabaseAdmin.from("credit_transactions").insert({
-            user_id: userId,
+            user_id: user.id,
             credit_type: "image",
             amount: -2,
             balance_after: newBalance,
@@ -207,26 +180,20 @@ async function processCharacterImage(
             related_id: generationId,
         });
 
-        // Complete job
-        await supabaseAdmin
-            .from("jobs")
-            .update({
-                status: "completed",
-                progress: 100,
-                result: {
-                    images: uploadedUrls,
-                    prompt: finalPrompt,
-                    character_id: character.id,
-                },
-            })
-            .eq("id", jobId);
+        console.log("=== SUCCESS ===");
 
-    } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error("Character image processing error:", error);
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "failed", error: errorMessage })
-            .eq("id", jobId);
+        return NextResponse.json({
+            success: true,
+            images,
+            seed: result.data.seed,
+            generationId,
+        });
+
+    } catch (error: any) {
+        console.error("Character image error:", error);
+        return NextResponse.json(
+            { error: error.message || "שגיאה ביצירת התמונה" },
+            { status: 500 }
+        );
     }
 }

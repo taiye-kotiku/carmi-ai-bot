@@ -1,13 +1,10 @@
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { NextResponse } from "next/server";
 
-// GET - Fetch single character
+// GET single character
 export async function GET(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -20,7 +17,7 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data: character, error } = await supabaseAdmin
+        const { data: character, error } = await supabase
             .from("characters")
             .select("*")
             .eq("id", id)
@@ -33,14 +30,13 @@ export async function GET(
 
         return NextResponse.json(character);
     } catch (error) {
-        console.error("Error fetching character:", error);
         return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
 }
 
-// PUT - Update character
-export async function PUT(
-    request: Request,
+// PATCH update character
+export async function PATCH(
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -57,45 +53,25 @@ export async function PUT(
 
         const { data: character, error } = await supabaseAdmin
             .from("characters")
-            .update({
-                name: body.name,
-                description: body.description,
-                reference_images: body.reference_images,
-                settings: body.settings,
-                updated_at: new Date().toISOString(),
-            })
+            .update(body)
             .eq("id", id)
             .eq("user_id", user.id)
             .select()
             .single();
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 400 });
+            throw error;
         }
 
         return NextResponse.json(character);
     } catch (error) {
-        console.error("Error updating character:", error);
         return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
 }
 
-
-// Add this after your PUT function:
-
-// PATCH - Update character (alias for PUT)
-export async function PATCH(
-    request: Request,
-    { params }: { params: Promise<{ id: string }> }
-) {
-    return PUT(request, { params });
-}
-
-
-
-// DELETE - Delete character
+// DELETE character
 export async function DELETE(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -115,12 +91,11 @@ export async function DELETE(
             .eq("user_id", user.id);
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 400 });
+            throw error;
         }
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error("Error deleting character:", error);
         return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
 }

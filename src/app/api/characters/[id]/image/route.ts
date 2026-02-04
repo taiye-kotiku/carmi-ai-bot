@@ -59,8 +59,10 @@ export async function POST(
         // Build prompt with trigger word
         const fullPrompt = triggerWord ? `${triggerWord}, ${prompt}` : prompt;
 
+        type ImageSize = "square" | "square_hd" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
+
         // Map aspect ratio to image size
-        const imageSizeMap: Record<string, string> = {
+        const imageSizeMap: Record<string, ImageSize> = {
             "1:1": "square",
             "16:9": "landscape_16_9",
             "9:16": "portrait_16_9",

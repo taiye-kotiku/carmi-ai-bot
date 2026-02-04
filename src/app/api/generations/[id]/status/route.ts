@@ -29,7 +29,7 @@ export async function GET(
     }
 
     // Already completed?
-    if (generation.status === "completed") {
+    if (generation.status === "completed" && generation.result_urls?.length > 0) {
         return NextResponse.json({
             status: "completed",
             images: generation.result_urls,
@@ -37,11 +37,11 @@ export async function GET(
     }
 
     if (generation.status === "failed") {
-        return NextResponse.json({ status: "failed", error: generation.metadata?.error });
+        return NextResponse.json({ status: "failed", error: generation.error_message });
     }
 
-    // Check FAL status
-    const falRequestId = generation.metadata?.fal_request_id;
+    // Check FAL status using job_id
+    const falRequestId = generation.job_id;
     if (!falRequestId) {
         return NextResponse.json({ status: "processing" });
     }
@@ -72,6 +72,7 @@ export async function GET(
                     status: "completed",
                     result_urls: images,
                     thumbnail_url: images[0],
+                    completed_at: new Date().toISOString(),
                 })
                 .eq("id", id);
 
@@ -81,7 +82,7 @@ export async function GET(
         if (status.status === "FAILED") {
             await supabaseAdmin
                 .from("generations")
-                .update({ status: "failed" })
+                .update({ status: "failed", error_message: "FAL generation failed" })
                 .eq("id", id);
             return NextResponse.json({ status: "failed" });
         }
@@ -89,6 +90,7 @@ export async function GET(
         return NextResponse.json({ status: "processing" });
 
     } catch (error) {
+        console.error("Poll error:", error);
         return NextResponse.json({ status: "processing" });
     }
 }

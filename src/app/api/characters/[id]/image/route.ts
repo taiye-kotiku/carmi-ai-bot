@@ -78,35 +78,33 @@ export async function POST(
             }, { status: 500 });
         }
 
+        // Generate unique ID
+        const generationId = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
         // Create generation record
-        const { data: generation, error: dbError } = await supabaseAdmin
+        const { error: dbError } = await supabaseAdmin
             .from("generations")
             .insert({
+                id: generationId,
                 user_id: user.id,
                 type: "image",
                 feature: "character_image",
                 prompt: fullPrompt,
                 character_id: characterId,
                 status: "processing",
-                metadata: {
-                    fal_request_id: falData.request_id,
-                    aspectRatio,
-                    loraUrl
-                },
-            })
-            .select("id")
-            .single();
+                job_id: falData.request_id,  // Store FAL request ID here
+            });
 
         if (dbError) {
             console.error("DB Error:", dbError);
             return NextResponse.json({ error: "Database error: " + dbError.message }, { status: 500 });
         }
 
-        console.log("Created generation:", generation?.id);
+        console.log("Created generation:", generationId);
 
         return NextResponse.json({
             success: true,
-            generationId: generation.id,
+            generationId: generationId,
             status: "processing"
         });
 

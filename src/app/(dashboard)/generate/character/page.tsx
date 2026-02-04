@@ -1,318 +1,467 @@
-// src/app/(dashboard)/generate/character/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-    Users,
-    Wand2,
-    Loader2,
-    Download,
-    Sparkles,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { CharacterSelector } from "@/components/features/character-selector";
-import { CreateCharacterModal } from "@/components/features/create-character-modal";
-import { Character } from "@/types/database";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
+import {
+    Loader2, Download, Sparkles, User, Image as ImageIcon,
+    Video, ArrowRight
+} from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 
-const ASPECT_RATIOS = [
-    { value: "1:1", label: "ריבועי", icon: "⬜" },
-    { value: "16:9", label: "רחב", icon: "🖼️" },
-    { value: "9:16", label: "סטורי", icon: "📱" },
-    { value: "4:3", label: "קלאסי", icon: "📺" },
+interface Character {
+    id: string;
+    name: string;
+    thumbnail_url: string;
+    trigger_word: string;
+    model_status: string;
+    lora_url: string | null;
+}
+
+const IMAGE_ASPECTS = [
+    { value: "1:1", label: "1:1" },
+    { value: "4:3", label: "4:3" },
+    { value: "3:4", label: "3:4" },
+    { value: "16:9", label: "16:9" },
+    { value: "9:16", label: "9:16" },
 ];
 
-export default function CharacterGenerationPage() {
+const VIDEO_ASPECTS = [
+    { value: "16:9", label: "16:9 (רוחבי)" },
+    { value: "9:16", label: "9:16 (סטורי)" },
+];
+
+const VIDEO_RESOLUTIONS = [
+    { value: "480p", label: "480p (מהיר)" },
+    { value: "580p", label: "580p" },
+    { value: "720p", label: "720p (איכותי)" },
+];
+
+export default function CharacterGeneratePage() {
     const searchParams = useSearchParams();
-    const preselectedId = searchParams.get("id");
+    const characterId = searchParams.get("id");
 
-    const [characters, setCharacters] = useState<Character[]>([]);
-    const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
-    const [prompt, setPrompt] = useState("");
-    const [aspectRatio, setAspectRatio] = useState("1:1");
-    const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState<string | null>(null);
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [selectorKey, setSelectorKey] = useState(0);
+    const [character, setCharacter] = useState<Character | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [tab, setTab] = useState("image");
 
-    // Fetch characters and preselect if ID in URL
+    // Image settings
+    const [imagePrompt, setImagePrompt] = useState("");
+    const [imageAspect, setImageAspect] = useState("1:1");
+    const [numImages, setNumImages] = useState(1);
+    const [generatingImage, setGeneratingImage] = useState(false);
+    const [imageResults, setImageResults] = useState<string[]>([]);
+
+    // Video settings
+    const [videoPrompt, setVideoPrompt] = useState("");
+    const [videoAspect, setVideoAspect] = useState("16:9");
+    const [videoResolution, setVideoResolution] = useState("720p");
+    const [proMode, setProMode] = useState(false);
+    const [generatingVideo, setGeneratingVideo] = useState(false);
+    const [videoResult, setVideoResult] = useState<string | null>(null);
+
     useEffect(() => {
-        async function fetchAndSelect() {
-            try {
-                const res = await fetch("/api/characters");
-                if (res.ok) {
-                    const data = await res.json();
-                    setCharacters(data);
-
-                    if (preselectedId) {
-                        const found = data.find((c: Character) => c.id === preselectedId);
-                        if (found) {
-                            setSelectedCharacter(found);
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to fetch characters:", err);
-            }
+        if (characterId) {
+            fetchCharacter();
+        } else {
+            setLoading(false);
         }
-        fetchAndSelect();
-    }, [preselectedId]);
+    }, [characterId]);
 
-    const handleGenerate = async () => {
-        if (!selectedCharacter) {
-            toast.error("נא לבחור דמות");
-            return;
-        }
-        if (!prompt.trim()) {
-            toast.error("נא להזין תיאור לתמונה");
-            return;
-        }
-
-        setLoading(true);
-        setResult(null);
-
+    async function fetchCharacter() {
         try {
-            const response = await fetch("/api/generate/character-image", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    character_id: selectedCharacter.id,
-                    prompt,
-                    aspect_ratio: aspectRatio,
-                }),
-            });
-
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.error);
+            const res = await fetch(`/api/characters/${characterId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setCharacter(data);
             }
-
-            const { jobId } = await response.json();
-
-            // Poll for result
-            let attempts = 0;
-            while (attempts < 60) {
-                await new Promise((r) => setTimeout(r, 2000));
-
-                const statusRes = await fetch(`/api/jobs/${jobId}`);
-                const status = await statusRes.json();
-
-                if (status.status === "completed") {
-                    setResult(status.result.images[0]);
-                    toast.success("התמונה נוצרה! 🎨");
-                    break;
-                }
-
-                if (status.status === "failed") {
-                    throw new Error(status.error);
-                }
-
-                attempts++;
-            }
-
-            if (attempts >= 60) {
-                throw new Error("הזמן הקצוב חלף");
-            }
-        } catch (err: any) {
-            toast.error(err.message);
+        } catch (err) {
+            toast.error("שגיאה בטעינת הדמות");
         } finally {
             setLoading(false);
         }
-    };
+    }
 
-    const handleDownload = async () => {
-        if (!result) return;
+    async function generateImage() {
+        if (!imagePrompt.trim() || !character) return;
+
+        setGeneratingImage(true);
+        setImageResults([]);
+
         try {
-            const response = await fetch(result);
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${selectedCharacter?.name || "character"}-${Date.now()}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            toast.success("התמונה הורדה!");
-        } catch {
-            toast.error("שגיאה בהורדה");
-        }
-    };
+            const res = await fetch(`/api/characters/${character.id}/image`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    prompt: imagePrompt,
+                    aspectRatio: imageAspect,
+                    numImages,
+                }),
+            });
 
-    const refreshCharacters = useCallback(() => {
-        setSelectorKey((k) => k + 1);
-    }, []);
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Generation failed");
+            }
+
+            setImageResults(data.images);
+            toast.success("התמונות נוצרו בהצלחה!");
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setGeneratingImage(false);
+        }
+    }
+
+    async function generateVideo() {
+        if (!videoPrompt.trim() || !character) return;
+
+        setGeneratingVideo(true);
+        setVideoResult(null);
+
+        try {
+            const res = await fetch(`/api/characters/${character.id}/video`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    prompt: videoPrompt,
+                    aspectRatio: videoAspect,
+                    resolution: videoResolution,
+                    proMode,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Video generation failed");
+            }
+
+            setVideoResult(data.videoUrl);
+            toast.success("הסרטון נוצר בהצלחה!");
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setGeneratingVideo(false);
+        }
+    }
+
+    async function handleDownload(url: string, type: "image" | "video", index = 0) {
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = `${character?.name}-${type}-${Date.now()}-${index + 1}.${type === "video" ? "mp4" : "jpg"}`;
+            a.click();
+            URL.revokeObjectURL(downloadUrl);
+        } catch {
+            window.open(url, "_blank");
+        }
+    }
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+            </div>
+        );
+    }
+
+    if (!characterId || !character) {
+        return (
+            <div className="max-w-2xl mx-auto text-center py-12">
+                <User className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+                <h2 className="text-xl font-semibold mb-2">לא נבחרה דמות</h2>
+                <p className="text-gray-500 mb-6">בחר דמות מהרשימה כדי להתחיל ליצור</p>
+                <Link href="/characters">
+                    <Button>
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                        לדף הדמויות
+                    </Button>
+                </Link>
+            </div>
+        );
+    }
+
+    if (character.model_status !== "ready") {
+        return (
+            <div className="max-w-2xl mx-auto text-center py-12">
+                <Loader2 className="h-16 w-16 mx-auto text-blue-500 animate-spin mb-4" />
+                <h2 className="text-xl font-semibold mb-2">הדמות עדיין באימון</h2>
+                <p className="text-gray-500 mb-6">נא להמתין עד שהאימון יסתיים (~15 דקות)</p>
+                <Link href="/characters">
+                    <Button variant="outline">
+                        חזרה לדמויות
+                    </Button>
+                </Link>
+            </div>
+        );
+    }
 
     return (
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto" dir="rtl">
             {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="h-12 w-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                        <Users className="h-6 w-6 text-indigo-600" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold">יצירה עם דמות</h1>
-                        <p className="text-gray-600">
-                            צור תמונות עם הדמות שלך בכל מצב שתרצה
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Input Column */}
-                <div className="space-y-6">
-                    <Card>
-                        <CardContent className="p-6 space-y-6">
-                            {/* Character Selector */}
-                            <CharacterSelector
-                                key={selectorKey}
-                                selectedId={selectedCharacter?.id}
-                                onSelect={setSelectedCharacter}
-                                onCreateNew={() => setShowCreateModal(true)}
-                            />
-
-                            {/* Selected character info */}
-                            {selectedCharacter && (
-                                <div className="bg-indigo-50 rounded-lg p-3 flex items-center gap-3">
-                                    <img
-                                        src={selectedCharacter.thumbnail_url || selectedCharacter.reference_images[0]}
-                                        alt={selectedCharacter.name}
-                                        className="w-12 h-12 rounded-lg object-cover"
-                                    />
-                                    <div>
-                                        <p className="font-medium">{selectedCharacter.name}</p>
-                                        <p className="text-sm text-gray-600">
-                                            {selectedCharacter.reference_images.length} תמונות ייחוס
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Prompt */}
-                            <div>
-                                <Label className="text-base">מה הדמות עושה?</Label>
-                                <Textarea
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    placeholder={
-                                        selectedCharacter
-                                            ? `לדוגמה: ${selectedCharacter.name} יושב/ת בבית קפה פריזאי, אור בוקר רך...`
-                                            : "בחר דמות קודם..."
-                                    }
-                                    rows={4}
-                                    className="mt-2"
-                                    disabled={!selectedCharacter}
-                                />
-                            </div>
-
-                            {/* Aspect Ratio */}
-                            <div>
-                                <Label className="text-base">יחס תמונה</Label>
-                                <div className="grid grid-cols-4 gap-2 mt-2">
-                                    {ASPECT_RATIOS.map((ratio) => (
-                                        <button
-                                            key={ratio.value}
-                                            onClick={() => setAspectRatio(ratio.value)}
-                                            className={`p-2 rounded-lg border text-sm flex flex-col items-center gap-1 transition-colors ${aspectRatio === ratio.value
-                                                ? "border-purple-500 bg-purple-50 text-purple-700"
-                                                : "border-gray-200 hover:border-gray-300"
-                                                }`}
-                                        >
-                                            <span>{ratio.icon}</span>
-                                            <span className="text-xs">{ratio.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Generate Button */}
-                            <Button
-                                onClick={handleGenerate}
-                                disabled={loading || !selectedCharacter || !prompt.trim()}
-                                className="w-full"
-                                size="lg"
-                            >
-                                {loading ? (
-                                    <>
-                                        <Loader2 className="h-5 w-5 animate-spin ml-2" />
-                                        יוצר תמונה...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Wand2 className="h-5 w-5 ml-2" />
-                                        צור תמונה עם הדמות
-                                    </>
-                                )}
-                            </Button>
-
-                            <p className="text-sm text-indigo-600 text-center">
-                                עלות: 2 קרדיטים תמונה
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Result Column */}
+            <div className="flex items-center gap-4 mb-8">
+                <img
+                    src={character.thumbnail_url}
+                    alt={character.name}
+                    className="h-16 w-16 rounded-xl object-cover"
+                />
                 <div>
-                    <Card className="h-full">
-                        <CardContent className="p-6 h-full flex flex-col">
-                            <h3 className="text-lg font-medium mb-4">תוצאה</h3>
-
-                            {loading && (
-                                <div className="flex-1 bg-gray-100 rounded-lg flex items-center justify-center min-h-[400px]">
-                                    <div className="text-center">
-                                        <Loader2 className="h-12 w-12 animate-spin text-indigo-500 mx-auto mb-4" />
-                                        <p className="text-gray-600">יוצר את התמונה עם הדמות שלך...</p>
-                                        <p className="text-sm text-gray-400 mt-1">
-                                            זה יכול לקחת עד דקה
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {result && !loading && (
-                                <div className="space-y-4">
-                                    <img
-                                        src={result}
-                                        alt="Generated"
-                                        className="w-full rounded-lg border"
-                                    />
-                                    <Button
-                                        variant="outline"
-                                        className="w-full"
-                                        onClick={handleDownload}
-                                    >
-                                        <Download className="h-4 w-4 ml-2" />
-                                        הורד תמונה
-                                    </Button>
-                                </div>
-                            )}
-
-                            {!loading && !result && (
-                                <div className="flex-1 bg-gray-50 rounded-lg flex items-center justify-center border-2 border-dashed min-h-[400px]">
-                                    <div className="text-center text-gray-400">
-                                        <Sparkles className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                                        <p>התמונה תופיע כאן</p>
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                    <h1 className="text-2xl font-bold">{character.name}</h1>
+                    <p className="text-gray-500">צור תמונות וסרטונים עם הדמות</p>
                 </div>
             </div>
 
-            {/* Create Character Modal */}
-            <CreateCharacterModal
-                open={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                onCreated={refreshCharacters}
-            />
+            <Tabs value={tab} onValueChange={setTab}>
+                <TabsList className="mb-6">
+                    <TabsTrigger value="image" className="flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4" />
+                        תמונות
+                    </TabsTrigger>
+                    <TabsTrigger value="video" className="flex items-center gap-2">
+                        <Video className="h-4 w-4" />
+                        סרטונים
+                    </TabsTrigger>
+                </TabsList>
+
+                {/* Image Generation */}
+                <TabsContent value="image">
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>הגדרות תמונה</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">תיאור הסצנה</label>
+                                    <Textarea
+                                        placeholder="תאר את הסצנה... לדוגמה: יושב בבית קפה פריזאי, אור רך"
+                                        value={imagePrompt}
+                                        onChange={(e) => setImagePrompt(e.target.value)}
+                                        rows={3}
+                                        disabled={generatingImage}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">יחס תצוגה</label>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {IMAGE_ASPECTS.map((a) => (
+                                            <button
+                                                key={a.value}
+                                                onClick={() => setImageAspect(a.value)}
+                                                disabled={generatingImage}
+                                                className={`px-3 py-2 rounded-lg border text-sm ${imageAspect === a.value
+                                                        ? "bg-purple-500 border-purple-500 text-white"
+                                                        : "hover:border-purple-300"
+                                                    }`}
+                                            >
+                                                {a.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">
+                                        מספר תמונות: {numImages}
+                                    </label>
+                                    <Slider
+                                        value={[numImages]}
+                                        onValueChange={([v]) => setNumImages(v)}
+                                        min={1}
+                                        max={4}
+                                        disabled={generatingImage}
+                                    />
+                                </div>
+
+                                <Button
+                                    onClick={generateImage}
+                                    disabled={!imagePrompt.trim() || generatingImage}
+                                    className="w-full"
+                                    size="lg"
+                                >
+                                    {generatingImage ? (
+                                        <>
+                                            <Loader2 className="h-5 w-5 ml-2 animate-spin" />
+                                            יוצר תמונות...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="h-5 w-5 ml-2" />
+                                            צור {numImages} תמונות
+                                        </>
+                                    )}
+                                </Button>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>תוצאות</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {imageResults.length === 0 ? (
+                                    <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                                        התמונות יופיעו כאן
+                                    </div>
+                                ) : (
+                                    <div className={`grid gap-2 ${imageResults.length > 1 ? "grid-cols-2" : ""}`}>
+                                        {imageResults.map((url, i) => (
+                                            <div key={i} className="relative group">
+                                                <img src={url} alt="" className="w-full rounded-lg" />
+                                                <Button
+                                                    size="icon"
+                                                    variant="secondary"
+                                                    className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={() => handleDownload(url, "image", i)}
+                                                >
+                                                    <Download className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* Video Generation */}
+                <TabsContent value="video">
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>הגדרות סרטון</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">תיאור הסרטון</label>
+                                    <Textarea
+                                        placeholder="תאר את הפעולה... לדוגמה: הולך ברחוב טוקיו בלילה, שלטי ניאון"
+                                        value={videoPrompt}
+                                        onChange={(e) => setVideoPrompt(e.target.value)}
+                                        rows={3}
+                                        disabled={generatingVideo}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">יחס תצוגה</label>
+                                    <div className="flex gap-2">
+                                        {VIDEO_ASPECTS.map((a) => (
+                                            <button
+                                                key={a.value}
+                                                onClick={() => setVideoAspect(a.value)}
+                                                disabled={generatingVideo}
+                                                className={`flex-1 px-3 py-2 rounded-lg border text-sm ${videoAspect === a.value
+                                                        ? "bg-purple-500 border-purple-500 text-white"
+                                                        : "hover:border-purple-300"
+                                                    }`}
+                                            >
+                                                {a.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">רזולוציה</label>
+                                    <div className="flex gap-2">
+                                        {VIDEO_RESOLUTIONS.map((r) => (
+                                            <button
+                                                key={r.value}
+                                                onClick={() => setVideoResolution(r.value)}
+                                                disabled={generatingVideo}
+                                                className={`flex-1 px-3 py-2 rounded-lg border text-sm ${videoResolution === r.value
+                                                        ? "bg-purple-500 border-purple-500 text-white"
+                                                        : "hover:border-purple-300"
+                                                    }`}
+                                            >
+                                                {r.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-lg">
+                                    <input
+                                        type="checkbox"
+                                        id="proMode"
+                                        checked={proMode}
+                                        onChange={(e) => setProMode(e.target.checked)}
+                                        disabled={generatingVideo}
+                                        className="h-4 w-4"
+                                    />
+                                    <label htmlFor="proMode" className="text-sm">
+                                        <span className="font-medium">מצב Pro</span>
+                                        <span className="text-gray-500"> - איכות גבוהה יותר (x2 קרדיטים)</span>
+                                    </label>
+                                </div>
+
+                                <Button
+                                    onClick={generateVideo}
+                                    disabled={!videoPrompt.trim() || generatingVideo}
+                                    className="w-full"
+                                    size="lg"
+                                >
+                                    {generatingVideo ? (
+                                        <>
+                                            <Loader2 className="h-5 w-5 ml-2 animate-spin" />
+                                            יוצר סרטון (2-5 דקות)...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Video className="h-5 w-5 ml-2" />
+                                            צור סרטון {proMode ? "(Pro)" : ""}
+                                        </>
+                                    )}
+                                </Button>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>תוצאה</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {!videoResult ? (
+                                    <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                                        הסרטון יופיע כאן
+                                    </div>
+                                ) : (
+                                    <div className="relative group">
+                                        <video
+                                            src={videoResult}
+                                            controls
+                                            autoPlay
+                                            loop
+                                            className="w-full rounded-lg"
+                                        />
+                                        <Button
+                                            size="icon"
+                                            variant="secondary"
+                                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={() => handleDownload(videoResult, "video")}
+                                        >
+                                            <Download className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }

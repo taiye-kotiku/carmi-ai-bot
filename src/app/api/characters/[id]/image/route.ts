@@ -1,12 +1,8 @@
-export const runtime = "nodejs";
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { fal } from "@fal-ai/client";
-
-fal.config({ credentials: process.env.FAL_KEY });
 
 export async function POST(
     request: NextRequest,
@@ -22,122 +18,131 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { prompt, aspectRatio = "1:1", numImages = 1 } = await request.json();
+        const { prompt, aspectRatio = "1:1" } = await request.json();
 
         if (!prompt?.trim()) {
             return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
         }
 
         // Get character
-        const { data: character, error: charError } = await supabaseAdmin
+        const { data: character } = await supabaseAdmin
             .from("characters")
             .select("*")
             .eq("id", characterId)
             .eq("user_id", user.id)
             .single();
 
-        if (charError || !character) {
+        if (!character) {
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        // Get LoRA URL
         const loraUrl = character.lora_url || character.model_url;
 
         if (!loraUrl) {
-            return NextResponse.json(
-                { error: "Character not trained yet" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Character not trained" }, { status: 400 });
         }
 
-        // Get trigger word
-        const settings = typeof character.settings === 'string'
-            ? JSON.parse(character.settings)
-            : character.settings;
-        const triggerWord = character.trigger_word || settings?.trigger_word || "";
-
-        // Build prompt with trigger word
+        const triggerWord = character.trigger_word || "";
         const fullPrompt = triggerWord ? `${triggerWord}, ${prompt}` : prompt;
 
-        type ImageSize = "square" | "square_hd" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
-
-        // Map aspect ratio to image size
-        const imageSizeMap: Record<string, ImageSize> = {
+        const imageSizeMap: Record<string, string> = {
             "1:1": "square",
             "16:9": "landscape_16_9",
             "9:16": "portrait_16_9",
-            "4:3": "landscape_4_3",
-            "3:4": "portrait_4_3",
         };
 
-        console.log("=== GENERATING IMAGE ===");
-        console.log("Character:", character.name);
-        console.log("LoRA URL:", loraUrl);
-        console.log("Trigger Word:", triggerWord);
-        console.log("Full Prompt:", fullPrompt);
-
-        // Use SD 1.5 model (compatible with your Modal-trained LoRA)
-        const result = await fal.subscribe("fal-ai/stable-diffusion-v15", {
-            input: {
+        // Create a generation record first
+        const { data: generation } = await supabaseAdmin
+            .from("generations")
+            .insert({
+                user_id: user.id,
+                type: "image",
+                feature: "character_image",
                 prompt: fullPrompt,
-                negative_prompt: "ugly, blurry, low quality, distorted, deformed",
-                loras: [
-                    {
-                        path: loraUrl,
-                        scale: 0.8,
-                    },
-                ],
+                character_id: characterId,
+                status: "processing",
+                metadata: { aspectRatio, loraUrl },
+            })
+            .select()
+            .single();
+
+        // Submit to FAL queue (non-blocking)
+        const response = await fetch("https://queue.fal.run/fal-ai/stable-diffusion-v15", {
+            method: "POST",
+            headers: {
+                "Authorization": `Key ${process.env.FAL_KEY}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                prompt: fullPrompt,
+                negative_prompt: "ugly, blurry, low quality, distorted",
+                loras: [{ path: loraUrl, scale: 0.8 }],
                 image_size: imageSizeMap[aspectRatio] || "square",
-                num_images: Math.min(numImages, 4),
-                num_inference_steps: 30,
+                num_images: 1,
+                num_inference_steps: 20,
                 guidance_scale: 7.5,
-                format: "jpeg",
                 enable_safety_checker: false,
-            },
-            logs: true,
-            onQueueUpdate: (update) => {
-                if (update.status === "IN_PROGRESS") {
-                    update.logs?.map((log) => log.message).forEach(console.log);
-                }
-            },
+            }),
         });
 
-        const images = result.data.images?.map((img: any) => img.url) || [];
+        const data = await response.json();
 
-        if (images.length === 0) {
-            throw new Error("No images generated");
+        if (!response.ok) {
+            console.error("FAL Error:", data);
+            await supabaseAdmin
+                .from("generations")
+                .update({ status: "failed", metadata: { error: data } })
+                .eq("id", generation?.id);
+            return NextResponse.json({ error: data.detail || "FAL error" }, { status: 500 });
         }
 
-        // Save to generations table
-        await supabaseAdmin.from("generations").insert({
-            user_id: user.id,
-            type: "image",
-            feature: "character_image",
-            prompt: fullPrompt,
-            result_urls: images,
-            thumbnail_url: images[0],
-            character_id: characterId,
-            metadata: {
-                aspectRatio,
-                loraScale: 0.8,
-                seed: result.data.seed,
-                triggerWord,
-                model: "stable-diffusion-v15",
-            },
-            status: "completed",
-        });
+        // FAL returns request_id for queue - poll for result
+        const requestId = data.request_id;
 
-        return NextResponse.json({
-            success: true,
-            images,
-            seed: result.data.seed,
-        });
+        // Poll for result (with timeout)
+        let result: any = null;
+        for (let i = 0; i < 30; i++) {  // 30 attempts, ~30 seconds max
+            await new Promise(r => setTimeout(r, 1000));
+
+            const statusRes = await fetch(`https://queue.fal.run/fal-ai/stable-diffusion-v15/requests/${requestId}/status`, {
+                headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
+            });
+            const status = await statusRes.json();
+
+            console.log(`Poll ${i + 1}: ${status.status}`);
+
+            if (status.status === "COMPLETED") {
+                // Get the result
+                const resultRes = await fetch(`https://queue.fal.run/fal-ai/stable-diffusion-v15/requests/${requestId}`, {
+                    headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
+                });
+                result = await resultRes.json();
+                break;
+            } else if (status.status === "FAILED") {
+                throw new Error("Generation failed");
+            }
+        }
+
+        if (!result?.images?.[0]?.url) {
+            throw new Error("Timeout waiting for image");
+        }
+
+        const images = result.images.map((img: any) => img.url);
+
+        // Update generation record
+        await supabaseAdmin
+            .from("generations")
+            .update({
+                status: "completed",
+                result_urls: images,
+                thumbnail_url: images[0],
+            })
+            .eq("id", generation?.id);
+
+        return NextResponse.json({ success: true, images });
 
     } catch (error: any) {
-        console.error("Image generation error:", error);
-        return NextResponse.json(
-            { error: error.message || "Generation failed" },
-            { status: 500 }
-        );
+        console.error("Error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

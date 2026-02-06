@@ -1,8 +1,13 @@
-export const maxDuration = 60;
+export const runtime = "nodejs";
+export const maxDuration = 120;
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { fal } from "@fal-ai/client";
+import { nanoid } from "nanoid";
+
+fal.config({ credentials: process.env.FAL_KEY });
 
 export async function POST(
     request: NextRequest,
@@ -10,6 +15,7 @@ export async function POST(
 ) {
     try {
         const { id: characterId } = await params;
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -19,11 +25,6 @@ export async function POST(
 
         const { prompt, aspectRatio = "1:1", numImages = 1 } = await request.json();
 
-        if (!prompt) {
-            return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
-        }
-
-        // Get character
         const { data: character } = await supabaseAdmin
             .from("characters")
             .select("*")
@@ -35,85 +36,64 @@ export async function POST(
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (character.status !== "ready" || !character.lora_url) {
-            return NextResponse.json({ error: "הדמות עוד לא מאומנת" }, { status: 400 });
+        const loraUrl = character.lora_url || character.model_url;
+        if (!loraUrl) {
+            return NextResponse.json({ error: "Not trained" }, { status: 400 });
         }
 
-        // Build prompt with trigger word
-        const fullPrompt = character.trigger_word
-            ? `${character.trigger_word} ${prompt}`
-            : prompt;
+        const triggerWord = character.trigger_word || character.settings?.trigger_word || "";
+        const fullPrompt = triggerWord ? `${triggerWord}, ${prompt}` : prompt;
 
-        // Map aspect ratio to FAL format
-        const sizeMap: Record<string, string> = {
+        const imageSizeMap: Record<string, string> = {
             "1:1": "square",
-            "16:9": "landscape_16_9",
-            "9:16": "portrait_16_9",
             "4:3": "landscape_4_3",
             "3:4": "portrait_4_3",
+            "16:9": "landscape_16_9",
+            "9:16": "portrait_16_9",
         };
 
-        console.log("=== Generating Character Image ===");
-        console.log("Prompt:", fullPrompt);
-        console.log("LoRA:", character.lora_url);
-        console.log("Aspect:", aspectRatio);
+        console.log("FLUX LoRA image generation:", fullPrompt);
 
-        // Call FAL Flux LoRA
-        const response = await fetch("https://fal.run/fal-ai/flux-lora", {
-            method: "POST",
-            headers: {
-                "Authorization": `Key ${process.env.FAL_KEY}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+        const result = await fal.subscribe("fal-ai/flux-lora", {
+            input: {
                 prompt: fullPrompt,
-                loras: [{ path: character.lora_url, scale: 1 }],
-                image_size: sizeMap[aspectRatio] || "square",
-                num_images: Math.min(numImages, 4),
+                loras: [{ path: loraUrl, scale: 0.9 }],
+                image_size: imageSizeMap[aspectRatio] || "square",
+                num_images: Math.min(numImages || 1, 4),
                 output_format: "jpeg",
                 guidance_scale: 3.5,
                 num_inference_steps: 28,
                 enable_safety_checker: false,
-            }),
+            },
+            logs: true,
         });
 
-        const result = await response.json();
-        console.log("FAL Result:", JSON.stringify(result, null, 2));
-
-        if (!response.ok) {
-            throw new Error(result.detail || "Image generation failed");
-        }
-
-        const images = result.images?.map((img: any) => img.url) || [];
-
+        const images = result.data.images?.map((img: { url: string }) => img.url) || [];
         if (images.length === 0) {
-            throw new Error("No images generated");
+            throw new Error("לא נוצרו תמונות");
         }
 
-        // Save to generations
-        const generationId = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        await supabaseAdmin
-            .from("generations")
-            .insert({
-                id: generationId,
-                user_id: user.id,
-                type: "image",
-                feature: "character_image",
-                prompt: fullPrompt,
-                character_id: characterId,
-                status: "completed",
-                result_urls: images,
-                thumbnail_url: images[0],
-            });
+        const generationId = nanoid();
+        await supabaseAdmin.from("generations").insert({
+            id: generationId,
+            user_id: user.id,
+            type: "image",
+            feature: "character_image",
+            prompt: fullPrompt,
+            character_id: characterId,
+            status: "completed",
+            result_urls: images,
+            thumbnail_url: images[0],
+            completed_at: new Date().toISOString(),
+        });
 
         return NextResponse.json({
             success: true,
-            images,
             generationId,
+            images,
         });
-
     } catch (error: any) {
-        console.error("Image generation error:", error);
+        console.error("Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

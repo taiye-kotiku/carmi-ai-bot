@@ -26,14 +26,17 @@ export function CreateCharacterModal({
     const [uploading, setUploading] = useState(false);
     const [creating, setCreating] = useState(false);
 
-    const canTrain = images.length >= 3;
+    const MIN_IMAGES = 15;
+    const MAX_IMAGES = 30;
+    const RECOMMENDED_IMAGES = 20;
+    const canTrain = images.length >= MIN_IMAGES;
 
     async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const files = e.target.files;
         if (!files?.length) return;
 
-        if (images.length + files.length > 10) {
-            toast.error("ניתן להעלות עד 10 תמונות");
+        if (images.length + files.length > MAX_IMAGES) {
+            toast.error(`ניתן להעלות עד ${MAX_IMAGES} תמונות`);
             return;
         }
 
@@ -67,8 +70,8 @@ export function CreateCharacterModal({
             toast.error("נא להזין שם לדמות");
             return;
         }
-        if (!images.length) {
-            toast.error("נא להעלות לפחות תמונה אחת");
+        if (images.length < MIN_IMAGES) {
+            toast.error(`נא להעלות לפחות ${MIN_IMAGES} תמונות (מומלץ ${RECOMMENDED_IMAGES} מזוויות, בגדים ורקעים שונים)`);
             return;
         }
 
@@ -90,9 +93,9 @@ export function CreateCharacterModal({
             }
 
             if (canTrain) {
-                toast.success("הדמות נוצרה! 🎉 האימון התחיל ויסתיים בעוד כ-15 דקות");
+                toast.success("הדמות נוצרה! לחץ על 'התחל אימון' בדף הדמויות");
             } else {
-                toast.success("הדמות נוצרה! 🎉 הוסף עוד תמונות כדי להתחיל אימון");
+                toast.success(`הדמות נוצרה! הוסף עוד ${MIN_IMAGES - images.length} תמונות כדי לאפשר אימון`);
             }
 
             onCreated();
@@ -154,7 +157,7 @@ export function CreateCharacterModal({
 
                 {/* Images */}
                 <div className="space-y-2">
-                    <Label>תמונות ייחוס (3-10 מומלץ לאימון)</Label>
+                    <Label>תמונות ייחוס (כ-20 מזוויות, בגדים ורקעים שונים)</Label>
                     <div className="grid grid-cols-4 gap-2">
                         {images.map((url, i) => (
                             <div key={i} className="relative aspect-square">
@@ -171,7 +174,7 @@ export function CreateCharacterModal({
                                 </button>
                             </div>
                         ))}
-                        {images.length < 10 && (
+                        {images.length < MAX_IMAGES && (
                             <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
                                 {uploading ? (
                                     <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
@@ -195,10 +198,10 @@ export function CreateCharacterModal({
                         {canTrain ? (
                             <div className="flex items-center gap-2">
                                 <Sparkles className="w-4 h-4" />
-                                <span>מעולה! {images.length} תמונות - אימון AI יתחיל אוטומטית</span>
+                                <span>מעולה! {images.length} תמונות - תוכל ללחוץ "התחל אימון" לאחר השמירה</span>
                             </div>
                         ) : (
-                            <span>💡 העלה לפחות 3 תמונות כדי להפעיל אימון AI לדמות</span>
+                            <span>💡 העלה כ-20 תמונות מזוויות שונות, בגדים ורקעים לאימון LoRA איכותי</span>
                         )}
                     </div>
                 </div>
@@ -220,7 +223,7 @@ export function CreateCharacterModal({
                         {creating ? (
                             <Loader2 className="w-4 h-4 animate-spin ml-2" />
                         ) : null}
-                        {canTrain ? "צור והתחל אימון" : "צור דמות"}
+                        {canTrain ? "צור דמות" : "צור דמות"}
                     </Button>
                 </div>
             </div>

@@ -106,41 +106,41 @@ export default function CharacterGeneratePage() {
             });
 
             const data = await res.json();
-            console.log("Submit response:", data);
 
             if (!res.ok) {
                 throw new Error(data.error || "Failed to submit");
             }
 
-            if (!data.generationId) {
+            // Images returned directly (sync FLUX LoRA)
+            if (data.images?.length > 0) {
+                setImageResults(data.images);
+                toast.success("התמונות נוצרו בהצלחה!");
+                return;
+            }
+
+            // Fallback: poll for async results
+            const generationId = data.generationId;
+            if (!generationId) {
                 throw new Error("No generation ID returned");
             }
 
-            const generationId = data.generationId;
-            toast.info("התמונה נשלחה לעיבוד...");
-
-            // Step 2: Poll for results
+            toast.info("התמונה נשלחת לעיבוד...");
             let attempts = 0;
             const maxAttempts = 60;
 
             while (attempts < maxAttempts) {
                 await new Promise(r => setTimeout(r, 2000));
-
                 const statusRes = await fetch(`/api/generations/${generationId}/status`);
                 const status = await statusRes.json();
-
-                console.log(`Poll ${attempts + 1}:`, status);
 
                 if (status.status === "completed" && status.images?.length > 0) {
                     setImageResults(status.images);
                     toast.success("התמונות נוצרו בהצלחה!");
                     return;
                 }
-
                 if (status.status === "failed") {
                     throw new Error(status.error || "Generation failed");
                 }
-
                 attempts++;
             }
 

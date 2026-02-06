@@ -19,7 +19,7 @@ import {
     Settings,
     CreditCard,
     HelpCircle,
-    LogOut,
+    Palette,
 } from "lucide-react";
 
 type NavItem =
@@ -35,6 +35,7 @@ const navigation: NavItem[] = [
     { type: "link", name: "יצירת תמונה", href: "/generate/text-to-image", icon: Image },
     { type: "link", name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
     { type: "link", name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
+    { type: "link", name: "המרה לקריקטורה", href: "/generate/cartoonize", icon: Palette },
     { type: "link", name: "המרת רילז", href: "/generate/reel-converter", icon: Film },
     { type: "link", name: "חיתוך סרטון", href: "/generate/video-clips", icon: Scissors },
     { type: "link", name: "יצירת קרוסלה", href: "/generate/carousel", icon: LayoutGrid },

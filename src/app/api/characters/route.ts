@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-// GET - List all characters
+// GET all characters
 export async function GET() {
     try {
         const supabase = await createClient();
@@ -12,22 +12,24 @@ export async function GET() {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data: characters, error } = await supabase
             .from("characters")
             .select("*")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
-        return NextResponse.json(data || []);
-    } catch (error: any) {
+        return NextResponse.json(characters || []);
+    } catch (error) {
         console.error("Error fetching characters:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
 }
 
-// POST - Create new character
+// POST create new character
 export async function POST(request: NextRequest) {
     try {
         const supabase = await createClient();
@@ -37,29 +39,37 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { name, description, image_urls } = await request.json();
+        const body = await request.json();
+        const { name, description, reference_images, trigger_word } = body;
 
-        if (!name) {
-            return NextResponse.json({ error: "Name is required" }, { status: 400 });
+        if (!name || !reference_images || reference_images.length < 15) {
+            return NextResponse.json(
+                { error: "Name and at least 15 reference images required (recommended ~20 from different angles, clothes, backgrounds)" },
+                { status: 400 }
+            );
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data: character, error } = await supabaseAdmin
             .from("characters")
             .insert({
                 user_id: user.id,
                 name,
                 description,
-                image_urls: image_urls || [],
-                status: "draft",
+                reference_images,
+                trigger_word: trigger_word || name.toLowerCase().replace(/\s+/g, "_"),
+                thumbnail_url: reference_images[0],
+                model_status: "pending",
             })
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
 
-        return NextResponse.json(data);
-    } catch (error: any) {
+        return NextResponse.json(character);
+    } catch (error) {
         console.error("Error creating character:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
 }

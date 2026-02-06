@@ -208,7 +208,7 @@ export default function CharactersPage() {
                             {/* Character Image */}
                             <div className="relative aspect-square bg-gray-100">
                                 <img
-                                    src={character.thumbnail_url || character.reference_images[0]}
+                                    src={character.thumbnail_url || character.reference_images?.[0] || (character as any).image_urls?.[0] || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect fill='%23e5e7eb' width='400' height='400'/%3E%3C/svg%3E"}
                                     alt={character.name}
                                     className={`w-full h-full object-cover ${character.model_status === "training" ? "opacity-75" : ""
                                         }`}
@@ -229,7 +229,7 @@ export default function CharactersPage() {
                                 <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 flex items-center gap-1">
                                     <ImageIcon className="h-3 w-3 text-white" />
                                     <span className="text-xs text-white">
-                                        {character.reference_images.length}
+                                        {character.reference_images?.length ?? (character as any).image_urls?.length ?? 0}
                                     </span>
                                 </div>
 
@@ -332,7 +332,7 @@ export default function CharactersPage() {
                                             נסה שוב
                                         </Button>
                                     ) : (character.model_status === "pending" || character.model_status === "draft") &&
-                                      character.reference_images?.length >= 15 ? (
+                                      (character.reference_images?.length ?? (character as any).image_urls?.length ?? 0) >= 15 ? (
                                         <Button
                                             size="sm"
                                             variant="default"

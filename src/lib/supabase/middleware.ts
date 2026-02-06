@@ -41,8 +41,8 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser();
 
-    // Protected routes (קרוסלה, מיתוג, מנוי וקרדיטים - signed users only)
-    const protectedRoutes = ["/dashboard", "/generate", "/gallery", "/settings", "/brand", "/credits", "/carousel-test"];
+    // Protected routes (קרוסלה, מיתוג, מנוי וקרדיטים, דמויות - signed users only)
+    const protectedRoutes = ["/dashboard", "/generate", "/gallery", "/settings", "/brand", "/credits", "/characters", "/carousel-test"];
     const isProtectedRoute = protectedRoutes.some((route) =>
         request.nextUrl.pathname.startsWith(route)
     );

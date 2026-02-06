@@ -44,7 +44,8 @@ export async function POST(
         const triggerWord = character.trigger_word || character.settings?.trigger_word || "";
         const fullPrompt = triggerWord ? `${triggerWord}, ${prompt}` : prompt;
 
-        const imageSizeMap: Record<string, string> = {
+        type ImageSize = "square" | "square_hd" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
+        const imageSizeMap: Record<string, ImageSize> = {
             "1:1": "square",
             "4:3": "landscape_4_3",
             "3:4": "portrait_4_3",

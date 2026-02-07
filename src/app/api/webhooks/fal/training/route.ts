@@ -47,7 +47,6 @@ export async function POST(request: NextRequest) {
                 })
                 .eq("id", character.id);
 
-            突兀:
 
             console.log("Training failed for:", character.id);
         }

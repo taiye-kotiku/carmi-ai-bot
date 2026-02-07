@@ -15,7 +15,7 @@ export async function GET() {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data: characters, error } = await supabase
+        const { data: characters, error } = await supabaseAdmin
             .from("characters")
             .select("*")
             .eq("user_id", user.id)
@@ -23,14 +23,18 @@ export async function GET() {
 
         if (error) {
             console.error("[Characters] List error:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json(
+                { error: error.message, details: error },
+                { status: 500 }
+            );
         }
 
         return NextResponse.json({ characters: characters || [] });
     } catch (error) {
         console.error("[Characters] Unexpected error:", error);
+        const message = error instanceof Error ? error.message : "Unknown error";
         return NextResponse.json(
-            { error: "Internal server error" },
+            { error: "Internal server error", message },
             { status: 500 }
         );
     }

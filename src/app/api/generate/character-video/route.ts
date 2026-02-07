@@ -83,7 +83,7 @@ export async function POST(req: Request) {
             id: jobId,
             user_id: user.id,
             type: "character_video",
-            status: "pending",
+            model_status: "pending",
             progress: 0,
         });
 
@@ -186,7 +186,7 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
             result_urls: [result.videoUrl, ...result.imageUrls],
             thumbnail_url: result.thumbnailUrl,
             duration: result.duration,
-            status: "completed",
+            model_status: "completed",
             job_id: jobId,
             character_id: options.character.id,
             completed_at: new Date().toISOString(),
@@ -234,7 +234,7 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
         await supabaseAdmin
             .from("jobs")
             .update({
-                status: "completed",
+                model_status: "completed",
                 progress: 100,
                 result: {
                     videoUrl: result.videoUrl,

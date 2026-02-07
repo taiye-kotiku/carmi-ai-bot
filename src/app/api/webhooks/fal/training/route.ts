@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
             await supabaseAdmin
                 .from("characters")
                 .update({
-                    model_status: "ready",
-                    model_url: payload.diffusers_lora_file.url,
-                    training_completed_at: new Date().toISOString(),
+                    status: "ready",
+                    lora_url: payload.diffusers_lora_file.url,
+                    trained_at: new Date().toISOString(),
                 })
                 .eq("id", character.id);
 
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
             await supabaseAdmin
                 .from("characters")
                 .update({
-                    model_status: "failed",
-                    training_error: payload?.error || "Training failed",
+                    status: "failed",
+                    error_message: payload?.error || "Training failed",
                 })
                 .eq("id", character.id);
 

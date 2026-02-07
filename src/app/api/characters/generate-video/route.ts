@@ -40,12 +40,12 @@ export async function POST(request: NextRequest) {
         let sourceImageUrl = imageUrl;
 
         // If no image provided, generate one first
-        if (!sourceImageUrl && character.model_url) {
+        if (!sourceImageUrl && character.lora_url) {
             const triggerWord = (character.settings as any)?.trigger_word || "TOK";
             const imageResult = await fal.subscribe("fal-ai/flux-lora", {
                 input: {
                     prompt: `${triggerWord} ${prompt}`,
-                    loras: [{ path: character.model_url, scale: 0.9 }],
+                    loras: [{ path: character.lora_url, scale: 0.9 }],
                     image_size: aspectRatio === "9:16" ? "portrait_16_9" : "landscape_16_9",
                     num_images: 1,
                 },

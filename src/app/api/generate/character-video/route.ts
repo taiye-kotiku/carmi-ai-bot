@@ -83,7 +83,7 @@ export async function POST(req: Request) {
             id: jobId,
             user_id: user.id,
             type: "character_video",
-            model_status: "pending",
+            status: "pending",
             progress: 0,
         });
 

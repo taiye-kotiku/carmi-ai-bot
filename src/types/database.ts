@@ -245,19 +245,14 @@ export type Database = {
                     user_id: string;
                     name: string;
                     description: string | null;
-                    thumbnail_url: string | null;
+                    image_urls: string[] | null;
                     status: 'pending' | 'training' | 'ready' | 'failed';
+                    trigger_word: string | null;
                     lora_url: string | null;
                     job_id: string | null;
                     training_started_at: string | null;
                     trained_at: string | null;
                     error_message: string | null;
-                    settings: {
-                        model?: string;
-                        ip_adapter_scale?: number;
-                        trigger_word?: string;
-                        reference_images?: string[];
-                    };
                     created_at: string;
                     updated_at: string;
                 };
@@ -267,35 +262,26 @@ export type Database = {
                     name: string;
                     description?: string | null;
                     thumbnail_url?: string | null;
+                    image_urls?: string[] | null;
                     status?: 'pending' | 'training' | 'ready' | 'failed';
+                    trigger_word?: string | null;
                     lora_url?: string | null;
                     job_id?: string | null;
                     training_started_at?: string | null;
                     trained_at?: string | null;
                     error_message?: string | null;
-                    settings?: {
-                        model?: string;
-                        ip_adapter_scale?: number;
-                        trigger_word?: string;
-                        reference_images?: string[];
-                    };
                 };
                 Update: {
                     name?: string;
                     description?: string | null;
-                    thumbnail_url?: string | null;
+                    image_urls?: string[] | null;
                     status?: 'pending' | 'training' | 'ready' | 'failed';
+                    trigger_word?: string | null;
                     lora_url?: string | null;
                     job_id?: string | null;
                     training_started_at?: string | null;
                     trained_at?: string | null;
                     error_message?: string | null;
-                    settings?: {
-                        model?: string;
-                        ip_adapter_scale?: number;
-                        trigger_word?: string;
-                        reference_images?: string[];
-                    };
                     updated_at?: string;
                 };
                 Relationships: [];

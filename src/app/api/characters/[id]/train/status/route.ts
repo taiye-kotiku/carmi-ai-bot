@@ -20,7 +20,7 @@ export async function GET(
         const { id } = await params;
         const { data: character, error } = await supabaseAdmin
             .from("characters")
-            .select("id, status, training_started_at, trained_at, error_message, lora_url, settings")
+            .select("id, status, training_started_at, trained_at, error_message, lora_url, trigger_word")
             .eq("id", id)
             .eq("user_id", user.id)
             .single();
@@ -50,7 +50,7 @@ export async function GET(
             trained_at: character.trained_at,
             error_message: character.error_message,
             lora_url: character.lora_url,
-            trigger_word: character.settings?.trigger_word || null,
+            trigger_word: character.trigger_word || null,
             elapsed_minutes,
         });
     } catch (error) {

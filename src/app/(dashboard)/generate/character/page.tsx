@@ -184,9 +184,9 @@ export default function CharacterGeneratePage() {
                                         }`}
                                 >
                                     <div className="aspect-square">
-                                        {char.thumbnail_url || char.settings?.reference_images?.[0] ? (
+                                        {char.image_urls?.[0] ? (
                                             <img
-                                                src={char.thumbnail_url || char.settings?.reference_images?.[0]}
+                                                src={char.image_urls[0]}
                                                 alt={char.name}
                                                 className="w-full h-full object-cover"
                                             />
@@ -220,10 +220,10 @@ export default function CharacterGeneratePage() {
                             dir="ltr"
                             className="font-mono text-sm"
                         />
-                        {selectedCharacter?.settings?.trigger_word && (
+                        {selectedCharacter?.trigger_word && (
                             <p className="text-xs text-muted-foreground">
                                 💡 מילת ההפעלה &quot;
-                                {selectedCharacter.settings.trigger_word}&quot; תתווסף אוטומטית
+                                {selectedCharacter.trigger_word}&quot; תתווסף אוטומטית
                                 לפרומפט
                             </p>
                         )}

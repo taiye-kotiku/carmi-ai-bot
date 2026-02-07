@@ -72,7 +72,7 @@ export function CharacterSelector({ selectedId, onSelect, onCreateNew }: Props) 
 
                 {characters.map((character) => {
                     const isSelected = selectedId === character.id;
-                    const image = character.thumbnail_url || character.settings?.reference_images?.[0];
+                    const image = character.image_urls?.[0];
 
                     return (
                         <button

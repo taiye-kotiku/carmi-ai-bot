@@ -107,11 +107,15 @@ export async function POST(
         });
 
         // ─── Generate ───
-        const triggerWord = character.settings?.trigger_word || "TOK";
+        let fullPrompt = prompt.trim();
+        const triggerWord = character.trigger_word || "TOK";
 
+        if (character.trigger_word) {
+            fullPrompt = `${character.trigger_word}, ${prompt}`;
+        }
         try {
             const result = await generateWithLora({
-                prompt: prompt.trim(),
+                prompt: fullPrompt,
                 modelUrl: character.lora_url,
                 triggerWord,
                 negativePrompt: negative_prompt,

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         // Fetch the character to get user_id for potential refund
         const { data: character, error: fetchError } = await admin
             .from("characters")
-            .select("user_id, settings")
+            .select("user_id, trigger_word")
             .eq("id", character_id)
             .single();
 
@@ -51,17 +51,12 @@ export async function POST(request: NextRequest) {
 
         if (status === "ready" && model_url) {
             // ─── Training succeeded ───
-            const updatedSettings = {
-                ...(character.settings || {}),
-                trigger_word: trigger_word || "TOK",
-            };
-
-            const { error: updateError } = await admin
+            const { error: updateError } = await supabaseAdmin
                 .from("characters")
                 .update({
                     status: "ready",
                     lora_url: model_url,
-                    settings: updatedSettings,
+                    trigger_word: trigger_word || "TOK",
                     trained_at: new Date().toISOString(),
                     error_message: null,
                 })

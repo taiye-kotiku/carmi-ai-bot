@@ -46,7 +46,9 @@ export async function POST(
         }
 
         // Check images
-        const imageUrls = character.settings?.reference_images || [];
+        const imageUrls = character.image_urls || [];
+        const triggerWord = character.trigger_word || "TOK";
+
         if (imageUrls.length < 5) {
             return NextResponse.json(
                 {

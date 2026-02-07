@@ -1,101 +1,175 @@
+// src/app/api/characters/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { Database } from "@/types/database";
 
-// GET single character
+// GET /api/characters/:id
 export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    _request: NextRequest,
+    { params }: { params: { id: string } }
 ) {
     try {
-        const { id } = await params;
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data, error } = await supabaseAdmin
+        const { data: character, error } = await supabase
             .from("characters")
             .select("*")
-            .eq("id", id)
+            .eq("id", params.id)
             .eq("user_id", user.id)
             .single();
 
-        if (error || !data) {
-            return NextResponse.json({ error: "Not found" }, { status: 404 });
+        if (error || !character) {
+            return NextResponse.json(
+                { error: "Character not found" },
+                { status: 404 }
+            );
         }
 
-        return NextResponse.json(data);
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ character });
+    } catch (error) {
+        console.error("[Character] GET error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }
 
-// UPDATE character
+// PATCH /api/characters/:id
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: { id: string } }
 ) {
     try {
-        const { id } = await params;
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const body = await request.json();
+        const allowedFields: (keyof Database["public"]["Tables"]["characters"]["Update"])[] = [
+            "name",
+            "description",
+        ];
 
-        const { data, error } = await supabaseAdmin
+        const updateData: Record<string, any> = {};
+        for (const field of allowedFields) {
+            if (field in body) {
+                updateData[field as string] = body[field];
+            }
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return NextResponse.json(
+                { error: "No valid fields to update" },
+                { status: 400 }
+            );
+        }
+
+        const { data: character, error } = await supabaseAdmin
             .from("characters")
-            .update({ ...body, updated_at: new Date().toISOString() })
-            .eq("id", id)
+            .update(updateData)
+            .eq("id", params.id)
             .eq("user_id", user.id)
             .select()
             .single();
 
-        if (error) throw error;
+        if (error || !character) {
+            return NextResponse.json(
+                { error: "Character not found or update failed" },
+                { status: 404 }
+            );
+        }
 
-        return NextResponse.json(data);
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ character });
+    } catch (error) {
+        console.error("[Character] PATCH error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }
 
-// DELETE character
+// DELETE /api/characters/:id
 export async function DELETE(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    _request: NextRequest,
+    { params }: { params: { id: string } }
 ) {
     try {
-        const { id } = await params;
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // Delete related generations first
-        await supabaseAdmin
-            .from("generations")
-            .delete()
-            .eq("character_id", id);
+        // Fetch first to check ownership and get storage paths for cleanup
+        const { data: character } = await supabase
+            .from("characters")
+            .select("id, user_id, model_status, reference_images")
+            .eq("id", params.id)
+            .eq("user_id", user.id)
+            .single();
 
-        // Delete character
+        if (!character) {
+            return NextResponse.json(
+                { error: "Character not found" },
+                { status: 404 }
+            );
+        }
+
+        // Don't allow deleting while training
+        if (character.model_status === "training") {
+            return NextResponse.json(
+                { error: "Cannot delete a character that is currently training" },
+                { status: 409 }
+            );
+        }
+
+
+        // Delete character (cascading will handle related records if set up)
         const { error } = await supabaseAdmin
             .from("characters")
             .delete()
-            .eq("id", id)
+            .eq("id", params.id)
             .eq("user_id", user.id);
 
-        if (error) throw error;
+        if (error) {
+            console.error("[Character] Delete error:", error);
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        // Optional: Clean up LoRA files from storage
+        try {
+            await supabaseAdmin.storage
+                .from("loras")
+                .remove([`${params.id}/lora.safetensors`]);
+        } catch {
+            // Storage cleanup is best-effort
+            console.warn("[Character] Could not clean up storage for", params.id);
+        }
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error) {
+        console.error("[Character] Delete unexpected error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }

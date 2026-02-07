@@ -1,119 +1,63 @@
+// src/app/api/characters/[id]/train/status/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    _request: NextRequest,
+    { params }: { params: { id: string } }
 ) {
     try {
-        const { id: characterId } = await params;
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data: character } = await supabaseAdmin
+        const { data: character, error } = await supabaseAdmin
             .from("characters")
-            .select("*")
-            .eq("id", characterId)
+            .select(
+                "id, model_status, training_started_at, training_completed_at, training_error, model_url, settings"
+            )
+            .eq("id", params.id)
             .eq("user_id", user.id)
             .single();
 
-        if (!character) {
-            return NextResponse.json({ error: "Not found" }, { status: 404 });
-        }
-
-        // If already done, return immediately
-        if (character.status === "ready") {
-            return NextResponse.json({
-                status: "ready",
-                lora_url: character.lora_url,
-                trigger_word: character.trigger_word,
-            });
-        }
-
-        if (character.status === "failed") {
-            return NextResponse.json({
-                status: "failed",
-                error: character.error_message,
-            });
-        }
-
-        // If training, check FAL status
-        if (character.status === "training" && character.job_id) {
-            const statusRes = await fetch(
-                `https://queue.fal.run/fal-ai/flux-lora-fast-training/requests/${character.job_id}/status`,
-                {
-                    headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
-                }
+        if (error || !character) {
+            return NextResponse.json(
+                { error: "Character not found" },
+                { status: 404 }
             );
-
-            const statusData = await statusRes.json();
-            console.log("FAL Status:", statusData);
-
-            // Training completed
-            if (statusData.status === "COMPLETED") {
-                // Get the result
-                const resultRes = await fetch(
-                    `https://queue.fal.run/fal-ai/flux-lora-fast-training/requests/${character.job_id}`,
-                    {
-                        headers: { "Authorization": `Key ${process.env.FAL_KEY}` },
-                    }
-                );
-                const resultData = await resultRes.json();
-                console.log("FAL Result:", JSON.stringify(resultData, null, 2));
-
-                const loraUrl = resultData.diffusers_lora_file?.url;
-
-                if (loraUrl) {
-                    await supabaseAdmin
-                        .from("characters")
-                        .update({
-                            status: "ready",
-                            lora_url: loraUrl,
-                            trained_at: new Date().toISOString(),
-                        })
-                        .eq("id", characterId);
-
-                    return NextResponse.json({
-                        status: "ready",
-                        lora_url: loraUrl,
-                        trigger_word: character.trigger_word,
-                    });
-                }
-            }
-
-            // Training failed
-            if (statusData.status === "FAILED") {
-                await supabaseAdmin
-                    .from("characters")
-                    .update({
-                        status: "failed",
-                        error_message: statusData.error || "Training failed",
-                    })
-                    .eq("id", characterId);
-
-                return NextResponse.json({
-                    status: "failed",
-                    error: statusData.error || "Training failed",
-                });
-            }
-
-            // Still processing
-            return NextResponse.json({
-                status: "training",
-                progress: statusData.progress || 0,
-                logs: statusData.logs || [],
-            });
         }
 
-        return NextResponse.json({ status: character.status });
+        // Calculate elapsed time
+        let elapsed_minutes: number | null = null;
+        if (
+            character.model_status === "training" &&
+            character.training_started_at
+        ) {
+            const started = new Date(character.training_started_at).getTime();
+            elapsed_minutes = Math.round((Date.now() - started) / 60000);
+        }
 
-    } catch (error: any) {
-        console.error("Status check error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({
+            id: character.id,
+            status: character.model_status,
+            training_started_at: character.training_started_at,
+            training_completed_at: character.training_completed_at,
+            training_error: character.training_error,
+            model_url: character.model_url,
+            trigger_word: character.settings?.trigger_word || null,
+            elapsed_minutes,
+        });
+    } catch (error) {
+        console.error("[TrainStatus] Error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }

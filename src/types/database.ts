@@ -6,7 +6,7 @@ export type Json =
     | { [key: string]: Json | undefined }
     | Json[];
 
-export interface Database {
+export type Database = {
     public: {
         Tables: {
             profiles: {
@@ -36,6 +36,7 @@ export interface Database {
                     locale?: string;
                     updated_at?: string;
                 };
+                Relationships: [];
             };
             credits: {
                 Row: {
@@ -61,6 +62,7 @@ export interface Database {
                     carousel_credits?: number;
                     updated_at?: string;
                 };
+                Relationships: [];
             };
             credit_transactions: {
                 Row: {
@@ -82,6 +84,7 @@ export interface Database {
                     related_id?: string | null;
                 };
                 Update: never;
+                Relationships: [];
             };
             brands: {
                 Row: {
@@ -123,6 +126,7 @@ export interface Database {
                     is_enabled?: boolean;
                     updated_at?: string;
                 };
+                Relationships: [];
             };
             generations: {
                 Row: {
@@ -171,6 +175,7 @@ export interface Database {
                     processing_time_ms?: number | null;
                     completed_at?: string | null;
                 };
+                Relationships: [];
             };
             jobs: {
                 Row: {
@@ -200,6 +205,7 @@ export interface Database {
                     error?: string | null;
                     updated_at?: string;
                 };
+                Relationships: [];
             };
             subscriptions: {
                 Row: {
@@ -231,6 +237,7 @@ export interface Database {
                     cancel_at?: string | null;
                     updated_at?: string;
                 };
+                Relationships: [];
             };
             characters: {
                 Row: {
@@ -286,7 +293,20 @@ export interface Database {
                     };
                     updated_at?: string;
                 };
+                Relationships: [];
             };
+        };
+        Views: {
+            [_ in never]: never;
+        };
+        Functions: {
+            [_ in never]: never;
+        };
+        Enums: {
+            [_ in never]: never;
+        };
+        CompositeTypes: {
+            [_ in never]: never;
         };
     };
 }

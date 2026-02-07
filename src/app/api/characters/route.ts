@@ -1,12 +1,15 @@
+// src/app/api/characters/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-// GET all characters
+// GET /api/characters — List user's characters
 export async function GET() {
     try {
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -19,57 +22,85 @@ export async function GET() {
             .order("created_at", { ascending: false });
 
         if (error) {
-            throw error;
+            console.error("[Characters] List error:", error);
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json(characters || []);
+        return NextResponse.json({ characters: characters || [] });
     } catch (error) {
-        console.error("Error fetching characters:", error);
-        return NextResponse.json({ error: "Server error" }, { status: 500 });
+        console.error("[Characters] Unexpected error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }
 
-// POST create new character
+// POST /api/characters — Create new character
 export async function POST(request: NextRequest) {
     try {
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         const body = await request.json();
-        const { name, description, reference_images, trigger_word } = body;
+        const { name, description, reference_images } = body;
 
-        if (!name || !reference_images || reference_images.length < 15) {
+        // Validation
+        if (!name || typeof name !== "string" || !name.trim()) {
             return NextResponse.json(
-                { error: "Name and at least 15 reference images required (recommended ~20 from different angles, clothes, backgrounds)" },
+                { error: "Character name is required" },
                 { status: 400 }
             );
         }
+
+        if (
+            !reference_images ||
+            !Array.isArray(reference_images) ||
+            reference_images.length < 5
+        ) {
+            return NextResponse.json(
+                {
+                    error: `At least 5 reference images are required. Got ${reference_images?.length ?? 0
+                        }.`,
+                },
+                { status: 400 }
+            );
+        }
+
+        // Use the first image as thumbnail
+        const thumbnailUrl = reference_images[0] || null;
 
         const { data: character, error } = await supabaseAdmin
             .from("characters")
             .insert({
                 user_id: user.id,
-                name,
-                description,
+                name: name.trim(),
+                description: description?.trim() || null,
                 reference_images,
-                trigger_word: trigger_word || name.toLowerCase().replace(/\s+/g, "_"),
-                thumbnail_url: reference_images[0],
+                thumbnail_url: thumbnailUrl,
                 model_status: "pending",
+                settings: {},
             })
             .select()
             .single();
 
         if (error) {
-            throw error;
+            console.error("[Characters] Create error:", error);
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        return NextResponse.json(character);
+        return NextResponse.json({ character }, { status: 201 });
     } catch (error) {
-        console.error("Error creating character:", error);
-        return NextResponse.json({ error: "Server error" }, { status: 500 });
+        console.error("[Characters] Create unexpected error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }

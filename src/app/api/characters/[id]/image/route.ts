@@ -1,100 +1,200 @@
-export const runtime = "nodejs";
-export const maxDuration = 120;
-
+// src/app/api/characters/[id]/image/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { fal } from "@fal-ai/client";
-import { nanoid } from "nanoid";
-
-fal.config({ credentials: process.env.FAL_KEY });
+import { generateWithLora } from "@/lib/services/modal";
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: { id: string } }
 ) {
     try {
-        const { id: characterId } = await params;
-
+        // ─── Auth ───
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+            error: authError,
+        } = await supabase.auth.getUser();
 
-        if (!user) {
+        if (authError || !user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { prompt, aspectRatio = "1:1", numImages = 1 } = await request.json();
+        const characterId = params.id;
 
-        const { data: character } = await supabaseAdmin
+        // ─── Fetch character ───
+        const { data: character, error: fetchError } = await supabaseAdmin
             .from("characters")
             .select("*")
             .eq("id", characterId)
             .eq("user_id", user.id)
             .single();
 
-        if (!character) {
-            return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        if (fetchError || !character) {
+            return NextResponse.json(
+                { error: "Character not found" },
+                { status: 404 }
+            );
         }
 
-        const loraUrl = character.lora_url || character.model_url;
-        if (!loraUrl) {
-            return NextResponse.json({ error: "Not trained" }, { status: 400 });
+        if (character.model_status !== "ready") {
+            return NextResponse.json(
+                {
+                    error: `Character is not ready. Current status: ${character.model_status}`,
+                },
+                { status: 400 }
+            );
         }
 
-        const triggerWord = character.trigger_word || character.settings?.trigger_word || "";
-        const fullPrompt = triggerWord ? `${triggerWord}, ${prompt}` : prompt;
-
-        type ImageSize = "square" | "square_hd" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
-        const imageSizeMap: Record<string, ImageSize> = {
-            "1:1": "square",
-            "4:3": "landscape_4_3",
-            "3:4": "portrait_4_3",
-            "16:9": "landscape_16_9",
-            "9:16": "portrait_16_9",
-        };
-
-        console.log("FLUX LoRA image generation:", fullPrompt);
-
-        const result = await fal.subscribe("fal-ai/flux-lora", {
-            input: {
-                prompt: fullPrompt,
-                loras: [{ path: loraUrl, scale: 0.9 }],
-                image_size: imageSizeMap[aspectRatio] || "square",
-                num_images: Math.min(numImages || 1, 4),
-                output_format: "jpeg",
-                guidance_scale: 3.5,
-                num_inference_steps: 28,
-                enable_safety_checker: false,
-            },
-            logs: true,
-        });
-
-        const images = result.data.images?.map((img: { url: string }) => img.url) || [];
-        if (images.length === 0) {
-            throw new Error("לא נוצרו תמונות");
+        if (!character.model_url) {
+            return NextResponse.json(
+                { error: "Character has no trained model" },
+                { status: 400 }
+            );
         }
 
-        const generationId = nanoid();
-        await supabaseAdmin.from("generations").insert({
-            id: generationId,
+        // ─── Parse request ───
+        const body = await request.json();
+        const {
+            prompt,
+            negative_prompt,
+            width = 1024,
+            height = 1024,
+            num_inference_steps = 28,
+            guidance_scale = 3.5,
+            seed = -1,
+            lora_scale = 0.85,
+        } = body;
+
+        if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+            return NextResponse.json(
+                { error: "prompt is required" },
+                { status: 400 }
+            );
+        }
+
+        // ─── Check credits ───
+        const GENERATION_COST = 1;
+        const { data: credits } = await supabaseAdmin
+            .from("credits")
+            .select("image_credits")
+            .eq("user_id", user.id)
+            .single();
+
+        if (!credits || credits.image_credits < GENERATION_COST) {
+            return NextResponse.json(
+                {
+                    error: `Insufficient credits. Generation costs ${GENERATION_COST} image credit. You have ${credits?.image_credits ?? 0}.`,
+                },
+                { status: 402 }
+            );
+        }
+
+        // ─── Deduct credits ───
+        const newBalance = credits.image_credits - GENERATION_COST;
+        await supabaseAdmin
+            .from("credits")
+            .update({ image_credits: newBalance })
+            .eq("user_id", user.id);
+
+        await supabaseAdmin.from("credit_transactions").insert({
             user_id: user.id,
-            type: "image",
-            feature: "character_image",
-            prompt: fullPrompt,
-            character_id: characterId,
-            status: "completed",
-            result_urls: images,
-            thumbnail_url: images[0],
-            completed_at: new Date().toISOString(),
+            credit_type: "image_credits",
+            amount: -GENERATION_COST,
+            balance_after: newBalance,
+            reason: "character_image_generation",
+            related_id: characterId,
         });
 
-        return NextResponse.json({
-            success: true,
-            generationId,
-            images,
-        });
-    } catch (error: any) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        // ─── Generate ───
+        const triggerWord = character.settings?.trigger_word || "TOK";
+
+        try {
+            const result = await generateWithLora({
+                prompt: prompt.trim(),
+                modelUrl: character.model_url,
+                triggerWord,
+                negativePrompt: negative_prompt,
+                numInferenceSteps: num_inference_steps,
+                guidanceScale: guidance_scale,
+                width,
+                height,
+                seed,
+                loraScale: lora_scale,
+            });
+
+            if (!result.success || !result.image_url) {
+                // Refund on failure
+                await supabaseAdmin
+                    .from("credits")
+                    .update({ image_credits: credits.image_credits })
+                    .eq("user_id", user.id);
+
+                await supabaseAdmin.from("credit_transactions").insert({
+                    user_id: user.id,
+                    credit_type: "image_credits",
+                    amount: GENERATION_COST,
+                    balance_after: credits.image_credits,
+                    reason: "generation_refund",
+                    related_id: characterId,
+                });
+
+                return NextResponse.json(
+                    { error: result.error || "Generation failed" },
+                    { status: 500 }
+                );
+            }
+
+            // ─── Save generation record ───
+            const generationId = crypto.randomUUID();
+            await supabaseAdmin.from("generations").insert({
+                id: generationId,
+                user_id: user.id,
+                type: "image",
+                feature: "character_image",
+                prompt: prompt.trim(),
+                result_urls: [result.image_url],
+                thumbnail_url: result.image_url,
+                width,
+                height,
+                status: "completed",
+                completed_at: new Date().toISOString(),
+            });
+
+            return NextResponse.json({
+                success: true,
+                image_url: result.image_url,
+                seed: result.seed,
+                generation_id: generationId,
+            });
+        } catch (genError) {
+            console.error("[CharacterImage] Generation error:", genError);
+
+            // Refund credits
+            await supabaseAdmin
+                .from("credits")
+                .update({ image_credits: credits.image_credits })
+                .eq("user_id", user.id);
+
+            await supabaseAdmin.from("credit_transactions").insert({
+                user_id: user.id,
+                credit_type: "image_credits",
+                amount: GENERATION_COST,
+                balance_after: credits.image_credits,
+                reason: "generation_refund_error",
+                related_id: characterId,
+            });
+
+            return NextResponse.json(
+                { error: "Generation service error" },
+                { status: 502 }
+            );
+        }
+    } catch (error) {
+        console.error("[CharacterImage] Unexpected error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }

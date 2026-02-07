@@ -70,7 +70,7 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!character.lora_url) {
+        if (!character.model_url) {
             return NextResponse.json(
                 { error: "הדמות עדיין לא מאומנת" },
                 { status: 400 }
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
         console.log("=== CHARACTER IMAGE GENERATION ===");
         console.log("Character:", character.name);
-        console.log("LoRA:", character.lora_url);
+        console.log("LoRA:", character.model_url);
 
         // Enhance prompt if requested
         let finalPrompt = prompt;
@@ -92,8 +92,8 @@ export async function POST(req: Request) {
         }
 
         // Add trigger word
-        const fullPrompt = character.trigger_word
-            ? `${character.trigger_word}, ${finalPrompt}`
+        const fullPrompt = character.settings?.trigger_word
+            ? `${character.settings.trigger_word}, ${finalPrompt}`
             : finalPrompt;
 
         console.log("Full prompt:", fullPrompt);
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
                 prompt: fullPrompt,
                 loras: [
                     {
-                        path: character.lora_url,
+                        path: character.model_url,
                         scale: 0.9,
                     },
                 ],

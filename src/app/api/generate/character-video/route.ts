@@ -43,7 +43,7 @@ export async function POST(req: Request) {
         }
 
         // Get character
-        const { data: character, error: charError } = await supabase
+        const { data: character, error: charError } = await supabaseAdmin
             .from("characters")
             .select("*")
             .eq("id", character_id)
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         const requiredImageCredits = numScenes * 2; // 2 credits per character image
         const requiredVideoCredits = 1;
 
-        const { data: credits } = await supabase
+        const { data: credits } = await supabaseAdmin
             .from("credits")
             .select("image_credits, video_credits")
             .eq("user_id", user.id)

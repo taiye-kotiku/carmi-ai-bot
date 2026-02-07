@@ -2,105 +2,64 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Character } from "@/types/database";
-import { toast } from "sonner";
+import { Card } from "@/components/ui/card";
+import type { Character } from "@/types/database";
 
-interface DeleteCharacterModalProps {
+interface Props {
     character: Character;
     onClose: () => void;
-    onDeleted: () => void;
+    onConfirm: () => void;
 }
 
-export function DeleteCharacterModal({
-    character,
-    onClose,
-    onDeleted,
-}: DeleteCharacterModalProps) {
+export function DeleteCharacterModal({ character, onClose, onConfirm }: Props) {
     const [deleting, setDeleting] = useState(false);
 
-    async function handleDelete() {
+    const handleConfirm = async () => {
         setDeleting(true);
-        try {
-            const res = await fetch(`/api/characters/${character.id}`, {
-                method: "DELETE",
-            });
-
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error);
-            }
-
-            toast.success("הדמות נמחקה בהצלחה");
-            onDeleted();
-            onClose();
-        } catch (err: any) {
-            toast.error(err.message || "שגיאה במחיקת הדמות");
-        } finally {
-            setDeleting(false);
-        }
-    }
+        await onConfirm();
+        setDeleting(false);
+    };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm">
-                {/* Icon */}
-                <div className="flex justify-center mb-4">
-                    <div className="h-14 w-14 bg-red-100 rounded-full flex items-center justify-center">
-                        <AlertTriangle className="h-7 w-7 text-red-600" />
-                    </div>
-                </div>
-
-                {/* Content */}
-                <div className="text-center mb-6">
-                    <h2 className="text-xl font-bold mb-2">מחיקת דמות</h2>
-                    <p className="text-gray-600">
-                        האם אתה בטוח שברצונך למחוק את{" "}
-                        <span className="font-semibold">{character.name}</span>?
+        <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            onClick={(e) => {
+                if (e.target === e.currentTarget && !deleting) onClose();
+            }}
+        >
+            <Card className="w-full max-w-md p-6" dir="rtl">
+                <div className="text-center space-y-4">
+                    <div className="text-5xl">⚠️</div>
+                    <h2 className="text-xl font-bold">מחיקת דמות</h2>
+                    <p className="text-muted-foreground">
+                        האם אתה בטוח שברצונך למחוק את הדמות{" "}
+                        <strong>&ldquo;{character.name}&rdquo;</strong>?
                     </p>
-                    <p className="text-sm text-gray-500 mt-2">
-                        פעולה זו לא ניתנת לביטול. תמונות שנוצרו עם הדמות יישארו בגלריה.
+                    <p className="text-sm text-destructive">
+                        פעולה זו תמחק את כל תמונות האימון והמודל המאומן. לא ניתן לבטל.
                     </p>
                 </div>
 
-                {/* Character Preview */}
-                <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 mb-6">
-                    <img
-                        src={character.thumbnail_url || character.reference_images[0]}
-                        alt={character.name}
-                        className="w-12 h-12 rounded-lg object-cover"
-                    />
-                    <div>
-                        <p className="font-medium">{character.name}</p>
-                        <p className="text-sm text-gray-500">
-                            {character.reference_images.length} תמונות ייחוס
-                        </p>
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-3">
+                <div className="flex gap-3 mt-6">
+                    <Button
+                        variant="destructive"
+                        onClick={handleConfirm}
+                        disabled={deleting}
+                        className="flex-1"
+                    >
+                        {deleting ? "מוחק..." : "🗑️ מחק"}
+                    </Button>
                     <Button
                         variant="outline"
                         onClick={onClose}
-                        className="flex-1"
                         disabled={deleting}
+                        className="flex-1"
                     >
                         ביטול
                     </Button>
-                    <Button
-                        variant="destructive"
-                        onClick={handleDelete}
-                        disabled={deleting}
-                        className="flex-1"
-                    >
-                        {deleting && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
-                        מחק דמות
-                    </Button>
                 </div>
-            </div>
+            </Card>
         </div>
     );
 }

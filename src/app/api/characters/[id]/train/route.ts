@@ -1,96 +1,204 @@
-export const maxDuration = 60;
-
+// src/app/api/characters/[id]/train/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { startLoraTraining } from "@/lib/services/modal";
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: { id: string } }
 ) {
     try {
-        const { id: characterId } = await params;
-
+        // ─── Auth ───
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+            error: authError,
+        } = await supabase.auth.getUser();
 
-        if (!user) {
+        if (authError || !user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const character = await supabaseAdmin
+        const characterId = params.id;
+
+        // ─── Fetch character & verify ownership ───
+        const { data: character, error: fetchError } = await supabaseAdmin
             .from("characters")
             .select("*")
             .eq("id", characterId)
             .eq("user_id", user.id)
-            .single()
-            .then(({ data }) => data);
+            .single();
 
-        if (!character) {
-            return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        if (fetchError || !character) {
+            return NextResponse.json(
+                { error: "Character not found" },
+                { status: 404 }
+            );
         }
 
-        const imageUrls = character.reference_images || character.image_urls || [];
-        if (imageUrls.length < 15) {
+        // Check status
+        if (character.model_status === "training") {
             return NextResponse.json(
-                { error: "Need at least 15 images (recommended ~20 from different angles, clothes, backgrounds)" },
+                { error: "Character is already being trained" },
+                { status: 409 }
+            );
+        }
+
+        // Check images
+        const imageUrls = character.reference_images || [];
+        if (imageUrls.length < 5) {
+            return NextResponse.json(
+                {
+                    error: `Need at least 5 reference images. Currently have ${imageUrls.length}.`,
+                },
                 { status: 400 }
             );
         }
 
-        const modalUrl = process.env.MODAL_TRAIN_ENDPOINT_URL;
-        if (!modalUrl) {
+        // ─── Check credits ───
+        const TRAINING_COST = 10; // image_credits cost for training
+        const { data: credits, error: creditsError } = await supabaseAdmin
+            .from("credits")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+        if (creditsError || !credits) {
             return NextResponse.json(
-                { error: "Modal training endpoint not configured (MODAL_TRAIN_ENDPOINT_URL)" },
+                { error: "Could not fetch credits" },
                 { status: 500 }
             );
         }
 
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-        const webhookUrl = `${appUrl}/api/webhooks/training-complete`;
+        if (credits.image_credits < TRAINING_COST) {
+            return NextResponse.json(
+                {
+                    error: `Insufficient credits. Training costs ${TRAINING_COST} image credits. You have ${credits.image_credits}.`,
+                },
+                { status: 402 }
+            );
+        }
 
-        console.log("Starting Modal FLUX LoRA training...");
-        console.log("Images:", imageUrls.length);
-        console.log("Character:", character.name);
+        // ─── Deduct credits ───
+        const newBalance = credits.image_credits - TRAINING_COST;
+        await supabaseAdmin
+            .from("credits")
+            .update({ image_credits: newBalance })
+            .eq("user_id", user.id);
 
-        const response = await fetch(modalUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                character_id: characterId,
-                character_name: character.name,
-                reference_image_urls: imageUrls,
-                webhook_url: webhookUrl,
-                supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-                supabase_service_key: process.env.SUPABASE_SERVICE_ROLE_KEY,
-            }),
+        // Log transaction
+        await supabaseAdmin.from("credit_transactions").insert({
+            user_id: user.id,
+            credit_type: "image_credits",
+            amount: -TRAINING_COST,
+            balance_after: newBalance,
+            reason: "character_training",
+            related_id: characterId,
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || "Modal training failed");
-        }
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
+        // ─── Update character status ───
         await supabaseAdmin
             .from("characters")
             .update({
                 model_status: "training",
                 training_started_at: new Date().toISOString(),
+                training_error: null, // Clear previous error
             })
             .eq("id", characterId);
 
-        return NextResponse.json({
-            success: true,
-            message: "FLUX LoRA training started",
-        });
+        // ─── Optional training config from request body ───
+        let trainingConfig: Record<string, number> = {};
+        try {
+            const body = await request.json();
+            trainingConfig = {
+                num_train_steps: body.num_train_steps,
+                learning_rate: body.learning_rate,
+                lora_rank: body.lora_rank,
+                resolution: body.resolution,
+            };
+        } catch {
+            // No body or invalid JSON — use defaults
+        }
 
-    } catch (error: any) {
-        console.error("Training error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        // ─── Start training on Modal ───
+        try {
+            const result = await startLoraTraining({
+                characterId,
+                characterName: character.name,
+                referenceImageUrls: imageUrls,
+                ...trainingConfig,
+            });
+
+            if (!result.success) {
+                // Modal rejected immediately — refund and reset
+                await supabaseAdmin
+                    .from("credits")
+                    .update({ image_credits: credits.image_credits })
+                    .eq("user_id", user.id);
+
+                await supabaseAdmin.from("credit_transactions").insert({
+                    user_id: user.id,
+                    credit_type: "image_credits",
+                    amount: TRAINING_COST,
+                    balance_after: credits.image_credits,
+                    reason: "training_refund_immediate_failure",
+                    related_id: characterId,
+                });
+
+                await supabaseAdmin
+                    .from("characters")
+                    .update({ model_status: "failed", training_error: "Failed to start training" })
+                    .eq("id", characterId);
+
+                return NextResponse.json(
+                    { error: "Failed to start training", details: result.errors },
+                    { status: 500 }
+                );
+            }
+
+            return NextResponse.json({
+                success: true,
+                message: result.message,
+                character_id: characterId,
+                config: result.config,
+            });
+        } catch (modalError) {
+            // Modal request failed — refund and reset
+            console.error("[Train] Modal request failed:", modalError);
+
+            await supabaseAdmin
+                .from("credits")
+                .update({ image_credits: credits.image_credits })
+                .eq("user_id", user.id);
+
+            await supabaseAdmin.from("credit_transactions").insert({
+                user_id: user.id,
+                credit_type: "image_credits",
+                amount: TRAINING_COST,
+                balance_after: credits.image_credits,
+                reason: "training_refund_modal_error",
+                related_id: characterId,
+            });
+
+            await supabaseAdmin
+                .from("characters")
+                .update({
+                    model_status: "failed",
+                    training_error: modalError instanceof Error ? modalError.message : "Modal request failed",
+                })
+                .eq("id", characterId);
+
+            return NextResponse.json(
+                { error: "Failed to connect to training service" },
+                { status: 502 }
+            );
+        }
+    } catch (error) {
+        console.error("[Train] Unexpected error:", error);
+        return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+        );
     }
 }

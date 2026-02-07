@@ -2,82 +2,53 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-    Users,
-    Plus,
-    MoreVertical,
-    Pencil,
-    Trash2,
-    Loader2,
-    ImageIcon,
-    Calendar,
-    Sparkles,
-    CheckCircle2,
-    AlertCircle,
-    Clock,
-    RotateCw,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { CreateCharacterModal } from "@/components/features/create-character-modal";
-import { EditCharacterModal } from "@/components/features/edit-character-modal";
 import { DeleteCharacterModal } from "@/components/features/delete-character-modal";
-import { Character } from "@/types/database";
-import { toast } from "sonner";
-import Link from "next/link";
+import type { Character } from "@/types/database";
 
-// Status badge component
-function StatusBadge({ status }: { status: string }) {
-    switch (status) {
-        case "training":
-            return (
-                <div className="flex items-center gap-1.5 bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    מאמן...
-                </div>
-            );
-        case "ready":
-            return (
-                <div className="flex items-center gap-1.5 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-medium">
-                    <CheckCircle2 className="h-3 w-3" />
-                    מוכן
-                </div>
-            );
-        case "failed":
-            return (
-                <div className="flex items-center gap-1.5 bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-medium">
-                    <AlertCircle className="h-3 w-3" />
-                    נכשל
-                </div>
-            );
-        default:
-            return (
-                <div className="flex items-center gap-1.5 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-medium">
-                    <Clock className="h-3 w-3" />
-                    טיוטה
-                </div>
-            );
-    }
+const STATUS_CONFIG: Record<
+    Character["model_status"],
+    { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
+    pending: { label: "ממתין לאימון", variant: "outline" },
+    training: { label: "מאמן...", variant: "secondary" },
+    ready: { label: "מוכן", variant: "default" },
+    failed: { label: "נכשל", variant: "destructive" },
+};
+
+// Estimate training time based on typical FLUX training
+function getTrainingProgress(startedAt: string | null): number {
+    if (!startedAt) return 0;
+    const elapsed = Date.now() - new Date(startedAt).getTime();
+    const estimatedTotal = 45 * 60 * 1000; // 45 minutes
+    return Math.min(Math.round((elapsed / estimatedTotal) * 100), 95);
+}
+
+function getElapsedMinutes(startedAt: string | null): number {
+    if (!startedAt) return 0;
+    return Math.round((Date.now() - new Date(startedAt).getTime()) / 60000);
 }
 
 export default function CharactersPage() {
     const [characters, setCharacters] = useState<Character[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
-    const [deletingCharacter, setDeletingCharacter] = useState<Character | null>(null);
-    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<Character | null>(null);
+    const [trainingId, setTrainingId] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     const fetchCharacters = useCallback(async () => {
         try {
             const res = await fetch("/api/characters");
-            if (res.ok) {
-                const data = await res.json();
-                setCharacters(data);
-            }
+            if (!res.ok) throw new Error("Failed to fetch");
+            const data = await res.json();
+            setCharacters(data.characters || []);
         } catch (err) {
             console.error("Failed to fetch characters:", err);
-            toast.error("שגיאה בטעינת הדמויות");
         } finally {
             setLoading(false);
         }
@@ -87,345 +58,282 @@ export default function CharactersPage() {
         fetchCharacters();
     }, [fetchCharacters]);
 
-    // Auto-refresh when there are training characters
+    // Poll when any character is training
     useEffect(() => {
         const hasTraining = characters.some((c) => c.model_status === "training");
-        if (hasTraining) {
-            const interval = setInterval(fetchCharacters, 15000); // Check every 15 seconds
-            return () => clearInterval(interval);
-        }
+        if (!hasTraining) return;
+
+        const interval = setInterval(fetchCharacters, 10000);
+        return () => clearInterval(interval);
     }, [characters, fetchCharacters]);
 
-    // Close menu when clicking outside
-    useEffect(() => {
-        const handleClick = () => setOpenMenuId(null);
-        if (openMenuId) {
-            document.addEventListener("click", handleClick);
-            return () => document.removeEventListener("click", handleClick);
-        }
-    }, [openMenuId]);
+    const handleStartTraining = async (characterId: string) => {
+        setTrainingId(characterId);
+        setError(null);
 
-    // Manual retry training
-    async function retryTraining(characterId: string) {
         try {
             const res = await fetch(`/api/characters/${characterId}/train`, {
                 method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
             });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                setError(data.error || "שגיאה בהתחלת האימון");
+                return;
+            }
+
+            await fetchCharacters();
+        } catch (err) {
+            console.error("Training error:", err);
+            setError("שגיאה בהתחלת האימון");
+        } finally {
+            setTrainingId(null);
+        }
+    };
+
+    const handleDelete = async (characterId: string) => {
+        try {
+            const res = await fetch(`/api/characters/${characterId}`, {
+                method: "DELETE",
+            });
+
             if (res.ok) {
-                toast.success("האימון התחיל מחדש!");
-                fetchCharacters();
+                setCharacters((prev) => prev.filter((c) => c.id !== characterId));
             } else {
-                throw new Error("Failed to start training");
+                const data = await res.json();
+                setError(data.error || "שגיאה במחיקה");
             }
         } catch (err) {
-            toast.error("שגיאה בהפעלת האימון");
+            console.error("Delete error:", err);
+            setError("שגיאה במחיקה");
         }
-    }
+        setDeleteTarget(null);
+    };
 
-    function formatDate(dateString: string) {
-        return new Date(dateString).toLocaleDateString("he-IL", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-        });
+    // Loading skeleton
+    if (loading) {
+        return (
+            <div className="container mx-auto p-6" dir="rtl">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="h-9 w-40 bg-muted animate-pulse rounded" />
+                    <div className="h-10 w-36 bg-muted animate-pulse rounded" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-72 bg-muted animate-pulse rounded-xl" />
+                    ))}
+                </div>
+            </div>
+        );
     }
-
-    const trainingCount = characters.filter((c) => c.model_status === "training").length;
 
     return (
-        <div className="max-w-6xl mx-auto">
+        <div className="container mx-auto p-6" dir="rtl">
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                        <Users className="h-6 w-6 text-indigo-600" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold">הדמויות שלי</h1>
-                        <p className="text-gray-600">
-                            נהל את הדמויות שלך ליצירת תמונות עקביות
-                        </p>
-                    </div>
+                <div>
+                    <h1 className="text-3xl font-bold">הדמויות שלי</h1>
+                    <p className="text-muted-foreground mt-1">
+                        צור ואמן דמויות מותאמות אישית ליצירת תוכן
+                    </p>
                 </div>
-                <Button onClick={() => setShowCreateModal(true)}>
-                    <Plus className="h-4 w-4 ml-2" />
+                <Button onClick={() => setShowCreateModal(true)} size="lg">
+                    <span className="ml-2">+</span>
                     דמות חדשה
                 </Button>
             </div>
 
-            {/* Training Progress Banner */}
-            {trainingCount > 0 && (
-                <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                    <div className="flex-1">
-                        <p className="font-medium text-blue-900">
-                            {trainingCount} {trainingCount === 1 ? "דמות באימון" : "דמויות באימון"}
-                        </p>
-                        <p className="text-sm text-blue-700">
-                            האימון לוקח כ-15-20 דקות. הדף יתעדכן אוטומטית.
-                        </p>
-                    </div>
+            {/* Global error */}
+            {error && (
+                <div className="bg-destructive/10 text-destructive rounded-lg p-4 mb-6 flex items-center justify-between">
+                    <span>{error}</span>
+                    <button onClick={() => setError(null)} className="text-sm underline">
+                        סגור
+                    </button>
                 </div>
             )}
 
-            {/* Loading State */}
-            {loading && (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-                </div>
-            )}
-
-            {/* Empty State */}
-            {!loading && characters.length === 0 && (
-                <Card>
-                    <CardContent className="flex flex-col items-center justify-center py-16">
-                        <div className="h-20 w-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                            <Users className="h-10 w-10 text-gray-400" />
-                        </div>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">
-                            אין לך דמויות עדיין
-                        </h3>
-                        <p className="text-gray-500 text-center mb-6 max-w-sm">
-                            צור דמות חדשה כדי ליצור תמונות עקביות של אותו אדם בסצנות שונות
-                        </p>
-                        <Button onClick={() => setShowCreateModal(true)}>
-                            <Plus className="h-4 w-4 ml-2" />
-                            צור דמות ראשונה
-                        </Button>
-                    </CardContent>
+            {/* Empty state */}
+            {characters.length === 0 ? (
+                <Card className="p-16 text-center">
+                    <div className="text-6xl mb-6">🎭</div>
+                    <h2 className="text-2xl font-semibold mb-3">אין דמויות עדיין</h2>
+                    <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                        העלה תמונות של אדם כדי לאמן מודל AI מותאם אישית.
+                        לאחר האימון תוכל ליצור תמונות חדשות של הדמות בכל סגנון וסצנה.
+                    </p>
+                    <Button onClick={() => setShowCreateModal(true)} size="lg">
+                        צור את הדמות הראשונה שלך
+                    </Button>
                 </Card>
-            )}
-
-            {/* Characters Grid */}
-            {!loading && characters.length > 0 && (
+            ) : (
+                /* Character grid */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {characters.map((character) => (
-                        <Card
-                            key={character.id}
-                            className={`group overflow-hidden hover:shadow-lg transition-shadow ${character.model_status === "training" ? "ring-2 ring-blue-300" : ""
-                                }`}
-                        >
-                            {/* Character Image */}
-                            <div className="relative aspect-square bg-gray-100">
-                                <img
-                                    src={character.thumbnail_url || character.reference_images?.[0] || (character as any).image_urls?.[0] || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect fill='%23e5e7eb' width='400' height='400'/%3E%3C/svg%3E"}
-                                    alt={character.name}
-                                    className={`w-full h-full object-cover ${character.model_status === "training" ? "opacity-75" : ""
-                                        }`}
-                                />
+                    {characters.map((character) => {
+                        const statusConfig = STATUS_CONFIG[character.model_status];
+                        const isTraining = character.model_status === "training";
+                        const isReady = character.model_status === "ready";
+                        const isPending = character.model_status === "pending";
+                        const isFailed = character.model_status === "failed";
 
-                                {/* Training Overlay */}
-                                {character.model_status === "training" && (
-                                    <div className="absolute inset-0 bg-blue-900/20 flex items-center justify-center">
-                                        <div className="bg-white/90 backdrop-blur-sm rounded-xl p-4 text-center">
-                                            <Loader2 className="h-8 w-8 text-blue-600 animate-spin mx-auto mb-2" />
-                                            <p className="text-sm font-medium">מאמן AI...</p>
-                                            <p className="text-xs text-gray-500">~15 דקות</p>
+                        return (
+                            <Card
+                                key={character.id}
+                                className={`overflow-hidden transition-all hover:shadow-lg ${isTraining ? "ring-2 ring-blue-400 ring-offset-2" : ""
+                                    }`}
+                            >
+                                {/* Image preview grid */}
+                                <div className="grid grid-cols-3 gap-0.5 h-36 bg-muted">
+                                    {character.reference_images.slice(0, 3).map((url, i) => (
+                                        <div key={i} className="overflow-hidden">
+                                            <img
+                                                src={url}
+                                                alt={`${character.name} ${i + 1}`}
+                                                className="w-full h-full object-cover hover:scale-105 transition-transform"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).src =
+                                                        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23e2e8f0' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='%2394a3b8' font-size='30'%3E🖼️%3C/text%3E%3C/svg%3E";
+                                                }}
+                                            />
                                         </div>
-                                    </div>
-                                )}
-
-                                {/* Overlay with reference count */}
-                                <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1 flex items-center gap-1">
-                                    <ImageIcon className="h-3 w-3 text-white" />
-                                    <span className="text-xs text-white">
-                                        {character.reference_images?.length ?? (character as any).image_urls?.length ?? 0}
-                                    </span>
-                                </div>
-
-                                {/* Status Badge */}
-                                <div className="absolute top-2 right-2">
-                                    <StatusBadge status={character.model_status || "draft"} />
-                                </div>
-
-                                {/* Menu Button */}
-                                <div className="absolute top-2 left-2">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setOpenMenuId(
-                                                openMenuId === character.id ? null : character.id
-                                            );
-                                        }}
-                                        className="p-1.5 bg-white/90 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
-                                    >
-                                        <MoreVertical className="h-4 w-4 text-gray-600" />
-                                    </button>
-
-                                    {/* Dropdown Menu */}
-                                    {openMenuId === character.id && (
-                                        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border py-1 min-w-[140px] z-10">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setEditingCharacter(character);
-                                                    setOpenMenuId(null);
-                                                }}
-                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50"
-                                            >
-                                                <Pencil className="h-4 w-4" />
-                                                עריכה
-                                            </button>
-                                            {character.model_status === "failed" && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        retryTraining(character.id);
-                                                        setOpenMenuId(null);
-                                                    }}
-                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
-                                                >
-                                                    <RotateCw className="h-4 w-4" />
-                                                    נסה שוב
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setDeletingCharacter(character);
-                                                    setOpenMenuId(null);
-                                                }}
-                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                                מחיקה
-                                            </button>
+                                    ))}
+                                    {character.reference_images.length > 3 && (
+                                        <div className="col-span-3 bg-muted/50 text-center text-xs text-muted-foreground py-1">
+                                            +{character.reference_images.length - 3} תמונות נוספות
                                         </div>
                                     )}
                                 </div>
-                            </div>
 
-                            {/* Character Info */}
-                            <CardContent className="p-4">
-                                <h3 className="font-semibold text-lg mb-1">
-                                    {character.name}
-                                </h3>
-                                {character.description && (
-                                    <p className="text-sm text-gray-500 line-clamp-2 mb-3">
-                                        {character.description}
-                                    </p>
-                                )}
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1 text-xs text-gray-400">
-                                        <Calendar className="h-3 w-3" />
-                                        {formatDate(character.created_at)}
+                                <div className="p-4 space-y-3">
+                                    {/* Name + status */}
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-lg font-bold truncate ml-2">
+                                            {character.name}
+                                        </h3>
+                                        <Badge variant={statusConfig.variant}>
+                                            {statusConfig.label}
+                                        </Badge>
                                     </div>
-                                    {character.model_status === "ready" ? (
-                                        <Link href={`/generate/character?id=${character.id}`}>
-                                            <Button size="sm" variant="default">
-                                                <Sparkles className="h-3 w-3 ml-1" />
-                                                יצירה
-                                            </Button>
-                                        </Link>
-                                    ) : character.model_status === "training" ? (
-                                        <Button size="sm" variant="outline" disabled>
-                                            <Loader2 className="h-3 w-3 ml-1 animate-spin" />
-                                            מאמן...
-                                        </Button>
-                                    ) : character.model_status === "failed" ? (
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => retryTraining(character.id)}
-                                        >
-                                            <RotateCw className="h-3 w-3 ml-1" />
-                                            נסה שוב
-                                        </Button>
-                                    ) : (character.model_status === "pending" || character.model_status === "draft") &&
-                                      (character.reference_images?.length ?? (character as any).image_urls?.length ?? 0) >= 15 ? (
-                                        <Button
-                                            size="sm"
-                                            variant="default"
-                                            onClick={() => retryTraining(character.id)}
-                                        >
-                                            <Sparkles className="h-3 w-3 ml-1" />
-                                            התחל אימון
-                                        </Button>
-                                    ) : (
-                                        <Link href={`/generate/character?id=${character.id}`}>
-                                            <Button size="sm" variant="outline">
-                                                <Sparkles className="h-3 w-3 ml-1" />
-                                                יצירה
-                                            </Button>
-                                        </Link>
+
+                                    {/* Description */}
+                                    {character.description && (
+                                        <p className="text-sm text-muted-foreground line-clamp-2">
+                                            {character.description}
+                                        </p>
                                     )}
+
+                                    {/* Image count */}
+                                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <span>📸</span>
+                                        <span>{character.reference_images.length} תמונות אימון</span>
+                                    </div>
+
+                                    {/* Training progress */}
+                                    {isTraining && (
+                                        <div className="space-y-2">
+                                            <Progress
+                                                value={getTrainingProgress(character.training_started_at)}
+                                            />
+                                            <p className="text-xs text-blue-600 animate-pulse flex items-center gap-1">
+                                                <span className="inline-block w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                                                אימון בתהליך —{" "}
+                                                {getElapsedMinutes(character.training_started_at)} דקות
+                                                (בערך 30-60 דקות)
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Error */}
+                                    {isFailed && character.training_error && (
+                                        <div className="bg-destructive/10 rounded-md p-2">
+                                            <p className="text-xs text-destructive">
+                                                {character.training_error}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Action buttons */}
+                                    <div className="flex gap-2 pt-2">
+                                        {isPending && (
+                                            <Button
+                                                onClick={() => handleStartTraining(character.id)}
+                                                disabled={trainingId === character.id}
+                                                className="flex-1"
+                                            >
+                                                {trainingId === character.id ? (
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="animate-spin">⏳</span>
+                                                        מתחיל...
+                                                    </span>
+                                                ) : (
+                                                    "🚀 התחל אימון"
+                                                )}
+                                            </Button>
+                                        )}
+
+                                        {isFailed && (
+                                            <Button
+                                                onClick={() => handleStartTraining(character.id)}
+                                                disabled={trainingId === character.id}
+                                                variant="outline"
+                                                className="flex-1"
+                                            >
+                                                🔄 נסה שוב
+                                            </Button>
+                                        )}
+
+                                        {isReady && (
+                                            <Button asChild className="flex-1">
+                                                <a href={`/generate/character?id=${character.id}`}>
+                                                    ✨ צור תמונה
+                                                </a>
+                                            </Button>
+                                        )}
+
+                                        {isTraining && (
+                                            <Button disabled variant="outline" className="flex-1">
+                                                ⏳ ממתין לאימון...
+                                            </Button>
+                                        )}
+
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setDeleteTarget(character)}
+                                            disabled={isTraining}
+                                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                                            title="מחק דמות"
+                                        >
+                                            🗑️
+                                        </Button>
+                                    </div>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-
-                    {/* Add New Card */}
-                    <Card
-                        className="border-2 border-dashed hover:border-purple-300 hover:bg-purple-50/50 transition-colors cursor-pointer"
-                        onClick={() => setShowCreateModal(true)}
-                    >
-                        <CardContent className="flex flex-col items-center justify-center h-full min-h-[300px]">
-                            <div className="h-16 w-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-                                <Plus className="h-8 w-8 text-purple-600" />
-                            </div>
-                            <p className="font-medium text-gray-700">הוסף דמות חדשה</p>
-                            <p className="text-sm text-gray-500">העלה תמונות ייחוס</p>
-                        </CardContent>
-                    </Card>
+                            </Card>
+                        );
+                    })}
                 </div>
             )}
 
-            {/* How it works section */}
-            {!loading && characters.length > 0 && (
-                <div className="mt-12">
-                    <h2 className="text-lg font-semibold mb-4">איך זה עובד?</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-white rounded-xl p-4 border">
-                            <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-                                <span className="text-lg font-bold text-purple-600">1</span>
-                            </div>
-                            <h3 className="font-medium mb-1">העלה 3+ תמונות</h3>
-                            <p className="text-sm text-gray-500">
-                                העלה תמונות ברורות של הפנים מזוויות שונות לאימון AI
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-xl p-4 border">
-                            <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-                                <span className="text-lg font-bold text-purple-600">2</span>
-                            </div>
-                            <h3 className="font-medium mb-1">המתן לאימון</h3>
-                            <p className="text-sm text-gray-500">
-                                ה-AI לומד את הפנים תוך ~15 דקות. תקבל התראה כשיסתיים
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-xl p-4 border">
-                            <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-                                <span className="text-lg font-bold text-purple-600">3</span>
-                            </div>
-                            <h3 className="font-medium mb-1">צור תמונות מדהימות</h3>
-                            <p className="text-sm text-gray-500">
-                                תאר סצנה וקבל תמונות של הדמות שלך בכל מצב שתרצה
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Modals */}
-            <CreateCharacterModal
-                open={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                onCreated={fetchCharacters}
-            />
-
-            {editingCharacter && (
-                <EditCharacterModal
-                    character={editingCharacter}
-                    onClose={() => setEditingCharacter(null)}
-                    onUpdated={fetchCharacters}
+            {/* Create Modal */}
+            {showCreateModal && (
+                <CreateCharacterModal
+                    onClose={() => setShowCreateModal(false)}
+                    onCreated={() => {
+                        setShowCreateModal(false);
+                        fetchCharacters();
+                    }}
                 />
             )}
 
-            {deletingCharacter && (
+            {/* Delete Modal */}
+            {deleteTarget && (
                 <DeleteCharacterModal
-                    character={deletingCharacter}
-                    onClose={() => setDeletingCharacter(null)}
-                    onDeleted={fetchCharacters}
+                    character={deleteTarget}
+                    onClose={() => setDeleteTarget(null)}
+                    onConfirm={() => handleDelete(deleteTarget.id)}
                 />
             )}
         </div>

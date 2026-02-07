@@ -1,15 +1,24 @@
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const CARTOONIZE_PROMPT = `Transform this photograph into a high-quality cartoon/illustration style. 
-Preserve the subject's identity, face, pose, and key features.
-Use clean lines, flat or semi-flat colors, and a stylized cartoon aesthetic (anime, digital art, or classic cartoon style).
-Maintain the same composition and framing as the original.
-Do NOT add text, watermarks, or alter the subject's appearance beyond style transformation.`;
+const VISION_PROMPT = `Analyze this photograph in detail. Describe:
+- The person's appearance (face, hair, clothing, pose)
+- The setting/background
+- Lighting and mood
+- Key visual elements
+
+Be very specific about facial features, expression, and pose. This description will be used to recreate the image in cartoon style.`;
+
+const CARTOONIZE_PROMPT = `Create a high-quality cartoon/illustration version of this person. 
+Style: Clean lines, flat or semi-flat colors, stylized cartoon aesthetic (anime, digital art, or classic cartoon).
+Preserve the exact identity, facial features, pose, and composition from the description.
+Maintain the same framing and background elements.
+Do NOT add text, watermarks, or alter the subject's appearance beyond style transformation.
+High quality, professional cartoon illustration.`;
 
 export async function POST(req: Request) {
     try {
@@ -42,27 +51,35 @@ export async function POST(req: Request) {
         const base64 = Buffer.from(buffer).toString("base64");
         const mimeType = file.type || "image/png";
 
-        // Use Google Generative AI SDK
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash-exp-image-generation",
-            generationConfig: {
-                responseModalities: ["IMAGE"],
-                responseMimeType: "image/png",
-            } as any,
-        });
 
-        const result = await model.generateContent([
+        // Step 1: Use Gemini Vision to analyze the image
+        const visionModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        const visionResult = await visionModel.generateContent([
             {
                 inlineData: {
                     data: base64,
                     mimeType,
                 },
             },
-            CARTOONIZE_PROMPT,
+            VISION_PROMPT,
         ]);
 
-        const response = result.response;
+        const imageDescription = visionResult.response.text();
+        console.log("Image description:", imageDescription);
+
+        // Step 2: Generate cartoon image from description
+        const imageModel = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash-exp-image-generation",
+            generationConfig: {
+                responseModalities: ["IMAGE"],
+            } as any,
+        });
+
+        const fullPrompt = `${CARTOONIZE_PROMPT}\n\nBased on this description: ${imageDescription}`;
+        const imageResult = await imageModel.generateContent(fullPrompt);
+
+        const response = imageResult.response;
         const imagePart = response.candidates?.[0]?.content?.parts?.find(
             (p: any) => p.inlineData?.mimeType?.startsWith("image/")
         );
@@ -85,7 +102,6 @@ export async function POST(req: Request) {
         console.error("Cartoonize error:", error);
         const errorMessage = error.message || "שגיאה בהמרה לקריקטורה";
         
-        // Provide more helpful error messages
         if (errorMessage.includes("API key")) {
             return NextResponse.json(
                 { error: "שגיאת הגדרה: GOOGLE_AI_API_KEY לא מוגדר" },

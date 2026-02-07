@@ -3,17 +3,13 @@ export const maxDuration = 60;
 
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const CARTOONIZE_SYSTEM_PROMPT = `You are an expert at transforming photographs into high-quality cartoon and digital art styles.
-
-Transform the provided photograph into a cartoon/illustration style. You MUST:
-- Preserve the subject's identity, face, pose, and key features
-- Use clean lines, flat or semi-flat colors, and a stylized cartoon aesthetic
-- Maintain the same composition and framing as the original
-- Output a single image in cartoon/illustration style (anime, digital art, or classic cartoon - choose what fits best)
-- Do NOT add text, watermarks, or alter the subject's appearance beyond style
-
-Return ONLY the transformed cartoon image.`;
+const CARTOONIZE_PROMPT = `Transform this photograph into a high-quality cartoon/illustration style. 
+Preserve the subject's identity, face, pose, and key features.
+Use clean lines, flat or semi-flat colors, and a stylized cartoon aesthetic (anime, digital art, or classic cartoon style).
+Maintain the same composition and framing as the original.
+Do NOT add text, watermarks, or alter the subject's appearance beyond style transformation.`;
 
 export async function POST(req: Request) {
     try {
@@ -46,52 +42,35 @@ export async function POST(req: Request) {
         const base64 = Buffer.from(buffer).toString("base64");
         const mimeType = file.type || "image/png";
 
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
+        // Use Google Generative AI SDK
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash-exp-image-generation",
+            generationConfig: {
+                responseModalities: ["IMAGE"],
+                responseMimeType: "image/png",
+            } as any,
+        });
+
+        const result = await model.generateContent([
             {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
-                                {
-                                    inlineData: {
-                                        mimeType,
-                                        data: base64,
-                                    },
-                                },
-                                {
-                                    text: CARTOONIZE_SYSTEM_PROMPT,
-                                },
-                            ],
-                        },
-                    ],
-                    generationConfig: {
-                        responseModalities: ["Text", "Image"],
-                        responseMimeType: "image/png",
-                    },
-                }),
-            }
-        );
+                inlineData: {
+                    data: base64,
+                    mimeType,
+                },
+            },
+            CARTOONIZE_PROMPT,
+        ]);
 
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error("Gemini cartoonize error:", errText);
-            return NextResponse.json(
-                { error: "שגיאה ביצירת הקריקטורה" },
-                { status: 500 }
-            );
-        }
-
-        const data = await response.json();
-        const imagePart = data.candidates?.[0]?.content?.parts?.find(
+        const response = result.response;
+        const imagePart = response.candidates?.[0]?.content?.parts?.find(
             (p: any) => p.inlineData?.mimeType?.startsWith("image/")
         );
 
         if (!imagePart?.inlineData) {
+            console.error("No image in response:", JSON.stringify(response, null, 2));
             return NextResponse.json(
-                { error: "לא נוצרה תמונת קריקטורה" },
+                { error: "לא נוצרה תמונת קריקטורה. נסה תמונה אחרת." },
                 { status: 500 }
             );
         }
@@ -104,8 +83,25 @@ export async function POST(req: Request) {
         });
     } catch (error: any) {
         console.error("Cartoonize error:", error);
+        const errorMessage = error.message || "שגיאה בהמרה לקריקטורה";
+        
+        // Provide more helpful error messages
+        if (errorMessage.includes("API key")) {
+            return NextResponse.json(
+                { error: "שגיאת הגדרה: GOOGLE_AI_API_KEY לא מוגדר" },
+                { status: 500 }
+            );
+        }
+        
+        if (errorMessage.includes("quota") || errorMessage.includes("rate limit")) {
+            return NextResponse.json(
+                { error: "מגבלת שימוש - נסה שוב בעוד כמה דקות" },
+                { status: 429 }
+            );
+        }
+
         return NextResponse.json(
-            { error: error.message || "שגיאה בהמרה לקריקטורה" },
+            { error: errorMessage },
             { status: 500 }
         );
     }

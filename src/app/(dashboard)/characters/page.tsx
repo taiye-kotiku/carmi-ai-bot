@@ -10,21 +10,25 @@ import { CreateCharacterModal } from "@/components/features/create-character-mod
 import { DeleteCharacterModal } from "@/components/features/delete-character-modal";
 import type { Character } from "@/types/database";
 
-const STATUS_CONFIG: Record<
-    Character["status"],
-    { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
-> = {
+type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
+
+const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
     pending: { label: "ממתין לאימון", variant: "outline" },
     training: { label: "מאמן...", variant: "secondary" },
     ready: { label: "מוכן", variant: "default" },
     failed: { label: "נכשל", variant: "destructive" },
 };
 
-// Estimate training time based on typical FLUX training
+const DEFAULT_STATUS = { label: "לא ידוע", variant: "outline" as BadgeVariant };
+
+function getStatusConfig(status: string) {
+    return STATUS_CONFIG[status] || DEFAULT_STATUS;
+}
+
 function getTrainingProgress(startedAt: string | null): number {
     if (!startedAt) return 0;
     const elapsed = Date.now() - new Date(startedAt).getTime();
-    const estimatedTotal = 45 * 60 * 1000; // 45 minutes
+    const estimatedTotal = 45 * 60 * 1000;
     return Math.min(Math.round((elapsed / estimatedTotal) * 100), 95);
 }
 
@@ -113,7 +117,6 @@ export default function CharactersPage() {
         setDeleteTarget(null);
     };
 
-    // Loading skeleton
     if (loading) {
         return (
             <div className="container mx-auto p-6" dir="rtl">
@@ -170,10 +173,9 @@ export default function CharactersPage() {
                     </Button>
                 </Card>
             ) : (
-                /* Character grid */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {characters.map((character) => {
-                        const statusConfig = STATUS_CONFIG[character.status];
+                        const statusConfig = getStatusConfig(character.status);
                         const isTraining = character.status === "training";
                         const isReady = character.status === "ready";
                         const isPending = character.status === "pending";
@@ -200,12 +202,19 @@ export default function CharactersPage() {
                                             />
                                         </div>
                                     ))}
-                                    {(character.image_urls || []).length > 3 && (
-                                        <div className="col-span-3 bg-muted/50 text-center text-xs text-muted-foreground py-1">
-                                            +{(character.image_urls || []).length - 3} תמונות נוספות
+                                    {(!character.image_urls || character.image_urls.length === 0) && (
+                                        <div className="col-span-3 flex items-center justify-center text-muted-foreground">
+                                            אין תמונות
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Extra images count */}
+                                {character.image_urls && character.image_urls.length > 3 && (
+                                    <div className="bg-muted/50 text-center text-xs text-muted-foreground py-1">
+                                        +{character.image_urls.length - 3} תמונות נוספות
+                                    </div>
+                                )}
 
                                 <div className="p-4 space-y-3">
                                     {/* Name + status */}
@@ -228,7 +237,9 @@ export default function CharactersPage() {
                                     {/* Image count */}
                                     <div className="text-xs text-muted-foreground flex items-center gap-1">
                                         <span>📸</span>
-                                        <span>{(character.image_urls || []).length} תמונות אימון</span>
+                                        <span>
+                                            {character.image_urls?.length || 0} תמונות אימון
+                                        </span>
                                     </div>
 
                                     {/* Training progress */}
@@ -317,7 +328,6 @@ export default function CharactersPage() {
                 </div>
             )}
 
-            {/* Create Modal */}
             {showCreateModal && (
                 <CreateCharacterModal
                     onClose={() => setShowCreateModal(false)}
@@ -328,7 +338,6 @@ export default function CharactersPage() {
                 />
             )}
 
-            {/* Delete Modal */}
             {deleteTarget && (
                 <DeleteCharacterModal
                     character={deleteTarget}

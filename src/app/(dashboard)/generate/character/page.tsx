@@ -79,7 +79,7 @@ export default function CharacterGeneratePage() {
                 const res = await fetch("/api/characters");
                 const data = await res.json();
                 const readyChars = (data.characters || []).filter(
-                    (c: Character) => c.model_status === "ready"
+                    (c: Character) => c.status === "ready" && c.lora_url
                 );
                 setCharacters(readyChars);
 
@@ -179,8 +179,8 @@ export default function CharacterGeneratePage() {
                                     key={char.id}
                                     onClick={() => setSelectedId(char.id)}
                                     className={`relative rounded-xl overflow-hidden border-2 transition-all ${selectedId === char.id
-                                            ? "border-primary shadow-lg ring-2 ring-primary/20"
-                                            : "border-transparent hover:border-muted-foreground/30"
+                                        ? "border-primary shadow-lg ring-2 ring-primary/20"
+                                        : "border-transparent hover:border-muted-foreground/30"
                                         }`}
                                 >
                                     <div className="aspect-square">
@@ -240,8 +240,8 @@ export default function CharacterGeneratePage() {
                                     key={preset.label}
                                     onClick={() => setPrompt(preset.prompt)}
                                     className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${prompt === preset.prompt
-                                            ? "bg-primary text-primary-foreground border-primary"
-                                            : "bg-background hover:bg-muted border-border"
+                                        ? "bg-primary text-primary-foreground border-primary"
+                                        : "bg-background hover:bg-muted border-border"
                                         }`}
                                 >
                                     {preset.label}
@@ -262,8 +262,8 @@ export default function CharacterGeneratePage() {
                                         setHeight(preset.height);
                                     }}
                                     className={`p-3 rounded-lg border-2 text-center transition-all ${width === preset.width && height === preset.height
-                                            ? "border-primary bg-primary/5"
-                                            : "border-border hover:border-primary/50"
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border hover:border-primary/50"
                                         }`}
                                 >
                                     <div className="text-xl mb-1">{preset.icon}</div>

@@ -11,7 +11,7 @@ import { DeleteCharacterModal } from "@/components/features/delete-character-mod
 import type { Character } from "@/types/database";
 
 const STATUS_CONFIG: Record<
-    Character["model_status"],
+    Character["status"],
     { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
 > = {
     pending: { label: "ממתין לאימון", variant: "outline" },
@@ -60,7 +60,7 @@ export default function CharactersPage() {
 
     // Poll when any character is training
     useEffect(() => {
-        const hasTraining = characters.some((c) => c.model_status === "training");
+        const hasTraining = characters.some((c) => c.status === "training");
         if (!hasTraining) return;
 
         const interval = setInterval(fetchCharacters, 10000);
@@ -173,11 +173,11 @@ export default function CharactersPage() {
                 /* Character grid */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {characters.map((character) => {
-                        const statusConfig = STATUS_CONFIG[character.model_status];
-                        const isTraining = character.model_status === "training";
-                        const isReady = character.model_status === "ready";
-                        const isPending = character.model_status === "pending";
-                        const isFailed = character.model_status === "failed";
+                        const statusConfig = STATUS_CONFIG[character.status];
+                        const isTraining = character.status === "training";
+                        const isReady = character.status === "ready";
+                        const isPending = character.status === "pending";
+                        const isFailed = character.status === "failed";
 
                         return (
                             <Card
@@ -247,10 +247,10 @@ export default function CharactersPage() {
                                     )}
 
                                     {/* Error */}
-                                    {isFailed && character.training_error && (
+                                    {isFailed && character.error_message && (
                                         <div className="bg-destructive/10 rounded-md p-2">
                                             <p className="text-xs text-destructive">
-                                                {character.training_error}
+                                                {character.error_message}
                                             </p>
                                         </div>
                                     )}

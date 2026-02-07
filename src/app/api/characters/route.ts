@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
                 description: description?.trim() || null,
                 reference_images,
                 thumbnail_url: thumbnailUrl,
-                model_status: "pending",
+                status: "pending",
                 settings: {},
             })
             .select()

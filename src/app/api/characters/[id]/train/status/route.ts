@@ -20,14 +20,13 @@ export async function GET(
         const { id } = await params;
         const { data: character, error } = await supabaseAdmin
             .from("characters")
-            .select(
-                "id, model_status, training_started_at, training_completed_at, training_error, model_url, settings"
-            )
+            .select("id, status, training_started_at, trained_at, error_message, lora_url, settings")
             .eq("id", id)
             .eq("user_id", user.id)
             .single();
 
         if (error || !character) {
+            console.error("[Train Status] Error:", error);
             return NextResponse.json(
                 { error: "Character not found" },
                 { status: 404 }
@@ -37,7 +36,7 @@ export async function GET(
         // Calculate elapsed time
         let elapsed_minutes: number | null = null;
         if (
-            character.model_status === "training" &&
+            character.status === "training" &&
             character.training_started_at
         ) {
             const started = new Date(character.training_started_at).getTime();
@@ -46,11 +45,11 @@ export async function GET(
 
         return NextResponse.json({
             id: character.id,
-            status: character.model_status,
+            status: character.status,
             training_started_at: character.training_started_at,
-            training_completed_at: character.training_completed_at,
-            training_error: character.training_error,
-            model_url: character.model_url,
+            trained_at: character.trained_at,
+            error_message: character.error_message,
+            lora_url: character.lora_url,
             trigger_word: character.settings?.trigger_word || null,
             elapsed_minutes,
         });

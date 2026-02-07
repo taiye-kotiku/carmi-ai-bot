@@ -19,10 +19,10 @@ export function CharacterSelector({ selectedId, onSelect, onCreateNew }: Props) 
             try {
                 const res = await fetch("/api/characters");
                 const data = await res.json();
-                const readyChars = (data.characters || []).filter(
-                    (c: Character) => c.model_status === "ready"
+                const readyCharacters = (data.characters || []).filter(
+                    (c: any) => c.status === "ready"
                 );
-                setCharacters(readyChars);
+                setCharacters(readyCharacters);
             } catch (err) {
                 console.error("Failed to load characters:", err);
             } finally {

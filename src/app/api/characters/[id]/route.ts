@@ -124,7 +124,7 @@ export async function DELETE(
         // Fetch first to check ownership and get storage paths for cleanup
         const { data: character } = await supabase
             .from("characters")
-            .select("id, user_id, model_status, reference_images")
+            .select("id, user_id, status, reference_images")
             .eq("id", id)
             .eq("user_id", user.id)
             .single();
@@ -137,7 +137,7 @@ export async function DELETE(
         }
 
         // Don't allow deleting while training
-        if (character.model_status === "training") {
+        if (character.status === "training") {
             return NextResponse.json(
                 { error: "Cannot delete a character that is currently training" },
                 { status: 409 }

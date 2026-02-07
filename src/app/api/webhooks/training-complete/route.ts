@@ -59,11 +59,11 @@ export async function POST(request: NextRequest) {
             const { error: updateError } = await admin
                 .from("characters")
                 .update({
-                    model_status: "ready",
-                    model_url: model_url,
+                    status: "ready",
+                    lora_url: model_url,
                     settings: updatedSettings,
-                    training_completed_at: new Date().toISOString(),
-                    training_error: null,
+                    trained_at: new Date().toISOString(),
+                    error_message: null,
                 })
                 .eq("id", character_id);
 
@@ -81,9 +81,9 @@ export async function POST(request: NextRequest) {
             await admin
                 .from("characters")
                 .update({
-                    model_status: "failed",
-                    training_error: error || "Training failed on GPU",
-                    training_completed_at: new Date().toISOString(),
+                    status: "failed",
+                    error_message: error || "Training failed on GPU",
+                    trained_at: new Date().toISOString(),
                 })
                 .eq("id", character_id);
 

@@ -37,16 +37,16 @@ export async function POST(
             );
         }
 
-        if (character.model_status !== "ready") {
+        if (character.status !== "ready") {
             return NextResponse.json(
                 {
-                    error: `Character is not ready. Current status: ${character.model_status}`,
+                    error: `Character is not ready. Current status: ${character.status}`,
                 },
                 { status: 400 }
             );
         }
 
-        if (!character.model_url) {
+        if (!character.lora_url) {
             return NextResponse.json(
                 { error: "Character has no trained model" },
                 { status: 400 }
@@ -112,7 +112,7 @@ export async function POST(
         try {
             const result = await generateWithLora({
                 prompt: prompt.trim(),
-                modelUrl: character.model_url,
+                modelUrl: character.lora_url,
                 triggerWord,
                 negativePrompt: negative_prompt,
                 numInferenceSteps: num_inference_steps,

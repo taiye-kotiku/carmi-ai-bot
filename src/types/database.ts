@@ -247,11 +247,12 @@ export type Database = {
                     description: string | null;
                     reference_images: string[];
                     thumbnail_url: string | null;
-                    model_status: 'pending' | 'training' | 'ready' | 'failed';
-                    model_url: string | null;
+                    status: 'pending' | 'training' | 'ready' | 'failed';
+                    lora_url: string | null;
+                    job_id: string | null;
                     training_started_at: string | null;
-                    training_completed_at: string | null;
-                    training_error: string | null;
+                    trained_at: string | null;
+                    error_message: string | null;
                     settings: {
                         model?: string;
                         ip_adapter_scale?: number;
@@ -267,9 +268,12 @@ export type Database = {
                     description?: string | null;
                     reference_images: string[];
                     thumbnail_url?: string | null;
-                    model_status?: 'pending' | 'training' | 'ready' | 'failed';
-                    model_url?: string | null;
+                    status?: 'pending' | 'training' | 'ready' | 'failed';
+                    lora_url?: string | null;
+                    job_id?: string | null;
                     training_started_at?: string | null;
+                    trained_at?: string | null;
+                    error_message?: string | null;
                     settings?: {
                         model?: string;
                         ip_adapter_scale?: number;
@@ -281,11 +285,12 @@ export type Database = {
                     description?: string | null;
                     reference_images?: string[];
                     thumbnail_url?: string | null;
-                    model_status?: 'pending' | 'training' | 'ready' | 'failed';
-                    model_url?: string | null;
+                    status?: 'pending' | 'training' | 'ready' | 'failed';
+                    lora_url?: string | null;
+                    job_id?: string | null;
                     training_started_at?: string | null;
-                    training_completed_at?: string | null;
-                    training_error?: string | null;
+                    trained_at?: string | null;
+                    error_message?: string | null;
                     settings?: {
                         model?: string;
                         ip_adapter_scale?: number;

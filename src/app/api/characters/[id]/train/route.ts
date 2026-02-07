@@ -38,7 +38,7 @@ export async function POST(
         }
 
         // Check status
-        if (character.model_status === "training") {
+        if (character.status === "training") {
             return NextResponse.json(
                 { error: "Character is already being trained" },
                 { status: 409 }
@@ -101,9 +101,9 @@ export async function POST(
         await supabaseAdmin
             .from("characters")
             .update({
-                model_status: "training",
+                status: "training",
                 training_started_at: new Date().toISOString(),
-                training_error: null, // Clear previous error
+                error_message: null, // Clear previous error
             })
             .eq("id", characterId);
 
@@ -148,7 +148,7 @@ export async function POST(
 
                 await supabaseAdmin
                     .from("characters")
-                    .update({ model_status: "failed", training_error: "Failed to start training" })
+                    .update({ status: "failed", error_message: "Failed to start training" })
                     .eq("id", characterId);
 
                 return NextResponse.json(
@@ -184,8 +184,8 @@ export async function POST(
             await supabaseAdmin
                 .from("characters")
                 .update({
-                    model_status: "failed",
-                    training_error: modalError instanceof Error ? modalError.message : "Modal request failed",
+                    status: "failed",
+                    error_message: modalError instanceof Error ? modalError.message : "Modal request failed",
                 })
                 .eq("id", characterId);
 

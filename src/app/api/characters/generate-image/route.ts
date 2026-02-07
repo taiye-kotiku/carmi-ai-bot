@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (!character.model_url) {
+        if (!character.lora_url) {
             return NextResponse.json(
                 { error: "Character not trained yet" },
                 { status: 400 }
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
                 prompt: fullPrompt,
                 loras: [
                     {
-                        path: character.model_url,
+                        path: character.lora_url,
                         scale: 0.9,
                     },
                 ],

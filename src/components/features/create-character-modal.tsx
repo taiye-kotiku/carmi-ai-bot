@@ -10,11 +10,13 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
 interface Props {
+    open?: boolean;
     onClose: () => void;
     onCreated: () => void;
 }
 
-export function CreateCharacterModal({ onClose, onCreated }: Props) {
+export function CreateCharacterModal({ open = true, onClose, onCreated }: Props) {
+    if (!open) return null;
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
@@ -239,8 +241,8 @@ export function CreateCharacterModal({ onClose, onCreated }: Props) {
                         <div className="flex items-center gap-2">
                             <div
                                 className={`text-sm font-medium ${uploadedUrls.length >= 5
-                                        ? "text-green-600"
-                                        : "text-amber-600"
+                                    ? "text-green-600"
+                                    : "text-amber-600"
                                     }`}
                             >
                                 {uploadedUrls.length >= 5 ? "✅" : "⚠️"} {uploadedUrls.length}

@@ -186,9 +186,8 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
             result_urls: [result.videoUrl, ...result.imageUrls],
             thumbnail_url: result.thumbnailUrl,
             duration: result.duration,
-            model_status: "completed",
+            status: "completed",
             job_id: jobId,
-            character_id: options.character.id,
             completed_at: new Date().toISOString(),
         });
 

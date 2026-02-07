@@ -152,14 +152,6 @@ export async function POST(req: Request) {
             result_urls: images,
             thumbnail_url: images[0],
             status: "completed",
-            character_id: character.id,
-            metadata: {
-                aspect_ratio,
-                lora_scale: 0.9,
-                seed: result.data.seed,
-                original_prompt: prompt,
-                enhanced: shouldEnhance,
-            },
             completed_at: new Date().toISOString(),
         });
 

@@ -196,7 +196,7 @@ async function processReelConversion(
             .update({
                 status: "completed",
                 progress: 100,
-                result: { frames: uploadedFrames },
+                result: { frames: uploadedFrames } as any,
             })
             .eq("id", jobId);
     } catch (error: unknown) {

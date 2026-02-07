@@ -161,7 +161,7 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
         const result = await generateCharacterVideo(
             {
                 characterId: options.character.id,
-                characterReferenceImages: options.character.reference_images,
+                characterReferenceImages: options.character.settings?.reference_images || [],
                 characterSettings: options.character.settings,
                 scenes: scenes.map(desc => ({
                     description: desc,

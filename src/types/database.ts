@@ -245,7 +245,6 @@ export type Database = {
                     user_id: string;
                     name: string;
                     description: string | null;
-                    reference_images: string[];
                     thumbnail_url: string | null;
                     status: 'pending' | 'training' | 'ready' | 'failed';
                     lora_url: string | null;
@@ -257,6 +256,7 @@ export type Database = {
                         model?: string;
                         ip_adapter_scale?: number;
                         trigger_word?: string;
+                        reference_images?: string[];
                     };
                     created_at: string;
                     updated_at: string;
@@ -266,7 +266,6 @@ export type Database = {
                     user_id: string;
                     name: string;
                     description?: string | null;
-                    reference_images: string[];
                     thumbnail_url?: string | null;
                     status?: 'pending' | 'training' | 'ready' | 'failed';
                     lora_url?: string | null;
@@ -278,12 +277,12 @@ export type Database = {
                         model?: string;
                         ip_adapter_scale?: number;
                         trigger_word?: string;
+                        reference_images?: string[];
                     };
                 };
                 Update: {
                     name?: string;
                     description?: string | null;
-                    reference_images?: string[];
                     thumbnail_url?: string | null;
                     status?: 'pending' | 'training' | 'ready' | 'failed';
                     lora_url?: string | null;
@@ -295,6 +294,7 @@ export type Database = {
                         model?: string;
                         ip_adapter_scale?: number;
                         trigger_word?: string;
+                        reference_images?: string[];
                     };
                     updated_at?: string;
                 };

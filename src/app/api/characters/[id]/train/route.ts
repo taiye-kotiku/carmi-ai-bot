@@ -46,7 +46,7 @@ export async function POST(
         }
 
         // Check images
-        const imageUrls = character.reference_images || [];
+        const imageUrls = character.settings?.reference_images || [];
         if (imageUrls.length < 5) {
             return NextResponse.json(
                 {

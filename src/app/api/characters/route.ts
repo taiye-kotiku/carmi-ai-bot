@@ -86,10 +86,11 @@ export async function POST(request: NextRequest) {
                 user_id: user.id,
                 name: name.trim(),
                 description: description?.trim() || null,
-                reference_images,
                 thumbnail_url: thumbnailUrl,
                 status: "pending",
-                settings: {},
+                settings: {
+                    reference_images,
+                },
             })
             .select()
             .single();

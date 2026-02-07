@@ -242,14 +242,14 @@ export default function CharacterVideoPage() {
                             {selectedCharacter && (
                                 <div className="bg-violet-50 rounded-lg p-3 flex items-center gap-3">
                                     <img
-                                        src={selectedCharacter.thumbnail_url || selectedCharacter.reference_images[0]}
+                                        src={selectedCharacter.thumbnail_url || selectedCharacter.settings?.reference_images?.[0]}
                                         alt={selectedCharacter.name}
                                         className="w-12 h-12 rounded-lg object-cover"
                                     />
                                     <div>
                                         <p className="font-medium">{selectedCharacter.name}</p>
                                         <p className="text-sm text-gray-600">
-                                            {selectedCharacter.reference_images.length} תמונות ייחוס
+                                            {(selectedCharacter.settings?.reference_images || []).length} תמונות ייחוס
                                         </p>
                                     </div>
                                 </div>
@@ -260,8 +260,8 @@ export default function CharacterVideoPage() {
                                 <button
                                     onClick={() => setIsCustomMode(false)}
                                     className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${!isCustomMode
-                                            ? "bg-white shadow text-violet-700"
-                                            : "text-gray-600 hover:text-gray-900"
+                                        ? "bg-white shadow text-violet-700"
+                                        : "text-gray-600 hover:text-gray-900"
                                         }`}
                                 >
                                     <Sparkles className="inline-block w-4 h-4 ml-1" />
@@ -270,8 +270,8 @@ export default function CharacterVideoPage() {
                                 <button
                                     onClick={() => setIsCustomMode(true)}
                                     className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${isCustomMode
-                                            ? "bg-white shadow text-violet-700"
-                                            : "text-gray-600 hover:text-gray-900"
+                                        ? "bg-white shadow text-violet-700"
+                                        : "text-gray-600 hover:text-gray-900"
                                         }`}
                                 >
                                     <Edit3 className="inline-block w-4 h-4 ml-1" />
@@ -307,8 +307,8 @@ export default function CharacterVideoPage() {
                                                     key={s.value}
                                                     onClick={() => setStyle(s.value)}
                                                     className={`p-3 rounded-lg border text-right transition-colors ${style === s.value
-                                                            ? "border-violet-500 bg-violet-50"
-                                                            : "border-gray-200 hover:border-gray-300"
+                                                        ? "border-violet-500 bg-violet-50"
+                                                        : "border-gray-200 hover:border-gray-300"
                                                         }`}
                                                 >
                                                     <div className="flex items-center gap-2 mb-1">
@@ -330,8 +330,8 @@ export default function CharacterVideoPage() {
                                                     key={count}
                                                     onClick={() => setSceneCount(count)}
                                                     className={`w-10 h-10 rounded-lg border text-sm font-medium transition-colors ${sceneCount === count
-                                                            ? "border-violet-500 bg-violet-50 text-violet-700"
-                                                            : "border-gray-200 hover:border-gray-300"
+                                                        ? "border-violet-500 bg-violet-50 text-violet-700"
+                                                        : "border-gray-200 hover:border-gray-300"
                                                         }`}
                                                 >
                                                     {count}
@@ -435,8 +435,8 @@ export default function CharacterVideoPage() {
                                                 key={ratio.value}
                                                 onClick={() => setAspectRatio(ratio.value)}
                                                 className={`p-2 rounded border text-xs flex items-center justify-center gap-1 transition-colors ${aspectRatio === ratio.value
-                                                        ? "border-violet-500 bg-violet-50"
-                                                        : "border-gray-200"
+                                                    ? "border-violet-500 bg-violet-50"
+                                                    : "border-gray-200"
                                                     }`}
                                             >
                                                 <span>{ratio.icon}</span>
@@ -455,8 +455,8 @@ export default function CharacterVideoPage() {
                                                 key={t.value}
                                                 onClick={() => setTransitionStyle(t.value)}
                                                 className={`p-2 rounded border text-xs transition-colors ${transitionStyle === t.value
-                                                        ? "border-violet-500 bg-violet-50"
-                                                        : "border-gray-200"
+                                                    ? "border-violet-500 bg-violet-50"
+                                                    : "border-gray-200"
                                                     }`}
                                             >
                                                 {t.label}
@@ -475,8 +475,8 @@ export default function CharacterVideoPage() {
                                             key={d}
                                             onClick={() => setSceneDuration(d)}
                                             className={`w-10 h-8 rounded border text-sm transition-colors ${sceneDuration === d
-                                                    ? "border-violet-500 bg-violet-50"
-                                                    : "border-gray-200"
+                                                ? "border-violet-500 bg-violet-50"
+                                                : "border-gray-200"
                                                 }`}
                                         >
                                             {d}

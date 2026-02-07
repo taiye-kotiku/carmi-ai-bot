@@ -124,7 +124,7 @@ export async function DELETE(
         // Fetch first to check ownership and get storage paths for cleanup
         const { data: character } = await supabase
             .from("characters")
-            .select("id, user_id, status, reference_images")
+            .select("id, user_id, status, settings")
             .eq("id", id)
             .eq("user_id", user.id)
             .single();

@@ -187,7 +187,7 @@ export default function CharactersPage() {
                             >
                                 {/* Image preview grid */}
                                 <div className="grid grid-cols-3 gap-0.5 h-36 bg-muted">
-                                    {character.reference_images.slice(0, 3).map((url, i) => (
+                                    {(character.settings?.reference_images || []).slice(0, 3).map((url, i) => (
                                         <div key={i} className="overflow-hidden">
                                             <img
                                                 src={url}
@@ -200,9 +200,9 @@ export default function CharactersPage() {
                                             />
                                         </div>
                                     ))}
-                                    {character.reference_images.length > 3 && (
+                                    {(character.settings?.reference_images || []).length > 3 && (
                                         <div className="col-span-3 bg-muted/50 text-center text-xs text-muted-foreground py-1">
-                                            +{character.reference_images.length - 3} תמונות נוספות
+                                            +{(character.settings?.reference_images || []).length - 3} תמונות נוספות
                                         </div>
                                     )}
                                 </div>
@@ -228,7 +228,7 @@ export default function CharactersPage() {
                                     {/* Image count */}
                                     <div className="text-xs text-muted-foreground flex items-center gap-1">
                                         <span>📸</span>
-                                        <span>{character.reference_images.length} תמונות אימון</span>
+                                        <span>{(character.settings?.reference_images || []).length} תמונות אימון</span>
                                     </div>
 
                                     {/* Training progress */}

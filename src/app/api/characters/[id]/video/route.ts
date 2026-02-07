@@ -35,12 +35,13 @@ export async function POST(
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (character.status !== "ready" || !character.lora_url) {
+        if (character.model_status !== "ready" || !character.model_url) {
             return NextResponse.json({ error: "הדמות עוד לא מאומנת" }, { status: 400 });
         }
 
-        const fullPrompt = character.trigger_word
-            ? `${character.trigger_word} ${prompt}`
+        const triggerWord = (character.settings as any)?.trigger_word;
+        const fullPrompt = triggerWord
+            ? `${triggerWord} ${prompt}`
             : prompt;
 
         const sizeMap: Record<string, string> = {
@@ -60,7 +61,7 @@ export async function POST(
             },
             body: JSON.stringify({
                 prompt: fullPrompt,
-                loras: [{ path: character.lora_url, scale: 1 }],
+                loras: [{ path: character.model_url, scale: 1 }],
                 image_size: sizeMap[aspectRatio] || "landscape_16_9",
                 num_images: 1,
                 guidance_scale: 3.5,

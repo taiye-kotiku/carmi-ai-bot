@@ -35,7 +35,7 @@ export async function POST(
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (character.model_status !== "ready" || !character.model_url) {
+        if (character.status !== "ready" || !character.lora_url) {
             return NextResponse.json({ error: "הדמות עוד לא מאומנת" }, { status: 400 });
         }
 
@@ -61,7 +61,7 @@ export async function POST(
             },
             body: JSON.stringify({
                 prompt: fullPrompt,
-                loras: [{ path: character.model_url, scale: 1 }],
+                loras: [{ path: character.lora_url, scale: 1 }],
                 image_size: sizeMap[aspectRatio] || "landscape_16_9",
                 num_images: 1,
                 guidance_scale: 3.5,

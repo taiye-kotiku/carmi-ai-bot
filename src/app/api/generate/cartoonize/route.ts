@@ -53,8 +53,8 @@ export async function POST(req: Request) {
 
         const genAI = new GoogleGenerativeAI(apiKey);
 
-        // Step 1: Use Gemini Vision to analyze the image
-        const visionModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        // Step 1: Use Gemini Vision to analyze the image (gemini-2.5-flash supports vision)
+        const visionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const visionResult = await visionModel.generateContent([
             {
                 inlineData: {
@@ -68,9 +68,9 @@ export async function POST(req: Request) {
         const imageDescription = visionResult.response.text();
         console.log("Image description:", imageDescription);
 
-        // Step 2: Generate cartoon image from description
+        // Step 2: Generate cartoon image from description (use Nano Banana Pro)
         const imageModel = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash-exp-image-generation",
+            model: "gemini-3-pro-image-preview", // Nano Banana Pro
             generationConfig: {
                 responseModalities: ["IMAGE"],
             } as any,

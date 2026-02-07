@@ -1,4 +1,6 @@
 // src/app/(dashboard)/characters/page.tsx
+// Add this at the top of the component, before the return:
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -14,7 +16,7 @@ type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
     pending: { label: "ממתין לאימון", variant: "outline" },
-    training: { label: "מאמן...", variant: "secondary" },
+    training: { label: "באימון", variant: "secondary" },
     ready: { label: "מוכן", variant: "default" },
     failed: { label: "נכשל", variant: "destructive" },
 };
@@ -38,12 +40,18 @@ function getElapsedMinutes(startedAt: string | null): number {
 }
 
 export default function CharactersPage() {
+    const [mounted, setMounted] = useState(false);
     const [characters, setCharacters] = useState<Character[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<Character | null>(null);
     const [trainingId, setTrainingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    // Fix hydration mismatch
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const fetchCharacters = useCallback(async () => {
         try {
@@ -62,7 +70,6 @@ export default function CharactersPage() {
         fetchCharacters();
     }, [fetchCharacters]);
 
-    // Poll when any character is training
     useEffect(() => {
         const hasTraining = characters.some((c) => c.status === "training");
         if (!hasTraining) return;
@@ -117,6 +124,23 @@ export default function CharactersPage() {
         setDeleteTarget(null);
     };
 
+    // Prevent hydration mismatch
+    if (!mounted) {
+        return (
+            <div className="container mx-auto p-6" dir="rtl">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="h-9 w-40 bg-muted animate-pulse rounded" />
+                    <div className="h-10 w-36 bg-muted animate-pulse rounded" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-72 bg-muted animate-pulse rounded-xl" />
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
     if (loading) {
         return (
             <div className="container mx-auto p-6" dir="rtl">
@@ -135,7 +159,6 @@ export default function CharactersPage() {
 
     return (
         <div className="container mx-auto p-6" dir="rtl">
-            {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-bold">הדמויות שלי</h1>
@@ -144,12 +167,10 @@ export default function CharactersPage() {
                     </p>
                 </div>
                 <Button onClick={() => setShowCreateModal(true)} size="lg">
-                    <span className="ml-2">+</span>
-                    דמות חדשה
+                    + דמות חדשה
                 </Button>
             </div>
 
-            {/* Global error */}
             {error && (
                 <div className="bg-destructive/10 text-destructive rounded-lg p-4 mb-6 flex items-center justify-between">
                     <span>{error}</span>
@@ -159,10 +180,8 @@ export default function CharactersPage() {
                 </div>
             )}
 
-            {/* Empty state */}
             {characters.length === 0 ? (
                 <Card className="p-16 text-center">
-                    <div className="text-6xl mb-6">🎭</div>
                     <h2 className="text-2xl font-semibold mb-3">אין דמויות עדיין</h2>
                     <p className="text-muted-foreground mb-8 max-w-md mx-auto">
                         העלה תמונות של אדם כדי לאמן מודל AI מותאם אישית.
@@ -187,37 +206,35 @@ export default function CharactersPage() {
                                 className={`overflow-hidden transition-all hover:shadow-lg ${isTraining ? "ring-2 ring-blue-400 ring-offset-2" : ""
                                     }`}
                             >
-                                {/* Image preview grid */}
+                                {/* Image preview */}
                                 <div className="grid grid-cols-3 gap-0.5 h-36 bg-muted">
-                                    {(character.image_urls || []).slice(0, 3).map((url, i) => (
-                                        <div key={i} className="overflow-hidden">
-                                            <img
-                                                src={url}
-                                                alt={`${character.name} ${i + 1}`}
-                                                className="w-full h-full object-cover hover:scale-105 transition-transform"
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).src =
-                                                        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23e2e8f0' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='%2394a3b8' font-size='30'%3E🖼️%3C/text%3E%3C/svg%3E";
-                                                }}
-                                            />
-                                        </div>
-                                    ))}
-                                    {(!character.image_urls || character.image_urls.length === 0) && (
-                                        <div className="col-span-3 flex items-center justify-center text-muted-foreground">
+                                    {(character.image_urls || []).length > 0 ? (
+                                        (character.image_urls || []).slice(0, 3).map((url, i) => (
+                                            <div key={i} className="overflow-hidden">
+                                                <img
+                                                    src={url}
+                                                    alt={`${character.name} ${i + 1}`}
+                                                    className="w-full h-full object-cover hover:scale-105 transition-transform"
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).style.display = "none";
+                                                    }}
+                                                />
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="col-span-3 flex items-center justify-center text-muted-foreground text-sm">
                                             אין תמונות
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Extra images count */}
-                                {character.image_urls && character.image_urls.length > 3 && (
+                                {(character.image_urls?.length || 0) > 3 && (
                                     <div className="bg-muted/50 text-center text-xs text-muted-foreground py-1">
-                                        +{character.image_urls.length - 3} תמונות נוספות
+                                        +{(character.image_urls?.length || 0) - 3} תמונות נוספות
                                     </div>
                                 )}
 
                                 <div className="p-4 space-y-3">
-                                    {/* Name + status */}
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-lg font-bold truncate ml-2">
                                             {character.name}
@@ -227,37 +244,28 @@ export default function CharactersPage() {
                                         </Badge>
                                     </div>
 
-                                    {/* Description */}
                                     {character.description && (
                                         <p className="text-sm text-muted-foreground line-clamp-2">
                                             {character.description}
                                         </p>
                                     )}
 
-                                    {/* Image count */}
-                                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <span>📸</span>
-                                        <span>
-                                            {character.image_urls?.length || 0} תמונות אימון
-                                        </span>
+                                    <div className="text-xs text-muted-foreground">
+                                        {(character.image_urls || []).length} תמונות אימון
                                     </div>
 
-                                    {/* Training progress */}
                                     {isTraining && (
                                         <div className="space-y-2">
                                             <Progress
                                                 value={getTrainingProgress(character.training_started_at)}
                                             />
-                                            <p className="text-xs text-blue-600 animate-pulse flex items-center gap-1">
-                                                <span className="inline-block w-2 h-2 bg-blue-500 rounded-full animate-ping" />
-                                                אימון בתהליך —{" "}
-                                                {getElapsedMinutes(character.training_started_at)} דקות
+                                            <p className="text-xs text-blue-600 animate-pulse">
+                                                אימון בתהליך - {getElapsedMinutes(character.training_started_at)} דקות
                                                 (בערך 30-60 דקות)
                                             </p>
                                         </div>
                                     )}
 
-                                    {/* Error */}
                                     {isFailed && character.error_message && (
                                         <div className="bg-destructive/10 rounded-md p-2">
                                             <p className="text-xs text-destructive">
@@ -266,7 +274,6 @@ export default function CharactersPage() {
                                         </div>
                                     )}
 
-                                    {/* Action buttons */}
                                     <div className="flex gap-2 pt-2">
                                         {isPending && (
                                             <Button
@@ -274,14 +281,9 @@ export default function CharactersPage() {
                                                 disabled={trainingId === character.id}
                                                 className="flex-1"
                                             >
-                                                {trainingId === character.id ? (
-                                                    <span className="flex items-center gap-2">
-                                                        <span className="animate-spin">⏳</span>
-                                                        מתחיל...
-                                                    </span>
-                                                ) : (
-                                                    "🚀 התחל אימון"
-                                                )}
+                                                {trainingId === character.id
+                                                    ? "מתחיל..."
+                                                    : "התחל אימון"}
                                             </Button>
                                         )}
 
@@ -292,21 +294,21 @@ export default function CharactersPage() {
                                                 variant="outline"
                                                 className="flex-1"
                                             >
-                                                🔄 נסה שוב
+                                                נסה שוב
                                             </Button>
                                         )}
 
                                         {isReady && (
                                             <Button asChild className="flex-1">
                                                 <a href={`/generate/character?id=${character.id}`}>
-                                                    ✨ צור תמונה
+                                                    צור תמונה
                                                 </a>
                                             </Button>
                                         )}
 
                                         {isTraining && (
                                             <Button disabled variant="outline" className="flex-1">
-                                                ⏳ ממתין לאימון...
+                                                ממתין לאימון...
                                             </Button>
                                         )}
 
@@ -318,7 +320,7 @@ export default function CharactersPage() {
                                             className="shrink-0 text-muted-foreground hover:text-destructive"
                                             title="מחק דמות"
                                         >
-                                            🗑️
+                                            X
                                         </Button>
                                     </div>
                                 </div>

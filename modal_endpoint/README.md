@@ -6,9 +6,13 @@ This endpoint trains LoRA adapters on FLUX.1-dev for character consistency, then
 
 1. **Modal account** – Sign up at [modal.com](https://modal.com)
 
-2. **Hugging Face token** – Required for FLUX.1-dev (gated model). Create a secret:
+2. **Create Modal secrets** (required for training):
    ```bash
+   # HuggingFace - required for FLUX.1-dev (gated model)
    modal secret create huggingface-secret HF_TOKEN=your_hf_token
+
+   # Supabase - for uploading trained LoRA
+   modal secret create supabase-credentials SUPABASE_URL=https://YOUR_PROJECT.supabase.co SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
    ```
 
 3. **Deploy the app**:
@@ -17,10 +21,13 @@ This endpoint trains LoRA adapters on FLUX.1-dev for character consistency, then
    modal deploy train_lora.py
    ```
 
-4. **Copy the endpoint URL** – After deploy, Modal shows a URL like `https://xxx--carmi-flux-lora-training-start-training.modal.run`. Add it to `.env.local`:
+4. **Copy the endpoint URL** – After deploy, Modal shows a URL like `https://xxx--carmi-train-lora.modal.run`. Add to Vercel / `.env.local`:
    ```
-   MODAL_TRAIN_ENDPOINT_URL=https://xxx--carmi-flux-lora-training-start-training.modal.run
+   MODAL_TRAINING_URL=https://xxx--carmi-train-lora.modal.run
+   NEXT_PUBLIC_APP_URL=https://carmi-ai-bot.vercel.app
    ```
+
+5. **Verify connections** – Call `GET /api/health/connections` to test Supabase, Modal, and webhook config.
 
 ## Supabase Storage
 

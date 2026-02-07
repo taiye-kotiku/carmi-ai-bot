@@ -162,7 +162,7 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
             {
                 characterId: options.character.id,
                 characterReferenceImages: options.character.image_urls || [],
-                characterSettings: options.character.settings,
+                characterSettings: { trigger_word: options.character.trigger_word },
                 scenes: scenes.map(desc => ({
                     description: desc,
                     duration: options.sceneDuration,

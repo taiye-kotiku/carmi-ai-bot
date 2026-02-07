@@ -39,7 +39,7 @@ export async function POST(
             return NextResponse.json({ error: "הדמות עוד לא מאומנת" }, { status: 400 });
         }
 
-        const triggerWord = (character.settings as any)?.trigger_word;
+        const triggerWord = character.trigger_word;
         const fullPrompt = triggerWord
             ? `${triggerWord} ${prompt}`
             : prompt;

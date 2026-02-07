@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const triggerWord = (character.settings as any)?.trigger_word || "TOK";
+        const triggerWord = character.trigger_word || "TOK";
         // Build prompt with trigger word
         const fullPrompt = `${triggerWord} ${prompt}`;
 

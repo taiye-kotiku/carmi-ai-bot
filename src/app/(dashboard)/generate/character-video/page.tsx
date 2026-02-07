@@ -242,14 +242,14 @@ export default function CharacterVideoPage() {
                             {selectedCharacter && (
                                 <div className="bg-violet-50 rounded-lg p-3 flex items-center gap-3">
                                     <img
-                                        src={selectedCharacter.thumbnail_url || selectedCharacter.settings?.reference_images?.[0]}
+                                        src={(selectedCharacter as any).thumbnail_url || selectedCharacter.image_urls?.[0]}
                                         alt={selectedCharacter.name}
                                         className="w-12 h-12 rounded-lg object-cover"
                                     />
                                     <div>
                                         <p className="font-medium">{selectedCharacter.name}</p>
                                         <p className="text-sm text-gray-600">
-                                            {(selectedCharacter.settings?.reference_images || []).length} תמונות ייחוס
+                                            {(selectedCharacter.image_urls || []).length} תמונות ייחוס
                                         </p>
                                     </div>
                                 </div>

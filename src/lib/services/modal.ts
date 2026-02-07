@@ -3,8 +3,9 @@
  * Modal API client for FLUX LoRA training and inference.
  */
 
-const MODAL_TRAINING_URL = process.env.MODAL_TRAINING_URL!;
-const MODAL_INFERENCE_URL = process.env.MODAL_INFERENCE_URL!;
+const MODAL_TRAINING_URL =
+    process.env.MODAL_TRAINING_URL || process.env.MODAL_TRAIN_ENDPOINT_URL;
+const MODAL_INFERENCE_URL = process.env.MODAL_INFERENCE_URL;
 
 // ─── Training ───
 
@@ -34,7 +35,20 @@ interface ModalTrainingResponse {
 export async function startLoraTraining(
     params: StartTrainingParams
 ): Promise<ModalTrainingResponse> {
-    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/training-complete`;
+    if (!MODAL_TRAINING_URL) {
+        throw new Error(
+            "MODAL_TRAINING_URL or MODAL_TRAIN_ENDPOINT_URL is not configured. " +
+                "Set it in Vercel/env to your Modal web endpoint URL."
+        );
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+        throw new Error(
+            "NEXT_PUBLIC_APP_URL is not set. Required for webhook callbacks."
+        );
+    }
+    const webhookUrl = `${appUrl.replace(/\/$/, "")}/api/webhooks/training-complete`;
 
     const body = {
         character_id: params.characterId,

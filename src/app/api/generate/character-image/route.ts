@@ -92,8 +92,8 @@ export async function POST(req: Request) {
         }
 
         // Add trigger word
-        const fullPrompt = character.settings?.trigger_word
-            ? `${character.settings.trigger_word}, ${finalPrompt}`
+        const fullPrompt = character.trigger_word
+            ? `${character.trigger_word}, ${finalPrompt}`
             : finalPrompt;
 
         console.log("Full prompt:", fullPrompt);

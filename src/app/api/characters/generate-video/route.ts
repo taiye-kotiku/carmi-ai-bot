@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
         // If no image provided, generate one first
         if (!sourceImageUrl && character.lora_url) {
-            const triggerWord = (character.settings as any)?.trigger_word || "TOK";
+            const triggerWord = character.trigger_word || "TOK";
             const imageResult = await fal.subscribe("fal-ai/flux-lora", {
                 input: {
                     prompt: `${triggerWord} ${prompt}`,
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const triggerWord = (character.settings as any)?.trigger_word || "TOK";
+        const triggerWord = character.trigger_word || "TOK";
         // Generate video from image using Kling
         const validDuration = (String(duration) === "10" ? "10" : "5") as "5" | "10";
 

@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function GET(
     _request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const supabase = await createClient();
@@ -17,12 +17,13 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const { id } = await params;
         const { data: character, error } = await supabaseAdmin
             .from("characters")
             .select(
                 "id, model_status, training_started_at, training_completed_at, training_error, model_url, settings"
             )
-            .eq("id", params.id)
+            .eq("id", id)
             .eq("user_id", user.id)
             .single();
 

@@ -7,7 +7,7 @@ import type { Database } from "@/types/database";
 // GET /api/characters/:id
 export async function GET(
     _request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const supabase = await createClient();
@@ -19,10 +19,11 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const { id } = await params;
         const { data: character, error } = await supabase
             .from("characters")
             .select("*")
-            .eq("id", params.id)
+            .eq("id", id)
             .eq("user_id", user.id)
             .single();
 
@@ -46,7 +47,7 @@ export async function GET(
 // PATCH /api/characters/:id
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const supabase = await createClient();
@@ -78,10 +79,11 @@ export async function PATCH(
             );
         }
 
+        const { id } = await params;
         const { data: character, error } = await supabaseAdmin
             .from("characters")
             .update(updateData)
-            .eq("id", params.id)
+            .eq("id", id)
             .eq("user_id", user.id)
             .select()
             .single();
@@ -106,7 +108,7 @@ export async function PATCH(
 // DELETE /api/characters/:id
 export async function DELETE(
     _request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const supabase = await createClient();
@@ -118,11 +120,12 @@ export async function DELETE(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const { id } = await params;
         // Fetch first to check ownership and get storage paths for cleanup
         const { data: character } = await supabase
             .from("characters")
             .select("id, user_id, model_status, reference_images")
-            .eq("id", params.id)
+            .eq("id", id)
             .eq("user_id", user.id)
             .single();
 
@@ -146,7 +149,7 @@ export async function DELETE(
         const { error } = await supabaseAdmin
             .from("characters")
             .delete()
-            .eq("id", params.id)
+            .eq("id", id)
             .eq("user_id", user.id);
 
         if (error) {
@@ -158,10 +161,10 @@ export async function DELETE(
         try {
             await supabaseAdmin.storage
                 .from("loras")
-                .remove([`${params.id}/lora.safetensors`]);
+                .remove([`${id}/lora.safetensors`]);
         } catch {
             // Storage cleanup is best-effort
-            console.warn("[Character] Could not clean up storage for", params.id);
+            console.warn("[Character] Could not clean up storage for", id);
         }
 
         return NextResponse.json({ success: true });

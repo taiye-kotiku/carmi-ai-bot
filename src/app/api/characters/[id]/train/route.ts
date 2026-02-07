@@ -6,7 +6,7 @@ import { startLoraTraining } from "@/lib/services/modal";
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         // ─── Auth ───
@@ -20,7 +20,7 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const characterId = params.id;
+        const { id: characterId } = await params;
 
         // ─── Fetch character & verify ownership ───
         const { data: character, error: fetchError } = await supabaseAdmin

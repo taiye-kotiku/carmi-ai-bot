@@ -233,7 +233,7 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
         await supabaseAdmin
             .from("jobs")
             .update({
-                model_status: "completed",
+                status: "completed",
                 progress: 100,
                 result: {
                     videoUrl: result.videoUrl,
@@ -241,7 +241,7 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
                     imageUrls: result.imageUrls,
                     scenes,
                     duration: result.duration,
-                },
+                } as any,
             })
             .eq("id", jobId);
 

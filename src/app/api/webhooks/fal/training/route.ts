@@ -16,8 +16,9 @@ export async function POST(request: NextRequest) {
         const { data: character } = await supabaseAdmin
             .from("characters")
             .select("*")
-            .eq("job_id", request_id)
+            .eq("job_id" as any, request_id)
             .single();
+
 
         if (!character) {
             console.log("Character not found for request_id:", request_id);
@@ -29,21 +30,24 @@ export async function POST(request: NextRequest) {
             await supabaseAdmin
                 .from("characters")
                 .update({
-                    status: "ready",
-                    lora_url: payload.diffusers_lora_file.url,
-                    trained_at: new Date().toISOString(),
+                    model_status: "ready",
+                    model_url: payload.diffusers_lora_file.url,
+                    training_completed_at: new Date().toISOString(),
                 })
                 .eq("id", character.id);
+
 
             console.log("Training completed for:", character.id);
         } else if (status === "ERROR") {
             await supabaseAdmin
                 .from("characters")
                 .update({
-                    status: "failed",
-                    error_message: payload?.error || "Training failed",
+                    model_status: "failed",
+                    training_error: payload?.error || "Training failed",
                 })
                 .eq("id", character.id);
+
+            突兀:
 
             console.log("Training failed for:", character.id);
         }

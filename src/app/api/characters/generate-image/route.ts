@@ -31,15 +31,16 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (!character.lora_url) {
+        if (!character.model_url) {
             return NextResponse.json(
                 { error: "Character not trained yet" },
                 { status: 400 }
             );
         }
 
+        const triggerWord = (character.settings as any)?.trigger_word || "TOK";
         // Build prompt with trigger word
-        const fullPrompt = `${character.trigger_word} ${prompt}`;
+        const fullPrompt = `${triggerWord} ${prompt}`;
 
         // Generate with FLUX + LoRA
         const result = await fal.subscribe("fal-ai/flux-lora", {
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
                 prompt: fullPrompt,
                 loras: [
                     {
-                        path: character.lora_url,
+                        path: character.model_url,
                         scale: 0.9,
                     },
                 ],
@@ -64,15 +65,16 @@ export async function POST(request: NextRequest) {
         const imageUrl = result.data.images[0].url;
 
         // Save to generations table
+        const generationId = crypto.randomUUID();
         await supabaseAdmin.from("generations").insert({
+            id: generationId,
             user_id: user.id,
             type: "image",
+            feature: "character_image",
             prompt: fullPrompt,
-            result_url: imageUrl,
-            character_id: characterId,
-            metadata: { aspectRatio, loraScale: 0.9 },
+            result_urls: [imageUrl],
+            status: "completed",
         });
-
         return NextResponse.json({
             success: true,
             imageUrl,

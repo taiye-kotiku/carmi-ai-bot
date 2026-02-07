@@ -40,11 +40,12 @@ export async function POST(request: NextRequest) {
         let sourceImageUrl = imageUrl;
 
         // If no image provided, generate one first
-        if (!sourceImageUrl && character.lora_url) {
+        if (!sourceImageUrl && character.model_url) {
+            const triggerWord = (character.settings as any)?.trigger_word || "TOK";
             const imageResult = await fal.subscribe("fal-ai/flux-lora", {
                 input: {
-                    prompt: `${character.trigger_word} ${prompt}`,
-                    loras: [{ path: character.lora_url, scale: 0.9 }],
+                    prompt: `${triggerWord} ${prompt}`,
+                    loras: [{ path: character.model_url, scale: 0.9 }],
                     image_size: aspectRatio === "9:16" ? "portrait_16_9" : "landscape_16_9",
                     num_images: 1,
                 },
@@ -59,12 +60,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const triggerWord = (character.settings as any)?.trigger_word || "TOK";
         // Generate video from image using Kling
         const validDuration = (String(duration) === "10" ? "10" : "5") as "5" | "10";
 
         const videoResult = await fal.subscribe("fal-ai/kling-video/v1.5/pro/image-to-video", {
             input: {
-                prompt: `${character.trigger_word} ${prompt}`,
+                prompt: `${triggerWord} ${prompt}`,
                 image_url: sourceImageUrl,
                 duration: validDuration,
                 aspect_ratio: aspectRatio,
@@ -74,13 +76,16 @@ export async function POST(request: NextRequest) {
         const videoUrl = videoResult.data.video.url;
 
         // Save to generations
+        const generationId = crypto.randomUUID();
         await supabaseAdmin.from("generations").insert({
+            id: generationId,
             user_id: user.id,
             type: "video",
-            prompt,
-            result_url: videoUrl,
-            character_id: characterId,
-            metadata: { aspectRatio, duration, sourceImageUrl },
+            feature: "character_video",
+            prompt: prompt,
+            result_urls: [videoUrl],
+            source_url: sourceImageUrl,
+            status: "completed",
         });
 
         return NextResponse.json({

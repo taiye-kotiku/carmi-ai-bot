@@ -103,7 +103,7 @@ export async function POST(
         }
 
         // Save to generations
-        const generationId = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const generationId = crypto.randomUUID();
         await supabaseAdmin
             .from("generations")
             .insert({
@@ -112,10 +112,9 @@ export async function POST(
                 type: "video",
                 feature: "character_video",
                 prompt: fullPrompt,
-                character_id: characterId,
+                source_url: imageUrl,
                 status: "processing",
                 job_id: videoData.request_id,
-                source_url: imageUrl,
             });
 
         return NextResponse.json({

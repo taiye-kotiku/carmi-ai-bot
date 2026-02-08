@@ -24,7 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CAROUSEL_TEMPLATES, getTemplatesByCategory } from "@/lib/carousel/templates";
+import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
+import type { CarouselTemplate } from "@/lib/carousel/templates";
 
 const LOGO_POSITIONS = [
     { value: "top-left", label: "פינה עליונה שמאל", grid: "col-start-1 row-start-1" },
@@ -106,7 +107,31 @@ export default function CarouselGenerationPage() {
     const [error, setError] = useState<string | null>(null);
     const [templateDesc, setTemplateDesc] = useState("");
     const [templateSuggestLoading, setTemplateSuggestLoading] = useState(false);
+    const [allTemplates, setAllTemplates] = useState<CarouselTemplate[]>(Object.values(CAROUSEL_TEMPLATES));
+    const [templatesLoading, setTemplatesLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Load all templates from API on mount
+    useEffect(() => {
+        async function loadTemplates() {
+            try {
+                const res = await fetch("/api/templates");
+                const data = await res.json();
+                if (data.templates && Array.isArray(data.templates)) {
+                    setAllTemplates(data.templates);
+                }
+            } catch (err) {
+                console.error("Failed to load templates:", err);
+            } finally {
+                setTemplatesLoading(false);
+            }
+        }
+        loadTemplates();
+    }, []);
+
+    const filteredTemplates = categoryFilter === "all" 
+        ? allTemplates 
+        : allTemplates.filter((t) => t.category === categoryFilter);
     
     // Handle background image upload
     async function handleBackgroundUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -887,10 +912,15 @@ export default function CarouselGenerationPage() {
                                 </div>
                                 <div className="space-y-3">
                                     <div className="text-xs text-gray-500">
-                                        {filteredTemplates.length} תבניות זמינות
+                                        {templatesLoading ? "טוען תבניות..." : `${filteredTemplates.length} תבניות זמינות`}
                                     </div>
-                                    <div className="grid grid-cols-4 gap-2 max-h-[500px] overflow-y-auto p-2 border rounded-lg bg-gray-50">
-                                        {filteredTemplates.map((template) => (
+                                    {templatesLoading ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-4 gap-2 max-h-[500px] overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                                            {filteredTemplates.map((template) => (
                                             <button
                                                 key={template.id}
                                                 onClick={() => setSelectedTemplate(template.id)}

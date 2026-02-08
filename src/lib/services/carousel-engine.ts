@@ -385,7 +385,6 @@ export async function createCarouselWithEngine(
                 })
                 .toBuffer();
                 
-            console.log(`Custom background resized to ${WIDTH}x${HEIGHT} using cover fit`);
         } catch (error) {
             console.error("Error processing custom background:", error);
             
@@ -441,12 +440,23 @@ export async function createCarouselWithEngine(
     
     // Verify background dimensions before applying effects
     const bgMetadata = await sharp(bgResized).metadata();
-    console.log(`Background dimensions: ${bgMetadata.width}x${bgMetadata.height}, useStaticBackground: ${useStaticBackground}`);
+    const expectedWidth = useStaticBackground ? WIDTH : bgTotalW;
+    const expectedHeight = HEIGHT;
+    
+    console.log(`Background dimensions: ${bgMetadata.width}x${bgMetadata.height}, Expected: ${expectedWidth}x${expectedHeight}, useStaticBackground: ${useStaticBackground}`);
+    
+    // Ensure background is exactly the right size (especially for static backgrounds)
+    if (useStaticBackground && (bgMetadata.width !== WIDTH || bgMetadata.height !== HEIGHT)) {
+        console.warn(`Resizing background to exact dimensions: ${WIDTH}x${HEIGHT}`);
+        bgResized = await sharp(bgResized)
+            .resize(WIDTH, HEIGHT, { fit: "cover", position: "center" })
+            .png()
+            .toBuffer();
+    }
     
     const bgWithEffects = await applyBackgroundEffects(bgResized, opacity, blurRadius, 18);
 
     const bgImage = await loadImage(bgWithEffects);
-    console.log(`Loaded background image: ${bgImage.width}x${bgImage.height}`);
     const images: Buffer[] = [];
 
     // Load logo if provided
@@ -486,24 +496,25 @@ export async function createCarouselWithEngine(
 
         // Draw background - static for custom backgrounds, parallax for templates
         if (useStaticBackground) {
-            // For custom backgrounds: draw the same image for all slides (no movement)
-            // Use the full image and scale it to canvas size
+            // For custom backgrounds: draw the EXACT SAME image for all slides (no movement)
+            // Always draw from (0,0) of source image to fill entire canvas
             try {
+                // Ensure we're drawing the full image from top-left corner
                 ctx.drawImage(
                     bgImage,
-                    0,
-                    0,
-                    bgImage.width,
-                    bgImage.height,
-                    0,
-                    0,
-                    WIDTH,
-                    HEIGHT
+                    0,           // Source X: always start from left edge
+                    0,           // Source Y: always start from top edge
+                    bgImage.width,   // Source width: use full image width
+                    bgImage.height,  // Source height: use full image height
+                    0,           // Destination X: canvas left edge
+                    0,           // Destination Y: canvas top edge
+                    WIDTH,       // Destination width: fill entire canvas width
+                    HEIGHT       // Destination height: fill entire canvas height
                 );
             } catch (drawError) {
-                console.error(`Error drawing static background on slide ${i}:`, drawError);
+                console.error(`Error drawing static background on slide ${i + 1}:`, drawError);
                 console.error(`Background image size: ${bgImage.width}x${bgImage.height}, Canvas: ${WIDTH}x${HEIGHT}`);
-                throw drawError; // Re-throw to see the actual error
+                throw drawError;
             }
         } else {
             // For templates: use parallax effect (each slide gets different portion)
@@ -538,18 +549,23 @@ export async function createCarouselWithEngine(
         if (logoImage && logoW > 0 && logoH > 0) {
             try {
                 const logoPos = getLogoPosition(logoPosition, logoW, logoH);
-                // Ensure logo is within bounds
-                const safeX = Math.max(0, Math.min(logoPos.x, WIDTH - logoW));
-                const safeY = Math.max(0, Math.min(logoPos.y, HEIGHT - logoH));
                 
-                // Validate logo dimensions
-                if (safeX + logoW <= WIDTH && safeY + logoH <= HEIGHT && logoW > 0 && logoH > 0) {
+                // Final safety checks - ensure logo is completely within canvas bounds
+                const safeX = Math.max(MARGIN, Math.min(logoPos.x, WIDTH - logoW - MARGIN));
+                const safeY = Math.max(MARGIN, Math.min(logoPos.y, HEIGHT - logoH - MARGIN));
+                
+                // Validate logo fits within canvas
+                const fitsHorizontally = safeX >= 0 && safeX + logoW <= WIDTH;
+                const fitsVertically = safeY >= 0 && safeY + logoH <= HEIGHT;
+                const validDimensions = logoW > 0 && logoH > 0 && logoW <= WIDTH && logoH <= HEIGHT;
+                
+                if (fitsHorizontally && fitsVertically && validDimensions) {
                     ctx.drawImage(logoImage, safeX, safeY, logoW, logoH);
                 } else {
-                    console.warn(`Logo position out of bounds: x=${safeX}, y=${safeY}, w=${logoW}, h=${logoH}`);
+                    console.warn(`[Slide ${i + 1}] Logo skipped - out of bounds: x=${safeX}, y=${safeY}, w=${logoW}, h=${logoH}, canvas=${WIDTH}x${HEIGHT}`);
                 }
             } catch (err) {
-                console.error("Error drawing logo:", err);
+                console.error(`[Slide ${i + 1}] Error drawing logo:`, err);
                 // Continue without logo rather than failing the entire generation
             }
         }

@@ -72,8 +72,27 @@ export async function GET() {
         }
         
         console.log(`Loaded ${allTemplates.length} templates (${Object.keys(CAROUSEL_TEMPLATES).length} registered + ${allTemplates.length - Object.keys(CAROUSEL_TEMPLATES).length} auto-registered)`);
+        console.log(`Total files found: ${files.length}`);
         
-        return NextResponse.json({ templates: allTemplates });
+        // Sort templates by ID for consistent ordering
+        allTemplates.sort((a, b) => {
+            // Sort b templates first, then T_ templates numerically
+            if (a.id.startsWith("b") && b.id.startsWith("T_")) return -1;
+            if (a.id.startsWith("T_") && b.id.startsWith("b")) return 1;
+            if (a.id.startsWith("T_") && b.id.startsWith("T_")) {
+                const numA = parseInt(a.id.replace("T_", "")) || 0;
+                const numB = parseInt(b.id.replace("T_", "")) || 0;
+                return numA - numB;
+            }
+            return a.id.localeCompare(b.id);
+        });
+        
+        return NextResponse.json({ 
+            templates: allTemplates,
+            count: allTemplates.length,
+            registered: Object.keys(CAROUSEL_TEMPLATES).length,
+            autoRegistered: allTemplates.length - Object.keys(CAROUSEL_TEMPLATES).length
+        });
     } catch (error) {
         console.error("Error loading templates:", error);
         return NextResponse.json({ templates: Object.values(CAROUSEL_TEMPLATES) }, { status: 200 });

@@ -115,10 +115,17 @@ export default function CarouselGenerationPage() {
     useEffect(() => {
         async function loadTemplates() {
             try {
-                const res = await fetch("/api/templates");
+                const res = await fetch("/api/templates?t=" + Date.now()); // Add cache busting
+                if (!res.ok) {
+                    throw new Error(`Failed to fetch templates: ${res.status}`);
+                }
                 const data = await res.json();
+                console.log("Templates API response:", data.templates?.length || 0, "templates");
                 if (data.templates && Array.isArray(data.templates)) {
+                    console.log("Setting templates:", data.templates.length);
                     setAllTemplates(data.templates);
+                } else {
+                    console.warn("Invalid templates data:", data);
                 }
             } catch (err) {
                 console.error("Failed to load templates:", err);

@@ -7,7 +7,12 @@ import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+    // Add cache headers to prevent caching
+    const headers = new Headers();
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    headers.set("Pragma", "no-cache");
+    headers.set("Expires", "0");
     try {
         const templatesDir = path.join(process.cwd(), "public/carousel-templates");
         if (!fs.existsSync(templatesDir)) {
@@ -87,14 +92,24 @@ export async function GET() {
             return a.id.localeCompare(b.id);
         });
         
-        return NextResponse.json({ 
+        const response = NextResponse.json({ 
             templates: allTemplates,
             count: allTemplates.length,
             registered: Object.keys(CAROUSEL_TEMPLATES).length,
-            autoRegistered: allTemplates.length - Object.keys(CAROUSEL_TEMPLATES).length
+            autoRegistered: allTemplates.length - Object.keys(CAROUSEL_TEMPLATES).length,
+            filesFound: files.length
         });
+        
+        // Set no-cache headers
+        response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        response.headers.set("Pragma", "no-cache");
+        response.headers.set("Expires", "0");
+        
+        return response;
     } catch (error) {
         console.error("Error loading templates:", error);
-        return NextResponse.json({ templates: Object.values(CAROUSEL_TEMPLATES) }, { status: 200 });
+        const fallback = NextResponse.json({ templates: Object.values(CAROUSEL_TEMPLATES) }, { status: 200 });
+        fallback.headers.set("Cache-Control", "no-store");
+        return fallback;
     }
 }

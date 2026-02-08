@@ -206,7 +206,20 @@ function drawCleanText(
             ctx.font = `bold ${fontSize}px CarouselFont`;
             totalLineW += ctx.measureText(seg.text).width;
         }
-        const startX = x + totalLineW / 2; // RTL: anchor at right edge
+        
+        // Calculate startX for RTL text, ensuring it stays within canvas bounds
+        let startX = x + totalLineW / 2; // RTL: anchor at right edge
+        
+        // Clamp to ensure text doesn't overflow canvas bounds
+        const rightBound = WIDTH - MARGIN;
+        const leftBound = MARGIN;
+        if (startX > rightBound) {
+            startX = rightBound;
+        }
+        // Ensure text doesn't go past left edge
+        if (startX - totalLineW < leftBound) {
+            startX = leftBound + totalLineW;
+        }
 
         // Draw each segment (logical order = right-to-left for Hebrew)
         // Add text shadow for better visibility on any background
@@ -335,7 +348,7 @@ export async function createCarouselWithEngine(
         useStaticBackground = true; // Custom backgrounds should not move
         
         try {
-            // Use custom background - resize without cropping, maintain high quality
+            // Use custom background - resize to COVER the entire canvas (no black bars)
             if (!customBackgroundBase64 || typeof customBackgroundBase64 !== "string") {
                 throw new Error("Invalid custom background base64 data");
             }
@@ -345,7 +358,6 @@ export async function createCarouselWithEngine(
             if (base64.includes(",")) {
                 base64 = base64.split(",")[1]; // Extract base64 part after comma
             } else {
-                // Remove data URL prefix if present
                 base64 = base64.replace(/^data:image\/\w+;base64,/, "");
             }
             
@@ -359,69 +371,26 @@ export async function createCarouselWithEngine(
                 throw new Error("Failed to decode base64 image");
             }
             
-            // Get original image dimensions
-            const metadata = await sharp(customBgBuffer).metadata();
-            const originalWidth = metadata.width;
-            const originalHeight = metadata.height;
-            
-            if (!originalWidth || !originalHeight || originalWidth <= 0 || originalHeight <= 0) {
-                throw new Error(`Could not read image dimensions: ${originalWidth}x${originalHeight}`);
-            }
-            
-            // For custom backgrounds, resize to exact canvas size (WIDTH x HEIGHT) - no parallax needed
-            // Calculate scale to fit within canvas without cropping (maintain aspect ratio)
-            const scaleX = WIDTH / originalWidth;
-            const scaleY = HEIGHT / originalHeight;
-            const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit both dimensions
-            
-            const newWidth = Math.round(originalWidth * scale);
-            const newHeight = Math.round(originalHeight * scale);
-            
-            // Calculate padding to center the image (ensure non-negative values)
-            const padTop = Math.max(0, Math.floor((HEIGHT - newHeight) / 2));
-            const padBottom = Math.max(0, HEIGHT - newHeight - padTop);
-            const padLeft = Math.max(0, Math.floor((WIDTH - newWidth) / 2));
-            const padRight = Math.max(0, WIDTH - newWidth - padLeft);
-            
-            // Resize with high quality (Lanczos3 kernel for sharp resampling) and add black padding
-            // Use exact dimensions to avoid any blur from resampling
-            let sharpInstance = sharp(customBgBuffer);
-            
-            // Only resize if needed (if image is larger than canvas or aspect ratio differs)
-            if (originalWidth !== WIDTH || originalHeight !== HEIGHT) {
-                sharpInstance = sharpInstance.resize(newWidth, newHeight, {
-                    fit: "inside", // Fit inside dimensions without cropping
-                    kernel: sharp.kernel.lanczos3, // High quality resampling (no blur)
-                    withoutEnlargement: false, // Allow upscaling if needed
-                });
-            }
-            
-            // Only extend if padding is needed
-            if (padTop > 0 || padBottom > 0 || padLeft > 0 || padRight > 0) {
-                sharpInstance = sharpInstance.extend({
-                    top: padTop,
-                    bottom: padBottom,
-                    left: padLeft,
-                    right: padRight,
-                    background: { r: 0, g: 0, b: 0, alpha: 1 } // Black padding
-                });
-            }
-            
-            // Use highest quality PNG settings to prevent blur
-            bgResized = await sharpInstance
+            // Resize image to COVER the canvas (fills entire area, may crop edges)
+            // This ensures no black bars - the image fills the entire canvas
+            bgResized = await sharp(customBgBuffer)
+                .resize(WIDTH, HEIGHT, {
+                    fit: "cover", // Cover entire canvas, crop if needed (NO black bars)
+                    position: "center", // Center the image when cropping
+                    kernel: sharp.kernel.lanczos3, // High quality resampling
+                })
                 .png({ 
                     quality: 100, 
-                    compressionLevel: 0, // No compression for maximum quality
-                    adaptiveFiltering: true,
-                    effort: 10 // Maximum effort for best quality
+                    compressionLevel: 0,
                 })
                 .toBuffer();
+                
+            console.log(`Custom background resized to ${WIDTH}x${HEIGHT} using cover fit`);
         } catch (error) {
             console.error("Error processing custom background:", error);
-            console.error("Error details:", error instanceof Error ? error.message : String(error));
             
             try {
-                // Fallback: use contain fit without extend (static background, no parallax)
+                // Fallback: still use cover fit
                 let base64 = customBackgroundBase64.trim();
                 if (base64.includes(",")) {
                     base64 = base64.split(",")[1];
@@ -431,21 +400,12 @@ export async function createCarouselWithEngine(
                 
                 const customBgBuffer = Buffer.from(base64, "base64");
                 
-                if (customBgBuffer.length === 0) {
-                    throw new Error("Failed to decode base64 in fallback");
-                }
-                
                 bgResized = await sharp(customBgBuffer)
-                    .resize(WIDTH, HEIGHT, {  // Use WIDTH instead of bgTotalW for static background
-                        fit: "contain",
-                        background: { r: 0, g: 0, b: 0, alpha: 1 },
-                        kernel: sharp.kernel.lanczos3 // High quality
+                    .resize(WIDTH, HEIGHT, {
+                        fit: "cover",
+                        position: "center",
                     })
-                    .png({
-                        quality: 100,
-                        compressionLevel: 0,
-                        adaptiveFiltering: true
-                    })
+                    .png()
                     .toBuffer();
             } catch (fallbackError) {
                 console.error("Fallback also failed:", fallbackError);

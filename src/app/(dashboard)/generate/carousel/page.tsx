@@ -497,23 +497,36 @@ export default function CarouselGenerationPage() {
                                     <div className="mt-4">
                                         <Label className="text-base font-medium">גודל הלוגו</Label>
                                         <div className="grid grid-cols-3 gap-2 mt-2">
-                                            {[
-                                                { value: "small", label: "קטן" },
-                                                { value: "medium", label: "בינוני" },
-                                                { value: "large", label: "גדול" },
-                                            ].map((size) => (
-                                                <button
-                                                    key={size.value}
-                                                    onClick={() => setLogoSize(size.value as "small" | "medium" | "large")}
-                                                    className={`p-2 rounded-lg border text-xs text-center transition-colors ${
-                                                        logoSize === size.value
-                                                            ? "border-pink-500 bg-pink-50 text-pink-700"
-                                                            : "border-gray-200 hover:border-gray-300"
-                                                    }`}
-                                                >
-                                                    {size.label}
-                                                </button>
-                                            ))}
+                                            <button
+                                                onClick={() => setLogoSize("small")}
+                                                className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                    logoSize === "small"
+                                                        ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                        : "border-gray-200 hover:border-gray-300"
+                                                }`}
+                                            >
+                                                קטן
+                                            </button>
+                                            <button
+                                                onClick={() => setLogoSize("medium")}
+                                                className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                    logoSize === "medium"
+                                                        ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                        : "border-gray-200 hover:border-gray-300"
+                                                }`}
+                                            >
+                                                בינוני
+                                            </button>
+                                            <button
+                                                onClick={() => setLogoSize("large")}
+                                                className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                    logoSize === "large"
+                                                        ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                        : "border-gray-200 hover:border-gray-300"
+                                                }`}
+                                            >
+                                                גדול
+                                            </button>
                                         </div>
                                     </div>
                                 </>

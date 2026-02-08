@@ -43,21 +43,51 @@ function getLogoPosition(
     logoWidth: number,
     logoHeight: number
 ): { x: number; y: number } {
+    // Progress bar constants
+    const PROGRESS_BAR_HEIGHT = 14;
+    const PROGRESS_BAR_BOTTOM_MARGIN = 50;
+    const PROGRESS_BAR_TOP = HEIGHT - PROGRESS_BAR_BOTTOM_MARGIN - PROGRESS_BAR_HEIGHT; // HEIGHT - 64
+    
+    // Top position - safe margin from top
     const topY = 60;
-    const bottomY = HEIGHT - 60 - logoHeight;
+    
+    // Bottom position - above progress bar with safe gap
+    const LOGO_BOTTOM_GAP = 25; // Gap between logo and progress bar
+    const bottomY = PROGRESS_BAR_TOP - logoHeight - LOGO_BOTTOM_GAP;
+    
+    // Horizontal positions
     const leftX = MARGIN;
     const rightX = WIDTH - MARGIN - logoWidth;
     const centerX = (WIDTH - logoWidth) / 2;
+    
+    // Safety checks for horizontal positions
+    const safeLeftX = Math.max(MARGIN, Math.min(leftX, WIDTH - logoWidth - MARGIN));
+    const safeRightX = Math.max(MARGIN, Math.min(rightX, WIDTH - logoWidth - MARGIN));
+    const safeCenterX = Math.max(MARGIN, Math.min(centerX, WIDTH - logoWidth - MARGIN));
+    
+    // Safety checks for vertical positions
+    const safeTopY = Math.max(0, Math.min(topY, HEIGHT - logoHeight - PROGRESS_BAR_BOTTOM_MARGIN - PROGRESS_BAR_HEIGHT - LOGO_BOTTOM_GAP));
+    // Ensure bottom logo doesn't overlap with progress bar or go off-screen
+    const minBottomY = topY + logoHeight + 50; // Minimum distance from top
+    const maxBottomY = PROGRESS_BAR_TOP - logoHeight - LOGO_BOTTOM_GAP;
+    const safeBottomY = Math.max(minBottomY, Math.min(bottomY, maxBottomY));
 
     const pos: Record<string, { x: number; y: number }> = {
-        "top-left": { x: leftX, y: topY },
-        "top-right": { x: rightX, y: topY },
-        "top-middle": { x: centerX, y: topY },
-        "bottom-left": { x: leftX, y: bottomY },
-        "bottom-right": { x: rightX, y: bottomY },
-        "bottom-middle": { x: centerX, y: bottomY },
+        "top-left": { x: safeLeftX, y: safeTopY },
+        "top-right": { x: safeRightX, y: safeTopY },
+        "top-middle": { x: safeCenterX, y: safeTopY },
+        "bottom-left": { x: safeLeftX, y: safeBottomY },
+        "bottom-right": { x: safeRightX, y: safeBottomY },
+        "bottom-middle": { x: safeCenterX, y: safeBottomY },
     };
-    return pos[position] || pos["top-right"];
+    
+    const result = pos[position] || pos["top-right"];
+    
+    // Final safety check - ensure logo is completely within canvas bounds
+    return {
+        x: Math.max(0, Math.min(result.x, WIDTH - logoWidth)),
+        y: Math.max(0, Math.min(result.y, HEIGHT - logoHeight))
+    };
 }
 
 /** Apply background effects: blur, scrim overlay, grain. Stronger for text readability. */
@@ -375,13 +405,16 @@ export async function createCarouselWithEngine(
             bodyFontSize
         );
 
-        // Draw logo
+        // Draw logo (before progress bar to ensure proper layering)
         if (logoImage) {
             const logoPos = getLogoPosition(logoPosition, logoW, logoH);
-            ctx.drawImage(logoImage, logoPos.x, logoPos.y, logoW, logoH);
+            // Ensure logo is within bounds
+            const safeX = Math.max(0, Math.min(logoPos.x, WIDTH - logoW));
+            const safeY = Math.max(0, Math.min(logoPos.y, HEIGHT - logoH));
+            ctx.drawImage(logoImage, safeX, safeY, logoW, logoH);
         }
 
-        // Progress bar
+        // Progress bar (drawn after logo to ensure it's on top)
         drawProgressBar(ctx, i, total, accentColor);
 
         // Counter (top-left like original)

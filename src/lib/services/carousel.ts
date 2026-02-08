@@ -46,7 +46,7 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         customBackgroundBase64,
     } = options;
 
-    // Handle custom background
+    // Handle custom background or auto-registered templates
     let template: CarouselTemplate;
     if (templateId === "custom" && customBackgroundBase64) {
         // Create a temporary template for custom background
@@ -62,7 +62,36 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
     } else {
         template = CAROUSEL_TEMPLATES[templateId];
         if (!template) {
-            throw new Error(`Template ${templateId} not found`);
+            // Auto-register template if file exists
+            const fs = require("fs");
+            const path = require("path");
+            const templatePathJpg = path.join(process.cwd(), "public/carousel-templates", `${templateId}.jpg`);
+            const templatePathPng = path.join(process.cwd(), "public/carousel-templates", `${templateId}.png`);
+            const file = fs.existsSync(templatePathJpg) ? `${templateId}.jpg` : 
+                        fs.existsSync(templatePathPng) ? `${templateId}.png` : null;
+            
+            if (!file) {
+                throw new Error(`Template ${templateId} not found`);
+            }
+            
+            // Auto-create template entry
+            let category: CarouselTemplate["category"] = "abstract";
+            if (templateId.startsWith("T_")) {
+                const num = parseInt(templateId.replace("T_", ""));
+                if (num >= 96 && num <= 144) category = "nature";
+                else if (num >= 20 && num <= 30) category = "gradient";
+                else if (num >= 60 && num <= 80) category = "tech";
+            }
+            
+            template = {
+                id: templateId,
+                style: templateId,
+                file,
+                text_color: category === "dark" ? "#FFFFFF" : "#1A1A1A",
+                accent: category === "dark" ? "#60A5FA" : "#2563EB",
+                y_pos: 675,
+                category,
+            };
         }
     }
 

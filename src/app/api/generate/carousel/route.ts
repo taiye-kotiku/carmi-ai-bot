@@ -48,11 +48,29 @@ export async function POST(req: Request) {
         }
 
         // Allow "custom" template if custom_background_base64 is provided
-        if (!template_id || (!CAROUSEL_TEMPLATES[template_id] && template_id !== "custom")) {
-            return NextResponse.json(
-                { error: "נא לבחור תבנית" },
-                { status: 400 }
-            );
+        // Also allow any template_id that exists as a file (auto-registered templates)
+        if (!template_id || (template_id !== "custom" && !CAROUSEL_TEMPLATES[template_id])) {
+            // Check if template file exists (for auto-registered templates)
+            if (template_id !== "custom") {
+                const fs = require("fs");
+                const path = require("path");
+                const templatePath = path.join(
+                    process.cwd(),
+                    "public/carousel-templates",
+                    `${template_id}.jpg`
+                );
+                const templatePathPng = path.join(
+                    process.cwd(),
+                    "public/carousel-templates",
+                    `${template_id}.png`
+                );
+                if (!fs.existsSync(templatePath) && !fs.existsSync(templatePathPng)) {
+                    return NextResponse.json(
+                        { error: "נא לבחור תבנית" },
+                        { status: 400 }
+                    );
+                }
+            }
         }
         
         if (template_id === "custom" && !custom_background_base64) {

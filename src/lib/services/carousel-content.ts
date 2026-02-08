@@ -48,24 +48,46 @@ Example: ["הנה *ההזדמנות* שלך", "Slide 2 text", "Slide 3 text"]`;
 
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();
+    console.log("Gemini response:", responseText.substring(0, 200));
 
     // Parse JSON from response
     try {
         // Clean up response - remove markdown code blocks if present
-        const cleanedResponse = responseText
+        let cleanedResponse = responseText
             .replace(/```json\n?/g, "")
             .replace(/```\n?/g, "")
+            .replace(/^\[/, "[") // Ensure starts with [
+            .replace(/\]$/, "]") // Ensure ends with ]
             .trim();
+
+        // Try to extract JSON array if wrapped in text
+        const jsonMatch = cleanedResponse.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            cleanedResponse = jsonMatch[0];
+        }
 
         const slides = JSON.parse(cleanedResponse);
 
         if (!Array.isArray(slides)) {
+            console.error("Response is not an array:", slides);
             throw new Error("Response is not an array");
         }
 
-        return slides.slice(0, slideCount);
+        if (slides.length === 0) {
+            throw new Error("Generated empty slides array");
+        }
+
+        const finalSlides = slides.slice(0, slideCount).filter((s: any) => s && typeof s === "string" && s.trim().length > 0);
+        
+        if (finalSlides.length === 0) {
+            throw new Error("No valid slides after filtering");
+        }
+
+        console.log(`Generated ${finalSlides.length} slides`);
+        return finalSlides;
     } catch (error) {
         console.error("Failed to parse carousel content:", error);
-        throw new Error("Failed to generate carousel content");
+        console.error("Raw response:", responseText);
+        throw new Error(`Failed to generate carousel content: ${error instanceof Error ? error.message : String(error)}`);
     }
 }

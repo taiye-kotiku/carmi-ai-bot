@@ -171,6 +171,7 @@ interface ProcessOptions {
 
 async function processCarousel(jobId: string, userId: string, options: ProcessOptions) {
     try {
+        console.log(`[Carousel ${jobId}] Starting generation with template: ${options.templateId}`);
         await supabaseAdmin
             .from("jobs")
             .update({ status: "processing", progress: 10 })
@@ -180,42 +181,58 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
         let slides = options.customSlides;
 
         if (!slides?.length && options.topic) {
+            console.log(`[Carousel ${jobId}] Generating content for topic: ${options.topic}`);
             await supabaseAdmin
                 .from("jobs")
                 .update({ progress: 20 })
                 .eq("id", jobId);
 
-            slides = await generateCarouselContent({
-                topic: options.topic,
-                slideCount: options.slideCount,
-                style: options.style as any,
-                language: "he",
-            });
+            try {
+                slides = await generateCarouselContent({
+                    topic: options.topic,
+                    slideCount: options.slideCount,
+                    style: options.style as any,
+                    language: "he",
+                });
+                console.log(`[Carousel ${jobId}] Generated ${slides?.length || 0} slides`);
+            } catch (contentError) {
+                console.error(`[Carousel ${jobId}] Content generation failed:`, contentError);
+                throw new Error(`Failed to generate content: ${contentError instanceof Error ? contentError.message : String(contentError)}`);
+            }
         }
 
         if (!slides?.length) {
-            throw new Error("No slides content");
+            throw new Error("No slides content - provide topic or custom slides");
         }
 
+        console.log(`[Carousel ${jobId}] Processing ${slides.length} slides`);
         await supabaseAdmin
             .from("jobs")
             .update({ progress: 40 })
             .eq("id", jobId);
 
         // Generate carousel images
-        const result = await generateCarousel({
-            slides,
-            templateId: options.templateId,
-            logoUrl: options.brandLogo,
-            logoBase64: options.logoBase64,
-            brandColor: options.brandColor,
-            logoPosition: options.logoPosition as any,
-            fontFamily: options.fontFamily,
-            headlineFontSize: options.headlineFontSize,
-            bodyFontSize: options.bodyFontSize,
-            fontColor: options.fontColor,
-            customBackgroundBase64: options.customBackgroundBase64,
-        });
+        console.log(`[Carousel ${jobId}] Generating images with template: ${options.templateId}`);
+        let result;
+        try {
+            result = await generateCarousel({
+                slides,
+                templateId: options.templateId,
+                logoUrl: options.brandLogo,
+                logoBase64: options.logoBase64,
+                brandColor: options.brandColor,
+                logoPosition: options.logoPosition as any,
+                fontFamily: options.fontFamily,
+                headlineFontSize: options.headlineFontSize,
+                bodyFontSize: options.bodyFontSize,
+                fontColor: options.fontColor,
+                customBackgroundBase64: options.customBackgroundBase64,
+            });
+            console.log(`[Carousel ${jobId}] Generated ${result.images.length} images`);
+        } catch (imageError) {
+            console.error(`[Carousel ${jobId}] Image generation failed:`, imageError);
+            throw new Error(`Failed to generate images: ${imageError instanceof Error ? imageError.message : String(imageError)}`);
+        }
 
         await supabaseAdmin
             .from("jobs")

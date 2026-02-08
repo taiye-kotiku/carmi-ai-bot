@@ -327,18 +327,21 @@ export async function createCarouselWithEngine(
     const total = slides.length;
     const bgTotalW = WIDTH + (total - 1) * SHIFT_PX;
 
-    // Load and prepare wide background (like Python's ImageOps.fit)
+    // Load and prepare wide background
     let bgResized: Buffer;
     if (customBackgroundBase64) {
-        // Use custom background
+        // Use custom background - resize to fit (contain) so whole image is visible
         const base64 = customBackgroundBase64.replace(/^data:image\/\w+;base64,/, "");
         const customBgBuffer = Buffer.from(base64, "base64");
         bgResized = await sharp(customBgBuffer)
-            .resize(bgTotalW, HEIGHT, { fit: "cover" })
+            .resize(bgTotalW, HEIGHT, { 
+                fit: "contain", // Changed from "cover" to "contain" to show whole image
+                background: { r: 0, g: 0, b: 0, alpha: 1 } // Black background for letterboxing
+            })
             .png()
             .toBuffer();
     } else {
-        // Use template background
+        // Use template background - keep cover for templates
         bgResized = await sharp(templatePath)
             .resize(bgTotalW, HEIGHT, { fit: "cover" })
             .png()

@@ -884,27 +884,36 @@ export default function CarouselGenerationPage() {
                                         ))}
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-                                    {filteredTemplates.map((template) => (
-                                        <button
-                                            key={template.id}
-                                            onClick={() => setSelectedTemplate(template.id)}
-                                            className={`relative aspect-[4/5] rounded-lg overflow-hidden border-2 ${
-                                                selectedTemplate === template.id ? "border-purple-500 ring-2 ring-purple-200" : "border-transparent"
-                                            }`}
-                                        >
-                                            <img
-                                                src={`/carousel-templates/${template.file}`}
-                                                alt={template.style}
-                                                className="w-full h-full object-cover"
-                                            />
-                                            {selectedTemplate === template.id && (
-                                                <div className="absolute inset-0 bg-purple-500/20 flex items-center justify-center">
-                                                    <Check className="w-6 h-6 text-white" />
+                                <div className="space-y-3">
+                                    <div className="text-xs text-gray-500">
+                                        {filteredTemplates.length} תבניות זמינות
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-2 max-h-[500px] overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                                        {filteredTemplates.map((template) => (
+                                            <button
+                                                key={template.id}
+                                                onClick={() => setSelectedTemplate(template.id)}
+                                                className={`relative aspect-[4/5] rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${
+                                                    selectedTemplate === template.id ? "border-purple-500 ring-2 ring-purple-200 shadow-lg" : "border-gray-300 hover:border-purple-300"
+                                                }`}
+                                            >
+                                                <img
+                                                    src={`/carousel-templates/${template.file}`}
+                                                    alt={template.style}
+                                                    className="w-full h-full object-cover"
+                                                    loading="lazy"
+                                                />
+                                                {selectedTemplate === template.id && (
+                                                    <div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center">
+                                                        <Check className="w-6 h-6 text-white drop-shadow-lg" />
+                                                    </div>
+                                                )}
+                                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate">
+                                                    {template.style}
                                                 </div>
-                                            )}
-                                        </button>
-                                    ))}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 

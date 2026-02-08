@@ -55,7 +55,15 @@ const SLIDE_COUNTS = [3, 4, 5, 6, 7, 8];
 
 const FONT_FAMILIES = [
     { value: "Assistant-Bold", label: "אסיסטנט מודגש (ברירת מחדל)", file: "Assistant-Bold.ttf" },
-    // More fonts can be added by placing .ttf files in public/fonts/
+    { value: "Assistant-ExtraBold", label: "אסיסטנט מודגש מאוד", file: "Assistant-ExtraBold.ttf" },
+    { value: "Assistant-SemiBold", label: "אסיסטנט מודגש בינוני", file: "Assistant-SemiBold.ttf" },
+    { value: "Assistant-Medium", label: "אסיסטנט בינוני", file: "Assistant-Medium.ttf" },
+    { value: "Assistant-Regular", label: "אסיסטנט רגיל", file: "Assistant-Regular.ttf" },
+    { value: "Assistant-Light", label: "אסיסטנט דק", file: "Assistant-Light.ttf" },
+    { value: "Assistant-ExtraLight", label: "אסיסטנט דק מאוד", file: "Assistant-ExtraLight.ttf" },
+    { value: "Antiochus-Bold", label: "אנטיוכוס מודגש", file: "Antiochus-Bold.ttf" },
+    { value: "Rubik-Medium-Italic", label: "רוביק בינוני נטוי", file: "Rubik-Medium-Italic.ttf" },
+    { value: "GveretLevin-AlefAlefAlef-Regular", label: "גברת לוין אלף", file: "GveretLevin-AlefAlefAlef-Regular.ttf" },
 ];
 
 export default function CarouselGenerationPage() {

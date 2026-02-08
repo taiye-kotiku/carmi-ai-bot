@@ -304,12 +304,25 @@ export async function createCarouselWithEngine(
     } else {
         fontPath = path.join(process.cwd(), "public/fonts/Assistant-Bold.ttf");
     }
-
+    
     if (!fs.existsSync(fontPath)) {
-        throw new Error(`Font not found: ${fontPath}`);
+        console.error(`Font not found: ${fontPath}. Available fonts:`, fs.readdirSync(path.join(process.cwd(), "public/fonts")).join(", "));
+        // Fallback to default font
+        const defaultFont = path.join(process.cwd(), "public/fonts/Assistant-Bold.ttf");
+        if (fs.existsSync(defaultFont)) {
+            console.warn(`Using fallback font: ${defaultFont}`);
+            fontPath = defaultFont;
+        } else {
+            throw new Error(`Font not found: ${fontPath} and fallback font also not found`);
+        }
     }
-
-    GlobalFonts.registerFromPath(fontPath, "CarouselFont");
+    
+    try {
+        GlobalFonts.registerFromPath(fontPath, "CarouselFont");
+    } catch (fontError) {
+        console.error(`Failed to register font ${fontPath}:`, fontError);
+        throw new Error(`Failed to load font: ${fontError instanceof Error ? fontError.message : String(fontError)}`);
+    }
 
     const total = slides.length;
     const bgTotalW = WIDTH + (total - 1) * SHIFT_PX;

@@ -6,10 +6,11 @@ import { startLoraTraining } from "@/lib/services/modal";
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        // ─── Auth ───
+        const { id: characterId } = await params;
+
         const supabase = await createClient();
         const {
             data: { user },
@@ -20,10 +21,8 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const characterId = params.id;
         const admin = createAdminClient();
 
-        // ─── Fetch character & verify ownership ───
         const { data: character, error: fetchError } = await admin
             .from("characters")
             .select("*")
@@ -32,17 +31,11 @@ export async function POST(
             .single();
 
         if (fetchError || !character) {
-            return NextResponse.json(
-                { error: "Character not found" },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
         if (character.status === "training") {
-            return NextResponse.json(
-                { error: "Character is already being trained" },
-                { status: 409 }
-            );
+            return NextResponse.json({ error: "Character is already being trained" }, { status: 409 });
         }
 
         const imageUrls = character.image_urls || [];
@@ -53,7 +46,7 @@ export async function POST(
             );
         }
 
-        // ─── Check credits ───
+        // Check credits
         const TRAINING_COST = 10;
         const { data: credits, error: creditsError } = await admin
             .from("credits")
@@ -62,10 +55,7 @@ export async function POST(
             .single();
 
         if (creditsError || !credits) {
-            return NextResponse.json(
-                { error: "Could not fetch credits" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "Could not fetch credits" }, { status: 500 });
         }
 
         if (credits.image_credits < TRAINING_COST) {
@@ -75,13 +65,9 @@ export async function POST(
             );
         }
 
-        // ─── Deduct credits ───
+        // Deduct credits
         const newBalance = credits.image_credits - TRAINING_COST;
-        await admin
-            .from("credits")
-            .update({ image_credits: newBalance })
-            .eq("user_id", user.id);
-
+        await admin.from("credits").update({ image_credits: newBalance }).eq("user_id", user.id);
         await admin.from("credit_transactions").insert({
             user_id: user.id,
             credit_type: "image_credits",
@@ -91,7 +77,7 @@ export async function POST(
             related_id: characterId,
         });
 
-        // ─── Update character status ───
+        // Update status
         await admin
             .from("characters")
             .update({
@@ -101,7 +87,7 @@ export async function POST(
             })
             .eq("id", characterId);
 
-        // ─── Parse optional training config ───
+        // Parse optional config
         let trainingConfig: Record<string, number> = {};
         try {
             const body = await request.json();
@@ -114,42 +100,26 @@ export async function POST(
                 };
             }
         } catch {
-            // empty body is fine
+            // empty body
         }
 
-        // ─── Log what we're about to do ───
+        // Check Modal URL
         const modalUrl = process.env.MODAL_TRAINING_URL;
         console.log("[Train] MODAL_TRAINING_URL:", modalUrl);
         console.log("[Train] Character:", characterId, character.name);
         console.log("[Train] Images:", imageUrls.length);
-        console.log("[Train] Webhook URL:", `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/training-complete`);
 
         if (!modalUrl) {
-            // Refund immediately
-            await admin
-                .from("credits")
-                .update({ image_credits: credits.image_credits })
-                .eq("user_id", user.id);
+            await admin.from("credits").update({ image_credits: credits.image_credits }).eq("user_id", user.id);
             await admin.from("credit_transactions").insert({
-                user_id: user.id,
-                credit_type: "image_credits",
-                amount: TRAINING_COST,
-                balance_after: credits.image_credits,
-                reason: "training_refund_no_modal_url",
-                related_id: characterId,
+                user_id: user.id, credit_type: "image_credits", amount: TRAINING_COST,
+                balance_after: credits.image_credits, reason: "training_refund_no_modal_url", related_id: characterId,
             });
-            await admin
-                .from("characters")
-                .update({ status: "failed", training_error: "MODAL_TRAINING_URL not configured" })
-                .eq("id", characterId);
-
-            return NextResponse.json(
-                { error: "Training service not configured. MODAL_TRAINING_URL is missing." },
-                { status: 500 }
-            );
+            await admin.from("characters").update({ status: "failed", training_error: "MODAL_TRAINING_URL not configured" }).eq("id", characterId);
+            return NextResponse.json({ error: "Training service not configured" }, { status: 500 });
         }
 
-        // ─── Call Modal ───
+        // Call Modal
         try {
             const result = await startLoraTraining({
                 characterId,
@@ -159,77 +129,32 @@ export async function POST(
             });
 
             if (!result.success) {
-                await admin
-                    .from("credits")
-                    .update({ image_credits: credits.image_credits })
-                    .eq("user_id", user.id);
+                await admin.from("credits").update({ image_credits: credits.image_credits }).eq("user_id", user.id);
                 await admin.from("credit_transactions").insert({
-                    user_id: user.id,
-                    credit_type: "image_credits",
-                    amount: TRAINING_COST,
-                    balance_after: credits.image_credits,
-                    reason: "training_refund_modal_rejected",
-                    related_id: characterId,
+                    user_id: user.id, credit_type: "image_credits", amount: TRAINING_COST,
+                    balance_after: credits.image_credits, reason: "training_refund_modal_rejected", related_id: characterId,
                 });
-                await admin
-                    .from("characters")
-                    .update({ status: "failed", training_error: result.errors?.join(", ") || "Modal rejected" })
-                    .eq("id", characterId);
-
-                return NextResponse.json(
-                    { error: "Failed to start training", details: result.errors },
-                    { status: 500 }
-                );
+                await admin.from("characters").update({ status: "failed", training_error: result.errors?.join(", ") || "Modal rejected" }).eq("id", characterId);
+                return NextResponse.json({ error: "Failed to start training", details: result.errors }, { status: 500 });
             }
 
-            return NextResponse.json({
-                success: true,
-                message: result.message,
-                character_id: characterId,
-                config: result.config,
-            });
+            return NextResponse.json({ success: true, message: result.message, character_id: characterId, config: result.config });
         } catch (modalError) {
-            // ─── THIS IS WHERE YOUR ERROR IS HAPPENING ───
             const errorMessage = modalError instanceof Error ? modalError.message : String(modalError);
-            console.error("[Train] Modal request failed:", errorMessage);
-            console.error("[Train] Full error:", modalError);
+            console.error("[Train] Modal error:", errorMessage);
 
-            // Refund
-            await admin
-                .from("credits")
-                .update({ image_credits: credits.image_credits })
-                .eq("user_id", user.id);
+            await admin.from("credits").update({ image_credits: credits.image_credits }).eq("user_id", user.id);
             await admin.from("credit_transactions").insert({
-                user_id: user.id,
-                credit_type: "image_credits",
-                amount: TRAINING_COST,
-                balance_after: credits.image_credits,
-                reason: "training_refund_modal_error",
-                related_id: characterId,
+                user_id: user.id, credit_type: "image_credits", amount: TRAINING_COST,
+                balance_after: credits.image_credits, reason: "training_refund_modal_error", related_id: characterId,
             });
-            await admin
-                .from("characters")
-                .update({
-                    status: "failed",
-                    training_error: errorMessage,
-                })
-                .eq("id", characterId);
+            await admin.from("characters").update({ status: "failed", training_error: errorMessage }).eq("id", characterId);
 
-            return NextResponse.json(
-                {
-                    error: "Failed to connect to training service",
-                    details: errorMessage,
-                    modal_url: modalUrl,
-                },
-                { status: 502 }
-            );
+            return NextResponse.json({ error: "Failed to connect to training service", details: errorMessage }, { status: 502 });
         }
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        console.error("[Train] Unexpected error:", msg);
-        return NextResponse.json(
-            { error: "Internal server error", details: msg },
-            { status: 500 }
-        );
+        console.error("[Train] Unexpected:", msg);
+        return NextResponse.json({ error: "Internal server error", details: msg }, { status: 500 });
     }
 }

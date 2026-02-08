@@ -330,7 +330,7 @@ export async function createCarouselWithEngine(
     // Load and prepare wide background
     let bgResized: Buffer;
     if (customBackgroundBase64) {
-        // Use custom background - resize without cropping, maintain quality
+        // Use custom background - resize without cropping, maintain high quality
         const base64 = customBackgroundBase64.replace(/^data:image\/\w+;base64,/, "");
         const customBgBuffer = Buffer.from(base64, "base64");
         
@@ -339,7 +339,7 @@ export async function createCarouselWithEngine(
         const originalWidth = metadata.width || bgTotalW;
         const originalHeight = metadata.height || HEIGHT;
         
-        // Calculate scale to fit within canvas without cropping
+        // Calculate scale to fit within canvas without cropping (maintain aspect ratio)
         const scaleX = bgTotalW / originalWidth;
         const scaleY = HEIGHT / originalHeight;
         const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit both dimensions
@@ -347,21 +347,31 @@ export async function createCarouselWithEngine(
         const newWidth = Math.round(originalWidth * scale);
         const newHeight = Math.round(originalHeight * scale);
         
-        // Resize with high quality (no blur) and center on canvas
+        // Calculate padding to center the image
+        const padTop = Math.floor((HEIGHT - newHeight) / 2);
+        const padBottom = HEIGHT - newHeight - padTop;
+        const padLeft = Math.floor((bgTotalW - newWidth) / 2);
+        const padRight = bgTotalW - newWidth - padLeft;
+        
+        // Resize with high quality (Lanczos3 kernel for sharp resampling) and add black padding
         bgResized = await sharp(customBgBuffer)
             .resize(newWidth, newHeight, {
                 fit: "inside", // Fit inside dimensions without cropping
-                kernel: sharp.kernel.lanczos3, // High quality resampling
-                withoutEnlargement: false,
+                kernel: sharp.kernel.lanczos3, // High quality resampling (no blur)
+                withoutEnlargement: false, // Allow upscaling if needed
             })
             .extend({
-                top: Math.floor((HEIGHT - newHeight) / 2),
-                bottom: Math.ceil((HEIGHT - newHeight) / 2),
-                left: Math.floor((bgTotalW - newWidth) / 2),
-                right: Math.ceil((bgTotalW - newWidth) / 2),
+                top: padTop,
+                bottom: padBottom,
+                left: padLeft,
+                right: padRight,
                 background: { r: 0, g: 0, b: 0, alpha: 1 } // Black padding
             })
-            .png({ quality: 100, compressionLevel: 0 }) // Maximum quality
+            .png({ 
+                quality: 100, 
+                compressionLevel: 0, // No compression for maximum quality
+                adaptiveFiltering: true 
+            })
             .toBuffer();
     } else {
         // Use template background - keep cover for templates

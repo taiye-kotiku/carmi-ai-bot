@@ -50,11 +50,7 @@ const PRESET_PROMPTS = [
     {
         label: "קזואל",
         prompt:
-<<<<<<< HEAD
             "casual everyday photo, natural lighting, urban street background, relaxed pose, candid style",
-=======
-            "פורטרט אתלטי, לבוש בגדי ספורט, סביבת חדר כושר או חוץ, תנוחה אנרגטית, תאורה דינמית",
->>>>>>> c7228418f114b12b4bd2a89f0c043ecfb96e69fd
     },
 ];
 

@@ -527,14 +527,14 @@ export async function createCarouselWithEngine(
         // Draw background - static for custom backgrounds, parallax for templates
         if (useStaticBackground) {
             // For custom backgrounds: draw the same image for all slides (no movement)
-            // Ensure we're drawing the correct portion of the image
+            // Use the full image and scale it to canvas size
             try {
                 ctx.drawImage(
                     bgImage,
                     0,
                     0,
-                    Math.min(bgImage.width, WIDTH),
-                    Math.min(bgImage.height, HEIGHT),
+                    bgImage.width,
+                    bgImage.height,
                     0,
                     0,
                     WIDTH,
@@ -542,8 +542,8 @@ export async function createCarouselWithEngine(
                 );
             } catch (drawError) {
                 console.error(`Error drawing static background on slide ${i}:`, drawError);
-                // Fallback: try simple draw
-                ctx.drawImage(bgImage, 0, 0, WIDTH, HEIGHT);
+                console.error(`Background image size: ${bgImage.width}x${bgImage.height}, Canvas: ${WIDTH}x${HEIGHT}`);
+                throw drawError; // Re-throw to see the actual error
             }
         } else {
             // For templates: use parallax effect (each slide gets different portion)

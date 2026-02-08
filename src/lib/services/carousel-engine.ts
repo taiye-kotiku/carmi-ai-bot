@@ -35,6 +35,7 @@ export interface CarouselEngineOptions {
     fontFamily?: string;
     headlineFontSize?: number;
     bodyFontSize?: number;
+    customBackgroundBase64?: string;
 }
 
 function getLogoPosition(
@@ -261,6 +262,7 @@ export async function createCarouselWithEngine(
         fontFamily,
         headlineFontSize,
         bodyFontSize,
+        customBackgroundBase64,
     } = options;
 
     // Determine font path based on fontFamily or customFontPath
@@ -279,23 +281,39 @@ export async function createCarouselWithEngine(
 
     GlobalFonts.registerFromPath(fontPath, "CarouselFont");
 
-    const templatePath = path.join(
-        process.cwd(),
-        "public/carousel-templates",
-        template.file
-    );
-    if (!fs.existsSync(templatePath)) {
-        throw new Error(`Template not found: ${templatePath}`);
+    // Only check template path if not using custom background
+    let templatePath: string | undefined;
+    if (!customBackgroundBase64 && template.file) {
+        templatePath = path.join(
+            process.cwd(),
+            "public/carousel-templates",
+            template.file
+        );
+        if (!fs.existsSync(templatePath)) {
+            throw new Error(`Template not found: ${templatePath}`);
+        }
     }
 
     const total = slides.length;
     const bgTotalW = WIDTH + (total - 1) * SHIFT_PX;
 
     // Load and prepare wide background (like Python's ImageOps.fit)
-    const bgResized = await sharp(templatePath)
-        .resize(bgTotalW, HEIGHT, { fit: "cover" })
-        .png()
-        .toBuffer();
+    let bgResized: Buffer;
+    if (customBackgroundBase64) {
+        // Use custom background
+        const base64 = customBackgroundBase64.replace(/^data:image\/\w+;base64,/, "");
+        const customBgBuffer = Buffer.from(base64, "base64");
+        bgResized = await sharp(customBgBuffer)
+            .resize(bgTotalW, HEIGHT, { fit: "cover" })
+            .png()
+            .toBuffer();
+    } else {
+        // Use template background
+        bgResized = await sharp(templatePath)
+            .resize(bgTotalW, HEIGHT, { fit: "cover" })
+            .png()
+            .toBuffer();
+    }
 
     const bgWithEffects = await applyBackgroundEffects(bgResized, 165, 5, 18);
 

@@ -36,6 +36,7 @@ export async function POST(req: Request) {
             headline_font_size,
             body_font_size,
             font_color,
+            custom_background_base64,
         } = body;
 
         // Validate
@@ -46,9 +47,17 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!template_id || !CAROUSEL_TEMPLATES[template_id]) {
+        // Allow "custom" template if custom_background_base64 is provided
+        if (!template_id || (!CAROUSEL_TEMPLATES[template_id] && template_id !== "custom")) {
             return NextResponse.json(
                 { error: "נא לבחור תבנית" },
+                { status: 400 }
+            );
+        }
+        
+        if (template_id === "custom" && !custom_background_base64) {
+            return NextResponse.json(
+                { error: "נא להעלות תמונת רקע מותאמת אישית" },
                 { status: 400 }
             );
         }
@@ -114,6 +123,7 @@ export async function POST(req: Request) {
             headlineFontSize: headline_font_size,
             bodyFontSize: body_font_size,
             fontColor: font_color,
+            customBackgroundBase64: custom_background_base64,
         });
 
         return NextResponse.json({ jobId });
@@ -138,6 +148,7 @@ interface ProcessOptions {
     headlineFontSize?: number;
     bodyFontSize?: number;
     fontColor?: string;
+    customBackgroundBase64?: string;
 }
 
 async function processCarousel(jobId: string, userId: string, options: ProcessOptions) {
@@ -185,6 +196,7 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
             headlineFontSize: options.headlineFontSize,
             bodyFontSize: options.bodyFontSize,
             fontColor: options.fontColor,
+            customBackgroundBase64: options.customBackgroundBase64,
         });
 
         await supabaseAdmin

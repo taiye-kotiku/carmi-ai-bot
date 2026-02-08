@@ -22,6 +22,7 @@ interface GenerateCarouselOptions {
     headlineFontSize?: number;
     bodyFontSize?: number;
     fontColor?: string;
+    customBackgroundBase64?: string;
 }
 
 interface CarouselResult {
@@ -42,11 +43,27 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         headlineFontSize,
         bodyFontSize,
         fontColor,
+        customBackgroundBase64,
     } = options;
 
-    const template = CAROUSEL_TEMPLATES[templateId];
-    if (!template) {
-        throw new Error(`Template ${templateId} not found`);
+    // Handle custom background
+    let template: CarouselTemplate;
+    if (templateId === "custom" && customBackgroundBase64) {
+        // Create a temporary template for custom background
+        template = {
+            id: "custom",
+            style: "Custom Background",
+            file: "", // Not used for custom backgrounds
+            text_color: fontColor || "#FFFFFF",
+            accent: brandColor || "#2563EB",
+            y_pos: 675,
+            category: "abstract",
+        };
+    } else {
+        template = CAROUSEL_TEMPLATES[templateId];
+        if (!template) {
+            throw new Error(`Template ${templateId} not found`);
+        }
     }
 
     const accentColor = brandColor || template.accent;
@@ -76,6 +93,7 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         fontFamily,
         headlineFontSize,
         bodyFontSize,
+        customBackgroundBase64,
     });
 
     return { images, template };

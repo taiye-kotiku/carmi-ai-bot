@@ -78,6 +78,13 @@ export default function CarouselGenerationPage() {
     const [logoPosition, setLogoPosition] = useState<string>("top-right");
     const [categoryFilter, setCategoryFilter] = useState("all");
     
+    // Background image upload
+    const [backgroundImage, setBackgroundImage] = useState<File | null>(null);
+    const [backgroundImagePreview, setBackgroundImagePreview] = useState<string | null>(null);
+    const [backgroundImageBase64, setBackgroundImageBase64] = useState<string | null>(null);
+    const [useCustomBackground, setUseCustomBackground] = useState(false);
+    const backgroundInputRef = useRef<HTMLInputElement>(null);
+    
     // Font customization states
     const [fontFamily, setFontFamily] = useState("Assistant-Bold");
     const [headlineFontSize, setHeadlineFontSize] = useState(95);
@@ -99,6 +106,30 @@ export default function CarouselGenerationPage() {
     const [templateDesc, setTemplateDesc] = useState("");
     const [templateSuggestLoading, setTemplateSuggestLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Handle background image upload
+    async function handleBackgroundUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            toast.error("נא להעלות קובץ תמונה (PNG, JPG)");
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error("גודל מקסימלי 10MB");
+            return;
+        }
+        setBackgroundImage(file);
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result as string;
+            setBackgroundImagePreview(base64);
+            setBackgroundImageBase64(base64);
+            setUseCustomBackground(true);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = "";
+    }
 
     const filteredTemplates = getTemplatesByCategory(categoryFilter);
 
@@ -240,7 +271,7 @@ export default function CarouselGenerationPage() {
                 body: JSON.stringify({
                     topic: useTopic ? topic : undefined,
                     slides: slides || undefined,
-                    template_id: selectedTemplate,
+                    template_id: useCustomBackground && backgroundImageBase64 ? "custom" : selectedTemplate,
                     slide_count: slides ? slides.length : slideCount,
                     style,
                     use_brand: false,
@@ -251,6 +282,7 @@ export default function CarouselGenerationPage() {
                     headline_font_size: headlineFontSize,
                     body_font_size: bodyFontSize,
                     font_color: fontColor,
+                    custom_background_base64: useCustomBackground ? backgroundImageBase64 : undefined,
                 }),
             });
 
@@ -422,6 +454,77 @@ export default function CarouselGenerationPage() {
                         </CardContent>
                     </Card>
 
+                    {/* העלאת רקע מותאם אישית */}
+                    <Card>
+                        <CardContent className="p-6">
+                            <Label className="text-base font-medium mb-3 block">רקע מותאם אישית</Label>
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="useCustomBackground"
+                                        checked={useCustomBackground}
+                                        onChange={(e) => {
+                                            setUseCustomBackground(e.target.checked);
+                                            if (!e.target.checked) {
+                                                setBackgroundImage(null);
+                                                setBackgroundImagePreview(null);
+                                                setBackgroundImageBase64(null);
+                                            }
+                                        }}
+                                        className="rounded"
+                                    />
+                                    <label htmlFor="useCustomBackground" className="text-sm">
+                                        השתמש ברקע מותאם אישית במקום תבנית
+                                    </label>
+                                </div>
+                                
+                                {useCustomBackground && (
+                                    <>
+                                        <input
+                                            ref={backgroundInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={handleBackgroundUpload}
+                                        />
+                                        {backgroundImagePreview ? (
+                                            <div className="relative">
+                                                <img
+                                                    src={backgroundImagePreview}
+                                                    alt="רקע"
+                                                    className="w-full h-48 object-cover rounded-lg border"
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        setBackgroundImage(null);
+                                                        setBackgroundImagePreview(null);
+                                                        setBackgroundImageBase64(null);
+                                                        if (backgroundInputRef.current) {
+                                                            backgroundInputRef.current.value = "";
+                                                        }
+                                                    }}
+                                                    className="absolute top-2 left-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div
+                                                onClick={() => backgroundInputRef.current?.click()}
+                                                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-pink-400 hover:bg-pink-50/50 transition-colors"
+                                            >
+                                                <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                                                <p className="text-sm text-gray-600">לחץ להעלאת תמונת רקע</p>
+                                                <p className="text-xs text-gray-400 mt-1">PNG או JPG, עד 10MB</p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* הגדרות פונט */}
                     <Card>
                         <CardContent className="p-6">
@@ -508,14 +611,59 @@ export default function CarouselGenerationPage() {
                                         </div>
                                     </div>
 
-                                    {/* דוגמה */}
-                                    <div className="bg-gray-900 rounded-lg p-4 text-center" style={{ direction: "rtl" }}>
-                                        <p style={{ color: fontColor, fontSize: `${bodyFontSize / 4}px` }}>
-                                            זהו טקסט רגיל בגודל {bodyFontSize}
-                                        </p>
-                                        <p style={{ color: fontColor, fontSize: `${headlineFontSize / 4}px`, fontWeight: "bold", marginTop: "8px" }}>
-                                            זו כותרת מודגשת בגודל {headlineFontSize}
-                                        </p>
+                                    {/* תצוגה מקדימה של הפונט */}
+                                    <div>
+                                        <Label>תצוגה מקדימה</Label>
+                                        <div 
+                                            className="bg-gray-900 rounded-lg p-6 text-center border-2 border-gray-700" 
+                                            style={{ 
+                                                direction: "rtl",
+                                                fontFamily: fontFamily === "Assistant-Bold" ? "var(--font-heebo)" : undefined
+                                            }}
+                                        >
+                                            <style>{`
+                                                @font-face {
+                                                    font-family: 'PreviewFont';
+                                                    src: url('/fonts/${fontFamily}.ttf') format('truetype');
+                                                }
+                                                .font-preview {
+                                                    font-family: 'PreviewFont', sans-serif;
+                                                }
+                                            `}</style>
+                                            <p 
+                                                className="font-preview"
+                                                style={{ 
+                                                    color: fontColor, 
+                                                    fontSize: `${bodyFontSize / 4}px`,
+                                                    lineHeight: 1.5
+                                                }}
+                                            >
+                                                זהו טקסט רגיל בגודל {bodyFontSize}px
+                                            </p>
+                                            <p 
+                                                className="font-preview"
+                                                style={{ 
+                                                    color: fontColor, 
+                                                    fontSize: `${headlineFontSize / 4}px`, 
+                                                    fontWeight: "bold", 
+                                                    marginTop: "12px",
+                                                    lineHeight: 1.5
+                                                }}
+                                            >
+                                                זו כותרת מודגשת בגודל {headlineFontSize}px
+                                            </p>
+                                            <p 
+                                                className="font-preview"
+                                                style={{ 
+                                                    color: fontColor, 
+                                                    fontSize: `${bodyFontSize / 4}px`,
+                                                    marginTop: "8px",
+                                                    opacity: 0.8
+                                                }}
+                                            >
+                                                דוגמה: *התחדשות עירונית* היא הזדמנות
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             )}

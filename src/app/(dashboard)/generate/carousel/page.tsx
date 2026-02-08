@@ -78,6 +78,7 @@ export default function CarouselGenerationPage() {
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [logoBase64, setLogoBase64] = useState<string | null>(null);
     const [logoPosition, setLogoPosition] = useState<string>("top-right");
+    const [logoSize, setLogoSize] = useState<"small" | "medium" | "large">("medium");
     const [categoryFilter, setCategoryFilter] = useState("all");
     
     // Background image upload
@@ -319,6 +320,7 @@ export default function CarouselGenerationPage() {
                     logo_url: logoUrl || undefined,
                     logo_base64: logoBase64 || undefined,
                     logo_position: logoPosition,
+                    logo_size: logoSize,
                     font_family: fontFamily,
                     headline_font_size: headlineFontSize,
                     body_font_size: bodyFontSize,
@@ -473,24 +475,48 @@ export default function CarouselGenerationPage() {
                             </div>
 
                             {hasLogo && (
-                                <div className="mt-4">
-                                    <Label className="text-base font-medium">מיקום הלוגו</Label>
-                                    <div className="grid grid-cols-3 gap-2 mt-2">
-                                        {LOGO_POSITIONS.map((pos) => (
-                                            <button
-                                                key={pos.value}
-                                                onClick={() => setLogoPosition(pos.value)}
-                                                className={`p-2 rounded-lg border text-xs text-center transition-colors ${
-                                                    logoPosition === pos.value
-                                                        ? "border-pink-500 bg-pink-50 text-pink-700"
-                                                        : "border-gray-200 hover:border-gray-300"
-                                                }`}
-                                            >
-                                                {pos.label}
-                                            </button>
-                                        ))}
+                                <>
+                                    <div className="mt-4">
+                                        <Label className="text-base font-medium">מיקום הלוגו</Label>
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
+                                            {LOGO_POSITIONS.map((pos) => (
+                                                <button
+                                                    key={pos.value}
+                                                    onClick={() => setLogoPosition(pos.value)}
+                                                    className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                        logoPosition === pos.value
+                                                            ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                            : "border-gray-200 hover:border-gray-300"
+                                                    }`}
+                                                >
+                                                    {pos.label}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                    <div className="mt-4">
+                                        <Label className="text-base font-medium">גודל הלוגו</Label>
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
+                                            {[
+                                                { value: "small", label: "קטן" },
+                                                { value: "medium", label: "בינוני" },
+                                                { value: "large", label: "גדול" },
+                                            ].map((size) => (
+                                                <button
+                                                    key={size.value}
+                                                    onClick={() => setLogoSize(size.value as "small" | "medium" | "large")}
+                                                    className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                        logoSize === size.value
+                                                            ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                            : "border-gray-200 hover:border-gray-300"
+                                                    }`}
+                                                >
+                                                    {size.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
                             )}
                         </CardContent>
                     </Card>

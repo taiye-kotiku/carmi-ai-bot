@@ -32,6 +32,7 @@ export async function POST(req: Request) {
             logo_url: customLogoUrl,
             logo_base64: logoBase64,
             logo_position = "top-right",
+            logo_size = "medium",
             font_family,
             headline_font_size,
             body_font_size,
@@ -136,6 +137,7 @@ export async function POST(req: Request) {
             logoBase64,
             brandColor,
             logoPosition,
+            logoSize: logo_size,
             requiredCredits,
             fontFamily: font_family,
             headlineFontSize: headline_font_size,
@@ -161,6 +163,7 @@ interface ProcessOptions {
     logoBase64?: string;
     brandColor?: string;
     logoPosition?: string;
+    logoSize?: "small" | "medium" | "large";
     requiredCredits: number;
     fontFamily?: string;
     headlineFontSize?: number;
@@ -222,6 +225,7 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
                 logoBase64: options.logoBase64,
                 brandColor: options.brandColor,
                 logoPosition: options.logoPosition as any,
+                logoSize: options.logoSize,
                 fontFamily: options.fontFamily,
                 headlineFontSize: options.headlineFontSize,
                 bodyFontSize: options.bodyFontSize,

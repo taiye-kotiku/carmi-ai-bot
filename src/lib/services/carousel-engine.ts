@@ -30,6 +30,7 @@ export interface CarouselEngineOptions {
     fontPath?: string;
     logoBuffer?: Buffer;
     logoPosition?: LogoPosition;
+    logoSize?: "small" | "medium" | "large";
     accentColor?: string;
     textColor?: string;
     fontFamily?: string;
@@ -300,6 +301,7 @@ export async function createCarouselWithEngine(
         fontPath: customFontPath,
         logoBuffer,
         logoPosition = "top-right",
+        logoSize = "medium",
         accentColor = template.accent,
         textColor = template.text_color,
         fontFamily,
@@ -466,9 +468,22 @@ export async function createCarouselWithEngine(
     if (logoBuffer && logoBuffer.length > 0) {
         try {
             logoImage = await loadImage(logoBuffer);
-            const maxLogo = 260;
-            const minLogo = 20; // Minimum logo size
             
+            // Define logo size multipliers
+            const logoSizeMultipliers = {
+                small: 0.6,   // 60% of base size
+                medium: 1.0,   // 100% of base size (default)
+                large: 1.5,   // 150% of base size
+            };
+            
+            const sizeMultiplier = logoSizeMultipliers[logoSize] || 1.0;
+            
+            // Base max logo size (will be multiplied by sizeMultiplier)
+            const baseMaxLogo = 260;
+            const maxLogo = Math.round(baseMaxLogo * sizeMultiplier);
+            const minLogo = Math.round(20 * sizeMultiplier); // Minimum logo size
+            
+            // Calculate logo dimensions based on size option
             if (logoImage.width > maxLogo || logoImage.height > maxLogo) {
                 const scale = Math.min(
                     maxLogo / logoImage.width,
@@ -477,8 +492,9 @@ export async function createCarouselWithEngine(
                 logoW = Math.max(minLogo, Math.round(logoImage.width * scale));
                 logoH = Math.max(minLogo, Math.round(logoImage.height * scale));
             } else {
-                logoW = Math.max(minLogo, logoImage.width);
-                logoH = Math.max(minLogo, logoImage.height);
+                // Scale up/down based on size option while maintaining aspect ratio
+                logoW = Math.max(minLogo, Math.round(logoImage.width * sizeMultiplier));
+                logoH = Math.max(minLogo, Math.round(logoImage.height * sizeMultiplier));
             }
             
             // Ensure logo doesn't exceed canvas dimensions

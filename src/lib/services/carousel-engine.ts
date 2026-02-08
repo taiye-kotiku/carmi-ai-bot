@@ -311,19 +311,6 @@ export async function createCarouselWithEngine(
 
     GlobalFonts.registerFromPath(fontPath, "CarouselFont");
 
-    // Only check template path if not using custom background
-    let templatePath: string | undefined;
-    if (!customBackgroundBase64 && template.file) {
-        templatePath = path.join(
-            process.cwd(),
-            "public/carousel-templates",
-            template.file
-        );
-        if (!fs.existsSync(templatePath)) {
-            throw new Error(`Template not found: ${templatePath}`);
-        }
-    }
-
     const total = slides.length;
     const bgTotalW = WIDTH + (total - 1) * SHIFT_PX;
 
@@ -379,7 +366,35 @@ export async function createCarouselWithEngine(
                 adaptiveFiltering: true 
             })
             .toBuffer();
+        } catch (error) {
+            console.error("Error processing custom background:", error);
+            // Fallback: use contain fit without extend
+            const base64 = customBackgroundBase64.replace(/^data:image\/\w+;base64,/, "");
+            const customBgBuffer = Buffer.from(base64, "base64");
+            bgResized = await sharp(customBgBuffer)
+                .resize(bgTotalW, HEIGHT, {
+                    fit: "contain",
+                    background: { r: 0, g: 0, b: 0, alpha: 1 }
+                })
+                .png()
+                .toBuffer();
+        }
     } else {
+        // Use template background - check if template file exists
+        if (!template.file) {
+            throw new Error(`Template ${template.id} has no file specified`);
+        }
+        
+        const templatePath = path.join(
+            process.cwd(),
+            "public/carousel-templates",
+            template.file
+        );
+        
+        if (!fs.existsSync(templatePath)) {
+            throw new Error(`Template file not found: ${templatePath}`);
+        }
+        
         // Use template background - keep cover for templates
         bgResized = await sharp(templatePath)
             .resize(bgTotalW, HEIGHT, { fit: "cover" })

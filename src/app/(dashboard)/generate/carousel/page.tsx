@@ -107,7 +107,7 @@ export default function CarouselGenerationPage() {
     const [error, setError] = useState<string | null>(null);
     const [templateDesc, setTemplateDesc] = useState("");
     const [templateSuggestLoading, setTemplateSuggestLoading] = useState(false);
-    const [allTemplates, setAllTemplates] = useState<CarouselTemplate[]>(Object.values(CAROUSEL_TEMPLATES));
+    const [allTemplates, setAllTemplates] = useState<CarouselTemplate[]>([]);
     const [templatesLoading, setTemplatesLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,20 +115,30 @@ export default function CarouselGenerationPage() {
     useEffect(() => {
         async function loadTemplates() {
             try {
-                const res = await fetch("/api/templates?t=" + Date.now()); // Add cache busting
+                const res = await fetch("/api/templates?t=" + Date.now(), {
+                    cache: "no-store", // Force no cache
+                });
                 if (!res.ok) {
                     throw new Error(`Failed to fetch templates: ${res.status}`);
                 }
                 const data = await res.json();
-                console.log("Templates API response:", data.templates?.length || 0, "templates");
-                if (data.templates && Array.isArray(data.templates)) {
+                console.log("Templates API response:", data);
+                console.log("Templates count:", data.templates?.length || 0);
+                console.log("Registered:", data.registered);
+                console.log("Auto-registered:", data.autoRegistered);
+                
+                if (data.templates && Array.isArray(data.templates) && data.templates.length > 0) {
                     console.log("Setting templates:", data.templates.length);
                     setAllTemplates(data.templates);
                 } else {
-                    console.warn("Invalid templates data:", data);
+                    console.warn("Invalid templates data, using fallback:", data);
+                    // Fallback to registered templates
+                    setAllTemplates(Object.values(CAROUSEL_TEMPLATES));
                 }
             } catch (err) {
                 console.error("Failed to load templates:", err);
+                // Fallback to registered templates on error
+                setAllTemplates(Object.values(CAROUSEL_TEMPLATES));
             } finally {
                 setTemplatesLoading(false);
             }
@@ -916,12 +926,40 @@ export default function CarouselGenerationPage() {
                                     </div>
                                 </div>
                                 <div className="space-y-3">
-                                    <div className="text-xs text-gray-500">
-                                        {templatesLoading ? "טוען תבניות..." : `${filteredTemplates.length} תבניות זמינות`}
+                                    <div className="text-xs text-gray-500 flex items-center justify-between">
+                                        <span>
+                                            {templatesLoading ? "טוען תבניות..." : `${filteredTemplates.length} תבניות זמינות`}
+                                        </span>
+                                        {!templatesLoading && allTemplates.length > 0 && (
+                                            <button
+                                                onClick={async () => {
+                                                    setTemplatesLoading(true);
+                                                    try {
+                                                        const res = await fetch("/api/templates?t=" + Date.now(), { cache: "no-store" });
+                                                        const data = await res.json();
+                                                        if (data.templates && Array.isArray(data.templates)) {
+                                                            setAllTemplates(data.templates);
+                                                            toast.success(`נטענו ${data.templates.length} תבניות`);
+                                                        }
+                                                    } catch (err) {
+                                                        toast.error("שגיאה בטעינת תבניות");
+                                                    } finally {
+                                                        setTemplatesLoading(false);
+                                                    }
+                                                }}
+                                                className="text-xs text-purple-600 hover:text-purple-800 underline"
+                                            >
+                                                רענן
+                                            </button>
+                                        )}
                                     </div>
                                     {templatesLoading ? (
                                         <div className="flex items-center justify-center py-8">
                                             <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                                        </div>
+                                    ) : filteredTemplates.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500">
+                                            לא נמצאו תבניות. נסה לרענן.
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-4 gap-2 max-h-[500px] overflow-y-auto p-2 border rounded-lg bg-gray-50">

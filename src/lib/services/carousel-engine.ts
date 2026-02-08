@@ -358,19 +358,26 @@ export async function createCarouselWithEngine(
         try {
             logoImage = await loadImage(logoBuffer);
             const maxLogo = 260;
+            const minLogo = 20; // Minimum logo size
+            
             if (logoImage.width > maxLogo || logoImage.height > maxLogo) {
                 const scale = Math.min(
                     maxLogo / logoImage.width,
                     maxLogo / logoImage.height
                 );
-                logoW = Math.round(logoImage.width * scale);
-                logoH = Math.round(logoImage.height * scale);
+                logoW = Math.max(minLogo, Math.round(logoImage.width * scale));
+                logoH = Math.max(minLogo, Math.round(logoImage.height * scale));
             } else {
-                logoW = logoImage.width;
-                logoH = logoImage.height;
+                logoW = Math.max(minLogo, logoImage.width);
+                logoH = Math.max(minLogo, logoImage.height);
             }
+            
+            // Ensure logo doesn't exceed canvas dimensions
+            logoW = Math.min(logoW, WIDTH - MARGIN * 2);
+            logoH = Math.min(logoH, HEIGHT - 200); // Leave space for text and progress bar
         } catch (e) {
             console.warn("Could not load logo:", e);
+            logoImage = null; // Ensure logoImage is null on error
         }
     }
 
@@ -406,12 +413,23 @@ export async function createCarouselWithEngine(
         );
 
         // Draw logo (before progress bar to ensure proper layering)
-        if (logoImage) {
-            const logoPos = getLogoPosition(logoPosition, logoW, logoH);
-            // Ensure logo is within bounds
-            const safeX = Math.max(0, Math.min(logoPos.x, WIDTH - logoW));
-            const safeY = Math.max(0, Math.min(logoPos.y, HEIGHT - logoH));
-            ctx.drawImage(logoImage, safeX, safeY, logoW, logoH);
+        if (logoImage && logoW > 0 && logoH > 0) {
+            try {
+                const logoPos = getLogoPosition(logoPosition, logoW, logoH);
+                // Ensure logo is within bounds
+                const safeX = Math.max(0, Math.min(logoPos.x, WIDTH - logoW));
+                const safeY = Math.max(0, Math.min(logoPos.y, HEIGHT - logoH));
+                
+                // Validate logo dimensions
+                if (safeX + logoW <= WIDTH && safeY + logoH <= HEIGHT && logoW > 0 && logoH > 0) {
+                    ctx.drawImage(logoImage, safeX, safeY, logoW, logoH);
+                } else {
+                    console.warn(`Logo position out of bounds: x=${safeX}, y=${safeY}, w=${logoW}, h=${logoH}`);
+                }
+            } catch (err) {
+                console.error("Error drawing logo:", err);
+                // Continue without logo rather than failing the entire generation
+            }
         }
 
         // Progress bar (drawn after logo to ensure it's on top)

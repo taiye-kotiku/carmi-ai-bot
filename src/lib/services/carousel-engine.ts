@@ -330,67 +330,110 @@ export async function createCarouselWithEngine(
     // Load and prepare wide background
     let bgResized: Buffer;
     if (customBackgroundBase64) {
-        // Use custom background - resize without cropping, maintain high quality
-        const base64 = customBackgroundBase64.replace(/^data:image\/\w+;base64,/, "");
-        const customBgBuffer = Buffer.from(base64, "base64");
-        
-        // Get original image dimensions
-        const metadata = await sharp(customBgBuffer).metadata();
-        const originalWidth = metadata.width || bgTotalW;
-        const originalHeight = metadata.height || HEIGHT;
-        
-        // Calculate scale to fit within canvas without cropping (maintain aspect ratio)
-        const scaleX = bgTotalW / originalWidth;
-        const scaleY = HEIGHT / originalHeight;
-        const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit both dimensions
-        
-        const newWidth = Math.round(originalWidth * scale);
-        const newHeight = Math.round(originalHeight * scale);
-        
-        // Calculate padding to center the image (ensure non-negative values)
-        const padTop = Math.max(0, Math.floor((HEIGHT - newHeight) / 2));
-        const padBottom = Math.max(0, HEIGHT - newHeight - padTop);
-        const padLeft = Math.max(0, Math.floor((bgTotalW - newWidth) / 2));
-        const padRight = Math.max(0, bgTotalW - newWidth - padLeft);
-        
-        // Resize with high quality (Lanczos3 kernel for sharp resampling) and add black padding
-        let sharpInstance = sharp(customBgBuffer)
-            .resize(newWidth, newHeight, {
-                fit: "inside", // Fit inside dimensions without cropping
-                kernel: sharp.kernel.lanczos3, // High quality resampling (no blur)
-                withoutEnlargement: false, // Allow upscaling if needed
-            });
-        
-        // Only extend if padding is needed
-        if (padTop > 0 || padBottom > 0 || padLeft > 0 || padRight > 0) {
-            sharpInstance = sharpInstance.extend({
-                top: padTop,
-                bottom: padBottom,
-                left: padLeft,
-                right: padRight,
-                background: { r: 0, g: 0, b: 0, alpha: 1 } // Black padding
-            });
-        }
-        
-        bgResized = await sharpInstance
-            .png({ 
-                quality: 100, 
-                compressionLevel: 0, // No compression for maximum quality
-                adaptiveFiltering: true 
-            })
-            .toBuffer();
+        try {
+            // Use custom background - resize without cropping, maintain high quality
+            if (!customBackgroundBase64 || typeof customBackgroundBase64 !== "string") {
+                throw new Error("Invalid custom background base64 data");
+            }
+            
+            // Clean base64 string - handle various formats
+            let base64 = customBackgroundBase64.trim();
+            if (base64.includes(",")) {
+                base64 = base64.split(",")[1]; // Extract base64 part after comma
+            } else {
+                // Remove data URL prefix if present
+                base64 = base64.replace(/^data:image\/\w+;base64,/, "");
+            }
+            
+            if (!base64 || base64.length === 0) {
+                throw new Error("Empty base64 string");
+            }
+            
+            const customBgBuffer = Buffer.from(base64, "base64");
+            
+            if (customBgBuffer.length === 0) {
+                throw new Error("Failed to decode base64 image");
+            }
+            
+            // Get original image dimensions
+            const metadata = await sharp(customBgBuffer).metadata();
+            const originalWidth = metadata.width;
+            const originalHeight = metadata.height;
+            
+            if (!originalWidth || !originalHeight || originalWidth <= 0 || originalHeight <= 0) {
+                throw new Error(`Could not read image dimensions: ${originalWidth}x${originalHeight}`);
+            }
+            
+            // Calculate scale to fit within canvas without cropping (maintain aspect ratio)
+            const scaleX = bgTotalW / originalWidth;
+            const scaleY = HEIGHT / originalHeight;
+            const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit both dimensions
+            
+            const newWidth = Math.round(originalWidth * scale);
+            const newHeight = Math.round(originalHeight * scale);
+            
+            // Calculate padding to center the image (ensure non-negative values)
+            const padTop = Math.max(0, Math.floor((HEIGHT - newHeight) / 2));
+            const padBottom = Math.max(0, HEIGHT - newHeight - padTop);
+            const padLeft = Math.max(0, Math.floor((bgTotalW - newWidth) / 2));
+            const padRight = Math.max(0, bgTotalW - newWidth - padLeft);
+            
+            // Resize with high quality (Lanczos3 kernel for sharp resampling) and add black padding
+            let sharpInstance = sharp(customBgBuffer)
+                .resize(newWidth, newHeight, {
+                    fit: "inside", // Fit inside dimensions without cropping
+                    kernel: sharp.kernel.lanczos3, // High quality resampling (no blur)
+                    withoutEnlargement: false, // Allow upscaling if needed
+                });
+            
+            // Only extend if padding is needed
+            if (padTop > 0 || padBottom > 0 || padLeft > 0 || padRight > 0) {
+                sharpInstance = sharpInstance.extend({
+                    top: padTop,
+                    bottom: padBottom,
+                    left: padLeft,
+                    right: padRight,
+                    background: { r: 0, g: 0, b: 0, alpha: 1 } // Black padding
+                });
+            }
+            
+            bgResized = await sharpInstance
+                .png({ 
+                    quality: 100, 
+                    compressionLevel: 0, // No compression for maximum quality
+                    adaptiveFiltering: true 
+                })
+                .toBuffer();
         } catch (error) {
             console.error("Error processing custom background:", error);
-            // Fallback: use contain fit without extend
-            const base64 = customBackgroundBase64.replace(/^data:image\/\w+;base64,/, "");
-            const customBgBuffer = Buffer.from(base64, "base64");
-            bgResized = await sharp(customBgBuffer)
-                .resize(bgTotalW, HEIGHT, {
-                    fit: "contain",
-                    background: { r: 0, g: 0, b: 0, alpha: 1 }
-                })
-                .png()
-                .toBuffer();
+            console.error("Error details:", error instanceof Error ? error.message : String(error));
+            
+            try {
+                // Fallback: use contain fit without extend
+                let base64 = customBackgroundBase64.trim();
+                if (base64.includes(",")) {
+                    base64 = base64.split(",")[1];
+                } else {
+                    base64 = base64.replace(/^data:image\/\w+;base64,/, "");
+                }
+                
+                const customBgBuffer = Buffer.from(base64, "base64");
+                
+                if (customBgBuffer.length === 0) {
+                    throw new Error("Failed to decode base64 in fallback");
+                }
+                
+                bgResized = await sharp(customBgBuffer)
+                    .resize(bgTotalW, HEIGHT, {
+                        fit: "contain",
+                        background: { r: 0, g: 0, b: 0, alpha: 1 }
+                    })
+                    .png()
+                    .toBuffer();
+            } catch (fallbackError) {
+                console.error("Fallback also failed:", fallbackError);
+                throw new Error(`Failed to process custom background image: ${error instanceof Error ? error.message : String(error)}`);
+            }
         }
     } else {
         // Use template background - check if template file exists

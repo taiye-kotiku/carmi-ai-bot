@@ -330,15 +330,38 @@ export async function createCarouselWithEngine(
     // Load and prepare wide background
     let bgResized: Buffer;
     if (customBackgroundBase64) {
-        // Use custom background - resize to fit (contain) so whole image is visible
+        // Use custom background - resize without cropping, maintain quality
         const base64 = customBackgroundBase64.replace(/^data:image\/\w+;base64,/, "");
         const customBgBuffer = Buffer.from(base64, "base64");
+        
+        // Get original image dimensions
+        const metadata = await sharp(customBgBuffer).metadata();
+        const originalWidth = metadata.width || bgTotalW;
+        const originalHeight = metadata.height || HEIGHT;
+        
+        // Calculate scale to fit within canvas without cropping
+        const scaleX = bgTotalW / originalWidth;
+        const scaleY = HEIGHT / originalHeight;
+        const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit both dimensions
+        
+        const newWidth = Math.round(originalWidth * scale);
+        const newHeight = Math.round(originalHeight * scale);
+        
+        // Resize with high quality (no blur) and center on canvas
         bgResized = await sharp(customBgBuffer)
-            .resize(bgTotalW, HEIGHT, { 
-                fit: "contain", // Changed from "cover" to "contain" to show whole image
-                background: { r: 0, g: 0, b: 0, alpha: 1 } // Black background for letterboxing
+            .resize(newWidth, newHeight, {
+                fit: "inside", // Fit inside dimensions without cropping
+                kernel: sharp.kernel.lanczos3, // High quality resampling
+                withoutEnlargement: false,
             })
-            .png()
+            .extend({
+                top: Math.floor((HEIGHT - newHeight) / 2),
+                bottom: Math.ceil((HEIGHT - newHeight) / 2),
+                left: Math.floor((bgTotalW - newWidth) / 2),
+                right: Math.ceil((bgTotalW - newWidth) / 2),
+                background: { r: 0, g: 0, b: 0, alpha: 1 } // Black padding
+            })
+            .png({ quality: 100, compressionLevel: 0 }) // Maximum quality
             .toBuffer();
     } else {
         // Use template background - keep cover for templates

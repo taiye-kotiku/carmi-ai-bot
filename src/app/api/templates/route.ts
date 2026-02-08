@@ -15,13 +15,20 @@ export async function GET() {
         }
         
         const files = fs.readdirSync(templatesDir).filter(f => f.endsWith(".jpg") || f.endsWith(".png"));
-        const allTemplates = [...Object.values(CAROUSEL_TEMPLATES)];
+        const allTemplates: typeof CAROUSEL_TEMPLATES[string][] = [];
         const registeredIds = new Set(Object.keys(CAROUSEL_TEMPLATES));
+        const processedIds = new Set<string>();
+        
+        // First add registered templates
+        for (const template of Object.values(CAROUSEL_TEMPLATES)) {
+            allTemplates.push(template);
+            processedIds.add(template.id);
+        }
         
         // Auto-register missing templates
         for (const file of files) {
             const id = file.replace(/\.(jpg|png)$/, "");
-            if (registeredIds.has(id)) continue;
+            if (processedIds.has(id)) continue;
             
             // Determine category based on filename patterns
             let category: "tech" | "gradient" | "office" | "abstract" | "dark" | "nature" = "abstract";
@@ -29,18 +36,23 @@ export async function GET() {
             
             if (id.startsWith("T_")) {
                 const num = parseInt(id.replace("T_", ""));
-                if (num >= 96 && num <= 144) {
-                    category = "nature";
-                    style = `Nature ${num - 95}`;
-                } else if (num >= 20 && num <= 30) {
-                    category = "gradient";
-                    style = `Gradient ${num}`;
-                } else if (num >= 60 && num <= 80) {
-                    category = "tech";
-                    style = `Tech ${num}`;
-                } else {
-                    category = "abstract";
-                    style = `Abstract ${num}`;
+                if (!isNaN(num)) {
+                    if (num >= 96 && num <= 144) {
+                        category = "nature";
+                        style = `Nature ${num - 95}`;
+                    } else if (num >= 20 && num <= 30) {
+                        category = "gradient";
+                        style = `Gradient ${num}`;
+                    } else if (num >= 60 && num <= 80) {
+                        category = "tech";
+                        style = `Tech ${num}`;
+                    } else if (num >= 6 && num <= 18) {
+                        category = "dark";
+                        style = `Dark ${num}`;
+                    } else {
+                        category = "abstract";
+                        style = `Abstract ${num}`;
+                    }
                 }
             } else if (id.startsWith("b")) {
                 category = "abstract";
@@ -56,7 +68,10 @@ export async function GET() {
                 y_pos: 675,
                 category,
             });
+            processedIds.add(id);
         }
+        
+        console.log(`Loaded ${allTemplates.length} templates (${Object.keys(CAROUSEL_TEMPLATES).length} registered + ${allTemplates.length - Object.keys(CAROUSEL_TEMPLATES).length} auto-registered)`);
         
         return NextResponse.json({ templates: allTemplates });
     } catch (error) {

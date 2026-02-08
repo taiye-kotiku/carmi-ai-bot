@@ -15,32 +15,32 @@ const PRESET_PROMPTS = [
     {
         label: "צילום מקצועי",
         prompt:
-            "professional headshot photo, studio lighting, clean neutral background, sharp focus, high quality",
+            "תמונת פורטרט מקצועית, תאורת סטודיו, רקע נייטרלי נקי, פוקוס חד, איכות גבוהה",
     },
     {
         label: "סגנון עסקי",
         prompt:
-            "professional business portrait, wearing a suit, office background, confident pose, corporate photography",
+            "פורטרט עסקי מקצועי, לבוש בחליפה, רקע משרד, תנוחה בטוחה, צילום קורפורטיבי",
     },
     {
         label: "חוף הים",
         prompt:
-            "casual photo at the beach, golden hour sunlight, ocean background, relaxed smile, natural lighting",
+            "צילום קז'ואל בחוף, אור שעת הזהב, רקע אוקיינוס, חיוך רגוע, תאורה טבעית",
     },
     {
         label: "סגנון אמנותי",
         prompt:
-            "artistic portrait, dramatic lighting, cinematic mood, shallow depth of field, moody atmosphere",
+            "פורטרט אמנותי, תאורה דרמטית, מצב רוח קולנועי, עומק שדה רדוד, אווירה מרשימה",
     },
     {
         label: "חג מולד",
         prompt:
-            "festive holiday portrait, christmas decorations background, warm cozy lighting, wearing winter clothes, cheerful",
+            "פורטרט חגיגי, רקע קישוטי חג מולד, תאורה חמה ונעימה, לבוש בגדי חורף, עליז",
     },
     {
         label: "ספורט",
         prompt:
-            "athletic portrait, wearing sports clothing, gym or outdoor setting, energetic pose, dynamic lighting",
+            "פורטרט אתלטי, לבוש בגדי ספורט, סביבת חדר כושר או חוץ, תנוחה אנרגטית, תאורה דינמית",
     },
 ];
 

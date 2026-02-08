@@ -478,9 +478,15 @@ export async function createCarouselWithEngine(
     // Apply background effects - reduce blur for custom backgrounds to maintain sharpness
     const blurRadius = useStaticBackground ? 0 : 5; // No blur for custom backgrounds
     const opacity = useStaticBackground ? 120 : 165; // Lighter overlay for custom backgrounds
+    
+    // Verify background dimensions before applying effects
+    const bgMetadata = await sharp(bgResized).metadata();
+    console.log(`Background dimensions: ${bgMetadata.width}x${bgMetadata.height}, useStaticBackground: ${useStaticBackground}`);
+    
     const bgWithEffects = await applyBackgroundEffects(bgResized, opacity, blurRadius, 18);
 
     const bgImage = await loadImage(bgWithEffects);
+    console.log(`Loaded background image: ${bgImage.width}x${bgImage.height}`);
     const images: Buffer[] = [];
 
     // Load logo if provided
@@ -521,13 +527,24 @@ export async function createCarouselWithEngine(
         // Draw background - static for custom backgrounds, parallax for templates
         if (useStaticBackground) {
             // For custom backgrounds: draw the same image for all slides (no movement)
-            ctx.drawImage(
-                bgImage,
-                0,
-                0,
-                WIDTH,
-                HEIGHT
-            );
+            // Ensure we're drawing the correct portion of the image
+            try {
+                ctx.drawImage(
+                    bgImage,
+                    0,
+                    0,
+                    Math.min(bgImage.width, WIDTH),
+                    Math.min(bgImage.height, HEIGHT),
+                    0,
+                    0,
+                    WIDTH,
+                    HEIGHT
+                );
+            } catch (drawError) {
+                console.error(`Error drawing static background on slide ${i}:`, drawError);
+                // Fallback: try simple draw
+                ctx.drawImage(bgImage, 0, 0, WIDTH, HEIGHT);
+            }
         } else {
             // For templates: use parallax effect (each slide gets different portion)
             const left = i * SHIFT_PX;

@@ -320,10 +320,45 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
 
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error("Carousel processing error:", error);
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "failed", error: errorMessage })
-            .eq("id", jobId);
+        const errorStack = error instanceof Error ? error.stack : String(error);
+        console.error(`[Carousel ${jobId}] Processing error:`, errorMessage);
+        console.error(`[Carousel ${jobId}] Stack:`, errorStack);
+        
+        try {
+            await supabaseAdmin
+                .from("jobs")
+                .update({ 
+                    status: "failed", 
+                    error: errorMessage,
+                    progress: 0
+                })
+                .eq("id", jobId);
+            
+            // Refund credits on failure
+            const { data: currentCredits } = await supabaseAdmin
+                .from("credits")
+                .select("carousel_credits")
+                .eq("user_id", userId)
+                .single();
+            
+            if (currentCredits) {
+                const refundedBalance = (currentCredits.carousel_credits || 0) + options.requiredCredits;
+                await supabaseAdmin
+                    .from("credits")
+                    .update({ carousel_credits: refundedBalance })
+                    .eq("user_id", userId);
+                
+                await supabaseAdmin.from("credit_transactions").insert({
+                    user_id: userId,
+                    credit_type: "carousel",
+                    amount: options.requiredCredits,
+                    balance_after: refundedBalance,
+                    reason: "carousel_generation_failed_refund",
+                    related_id: jobId
+                });
+            }
+        } catch (dbError) {
+            console.error(`[Carousel ${jobId}] Failed to update job status:`, dbError);
+        }
     }
 }

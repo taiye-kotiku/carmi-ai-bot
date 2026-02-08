@@ -1,7 +1,4 @@
 // src/lib/carousel/templates.ts
-import fs from "fs";
-import path from "path";
-
 export interface CarouselTemplate {
     id: string;
     style: string;
@@ -201,66 +198,8 @@ export const CAROUSEL_TEMPLATES: Record<string, CarouselTemplate> = {
     "b6": { id: "b6", style: "בניין 6", file: "b6.jpg", text_color: "#FFFFFF", accent: "#F8FF00", y_pos: 400, category: "abstract" },
 };
 
-// Auto-register templates from folder that aren't in CAROUSEL_TEMPLATES
-function getAutoRegisteredTemplates(): CarouselTemplate[] {
-    const templatesDir = path.join(process.cwd(), "public/carousel-templates");
-    if (!fs.existsSync(templatesDir)) return [];
-    
-    const files = fs.readdirSync(templatesDir).filter(f => f.endsWith(".jpg") || f.endsWith(".png"));
-    const autoTemplates: CarouselTemplate[] = [];
-    
-    for (const file of files) {
-        const id = file.replace(/\.(jpg|png)$/, "");
-        // Skip if already registered
-        if (CAROUSEL_TEMPLATES[id]) continue;
-        
-        // Determine category based on filename patterns
-        let category: CarouselTemplate["category"] = "abstract";
-        let style = id;
-        
-        if (id.startsWith("T_")) {
-            const num = parseInt(id.replace("T_", ""));
-            if (num >= 96 && num <= 144) {
-                category = "nature"; // Nature backgrounds we downloaded
-                style = `Nature ${num - 95}`;
-            } else if (num >= 20 && num <= 30) {
-                category = "gradient";
-                style = `Gradient ${num}`;
-            } else if (num >= 60 && num <= 80) {
-                category = "tech";
-                style = `Tech ${num}`;
-            } else {
-                category = "abstract";
-                style = `Abstract ${num}`;
-            }
-        } else if (id.startsWith("b")) {
-            category = "abstract";
-            style = `Building ${id.replace("b", "")}`;
-        }
-        
-        autoTemplates.push({
-            id,
-            style,
-            file,
-            text_color: category === "dark" ? "#FFFFFF" : "#1A1A1A",
-            accent: category === "dark" ? "#60A5FA" : "#2563EB",
-            y_pos: 675,
-            category,
-        });
-    }
-    
-    return autoTemplates;
-}
-
-// Merge registered and auto-registered templates
-function getAllTemplates(): CarouselTemplate[] {
-    const registered = Object.values(CAROUSEL_TEMPLATES);
-    const autoRegistered = getAutoRegisteredTemplates();
-    return [...registered, ...autoRegistered];
-}
-
 export function getTemplatesByCategory(category?: string): CarouselTemplate[] {
-    const templates = getAllTemplates();
+    const templates = Object.values(CAROUSEL_TEMPLATES);
     if (!category || category === "all") return templates;
     return templates.filter((t) => t.category === category);
 }

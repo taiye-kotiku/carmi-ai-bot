@@ -329,7 +329,11 @@ export async function createCarouselWithEngine(
 
     // Load and prepare wide background
     let bgResized: Buffer;
+    let useStaticBackground = false; // Flag to indicate if we should use static (no parallax) background
+    
     if (customBackgroundBase64) {
+        useStaticBackground = true; // Custom backgrounds should not move
+        
         try {
             // Use custom background - resize without cropping, maintain high quality
             if (!customBackgroundBase64 || typeof customBackgroundBase64 !== "string") {
@@ -364,8 +368,9 @@ export async function createCarouselWithEngine(
                 throw new Error(`Could not read image dimensions: ${originalWidth}x${originalHeight}`);
             }
             
+            // For custom backgrounds, resize to exact canvas size (WIDTH x HEIGHT) - no parallax needed
             // Calculate scale to fit within canvas without cropping (maintain aspect ratio)
-            const scaleX = bgTotalW / originalWidth;
+            const scaleX = WIDTH / originalWidth;
             const scaleY = HEIGHT / originalHeight;
             const scale = Math.min(scaleX, scaleY); // Use smaller scale to fit both dimensions
             
@@ -375,16 +380,21 @@ export async function createCarouselWithEngine(
             // Calculate padding to center the image (ensure non-negative values)
             const padTop = Math.max(0, Math.floor((HEIGHT - newHeight) / 2));
             const padBottom = Math.max(0, HEIGHT - newHeight - padTop);
-            const padLeft = Math.max(0, Math.floor((bgTotalW - newWidth) / 2));
-            const padRight = Math.max(0, bgTotalW - newWidth - padLeft);
+            const padLeft = Math.max(0, Math.floor((WIDTH - newWidth) / 2));
+            const padRight = Math.max(0, WIDTH - newWidth - padLeft);
             
             // Resize with high quality (Lanczos3 kernel for sharp resampling) and add black padding
-            let sharpInstance = sharp(customBgBuffer)
-                .resize(newWidth, newHeight, {
+            // Use exact dimensions to avoid any blur from resampling
+            let sharpInstance = sharp(customBgBuffer);
+            
+            // Only resize if needed (if image is larger than canvas or aspect ratio differs)
+            if (originalWidth !== WIDTH || originalHeight !== HEIGHT) {
+                sharpInstance = sharpInstance.resize(newWidth, newHeight, {
                     fit: "inside", // Fit inside dimensions without cropping
                     kernel: sharp.kernel.lanczos3, // High quality resampling (no blur)
                     withoutEnlargement: false, // Allow upscaling if needed
                 });
+            }
             
             // Only extend if padding is needed
             if (padTop > 0 || padBottom > 0 || padLeft > 0 || padRight > 0) {
@@ -397,11 +407,13 @@ export async function createCarouselWithEngine(
                 });
             }
             
+            // Use highest quality PNG settings to prevent blur
             bgResized = await sharpInstance
                 .png({ 
                     quality: 100, 
                     compressionLevel: 0, // No compression for maximum quality
-                    adaptiveFiltering: true 
+                    adaptiveFiltering: true,
+                    effort: 10 // Maximum effort for best quality
                 })
                 .toBuffer();
         } catch (error) {
@@ -409,7 +421,7 @@ export async function createCarouselWithEngine(
             console.error("Error details:", error instanceof Error ? error.message : String(error));
             
             try {
-                // Fallback: use contain fit without extend
+                // Fallback: use contain fit without extend (static background, no parallax)
                 let base64 = customBackgroundBase64.trim();
                 if (base64.includes(",")) {
                     base64 = base64.split(",")[1];
@@ -424,11 +436,16 @@ export async function createCarouselWithEngine(
                 }
                 
                 bgResized = await sharp(customBgBuffer)
-                    .resize(bgTotalW, HEIGHT, {
+                    .resize(WIDTH, HEIGHT, {  // Use WIDTH instead of bgTotalW for static background
                         fit: "contain",
-                        background: { r: 0, g: 0, b: 0, alpha: 1 }
+                        background: { r: 0, g: 0, b: 0, alpha: 1 },
+                        kernel: sharp.kernel.lanczos3 // High quality
                     })
-                    .png()
+                    .png({
+                        quality: 100,
+                        compressionLevel: 0,
+                        adaptiveFiltering: true
+                    })
                     .toBuffer();
             } catch (fallbackError) {
                 console.error("Fallback also failed:", fallbackError);
@@ -458,7 +475,10 @@ export async function createCarouselWithEngine(
             .toBuffer();
     }
 
-    const bgWithEffects = await applyBackgroundEffects(bgResized, 165, 5, 18);
+    // Apply background effects - reduce blur for custom backgrounds to maintain sharpness
+    const blurRadius = useStaticBackground ? 0 : 5; // No blur for custom backgrounds
+    const opacity = useStaticBackground ? 120 : 165; // Lighter overlay for custom backgrounds
+    const bgWithEffects = await applyBackgroundEffects(bgResized, opacity, blurRadius, 18);
 
     const bgImage = await loadImage(bgWithEffects);
     const images: Buffer[] = [];
@@ -495,22 +515,34 @@ export async function createCarouselWithEngine(
     }
 
     for (let i = 0; i < slides.length; i++) {
-        const left = i * SHIFT_PX;
         const canvas = createCanvas(WIDTH, HEIGHT);
         const ctx = canvas.getContext("2d");
 
-        // Draw cropped background (each slide gets different portion)
-        ctx.drawImage(
-            bgImage,
-            left,
-            0,
-            WIDTH,
-            HEIGHT,
-            0,
-            0,
-            WIDTH,
-            HEIGHT
-        );
+        // Draw background - static for custom backgrounds, parallax for templates
+        if (useStaticBackground) {
+            // For custom backgrounds: draw the same image for all slides (no movement)
+            ctx.drawImage(
+                bgImage,
+                0,
+                0,
+                WIDTH,
+                HEIGHT
+            );
+        } else {
+            // For templates: use parallax effect (each slide gets different portion)
+            const left = i * SHIFT_PX;
+            ctx.drawImage(
+                bgImage,
+                left,
+                0,
+                WIDTH,
+                HEIGHT,
+                0,
+                0,
+                WIDTH,
+                HEIGHT
+            );
+        }
 
         // Draw text (centered, adaptive)
         drawCleanText(

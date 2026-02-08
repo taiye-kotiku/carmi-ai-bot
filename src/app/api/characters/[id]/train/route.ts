@@ -1,12 +1,12 @@
 // src/app/api/characters/[id]/train/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { startLoraTraining } from "@/lib/services/modal";
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: { id: string } }
 ) {
     try {
         // ─── Auth ───
@@ -20,10 +20,11 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { id: characterId } = await params;
+        const characterId = params.id;
+        const admin = createAdminClient();
 
         // ─── Fetch character & verify ownership ───
-        const { data: character, error: fetchError } = await supabaseAdmin
+        const { data: character, error: fetchError } = await admin
             .from("characters")
             .select("*")
             .eq("id", characterId)
@@ -37,7 +38,6 @@ export async function POST(
             );
         }
 
-        // Check status
         if (character.status === "training") {
             return NextResponse.json(
                 { error: "Character is already being trained" },
@@ -45,22 +45,17 @@ export async function POST(
             );
         }
 
-        // Check images
         const imageUrls = character.image_urls || [];
-        const triggerWord = character.trigger_word || "TOK";
-
         if (imageUrls.length < 5) {
             return NextResponse.json(
-                {
-                    error: `Need at least 5 reference images. Currently have ${imageUrls.length}.`,
-                },
+                { error: `Need at least 5 reference images. Currently have ${imageUrls.length}.` },
                 { status: 400 }
             );
         }
 
         // ─── Check credits ───
-        const TRAINING_COST = 10; // image_credits cost for training
-        const { data: credits, error: creditsError } = await supabaseAdmin
+        const TRAINING_COST = 10;
+        const { data: credits, error: creditsError } = await admin
             .from("credits")
             .select("*")
             .eq("user_id", user.id)
@@ -75,22 +70,19 @@ export async function POST(
 
         if (credits.image_credits < TRAINING_COST) {
             return NextResponse.json(
-                {
-                    error: `Insufficient credits. Training costs ${TRAINING_COST} image credits. You have ${credits.image_credits}.`,
-                },
+                { error: `Insufficient credits. Training costs ${TRAINING_COST}. You have ${credits.image_credits}.` },
                 { status: 402 }
             );
         }
 
         // ─── Deduct credits ───
         const newBalance = credits.image_credits - TRAINING_COST;
-        await supabaseAdmin
+        await admin
             .from("credits")
             .update({ image_credits: newBalance })
             .eq("user_id", user.id);
 
-        // Log transaction
-        await supabaseAdmin.from("credit_transactions").insert({
+        await admin.from("credit_transactions").insert({
             user_id: user.id,
             credit_type: "image_credits",
             amount: -TRAINING_COST,
@@ -100,30 +92,64 @@ export async function POST(
         });
 
         // ─── Update character status ───
-        await supabaseAdmin
+        await admin
             .from("characters")
             .update({
                 status: "training",
                 training_started_at: new Date().toISOString(),
-                error_message: null, // Clear previous error
+                training_error: null,
             })
             .eq("id", characterId);
 
-        // ─── Optional training config from request body ───
+        // ─── Parse optional training config ───
         let trainingConfig: Record<string, number> = {};
         try {
             const body = await request.json();
-            trainingConfig = {
-                num_train_steps: body.num_train_steps,
-                learning_rate: body.learning_rate,
-                lora_rank: body.lora_rank,
-                resolution: body.resolution,
-            };
+            if (body && typeof body === "object") {
+                trainingConfig = {
+                    num_train_steps: body.num_train_steps,
+                    learning_rate: body.learning_rate,
+                    lora_rank: body.lora_rank,
+                    resolution: body.resolution,
+                };
+            }
         } catch {
-            // No body or invalid JSON — use defaults
+            // empty body is fine
         }
 
-        // ─── Start training on Modal ───
+        // ─── Log what we're about to do ───
+        const modalUrl = process.env.MODAL_TRAINING_URL;
+        console.log("[Train] MODAL_TRAINING_URL:", modalUrl);
+        console.log("[Train] Character:", characterId, character.name);
+        console.log("[Train] Images:", imageUrls.length);
+        console.log("[Train] Webhook URL:", `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/training-complete`);
+
+        if (!modalUrl) {
+            // Refund immediately
+            await admin
+                .from("credits")
+                .update({ image_credits: credits.image_credits })
+                .eq("user_id", user.id);
+            await admin.from("credit_transactions").insert({
+                user_id: user.id,
+                credit_type: "image_credits",
+                amount: TRAINING_COST,
+                balance_after: credits.image_credits,
+                reason: "training_refund_no_modal_url",
+                related_id: characterId,
+            });
+            await admin
+                .from("characters")
+                .update({ status: "failed", training_error: "MODAL_TRAINING_URL not configured" })
+                .eq("id", characterId);
+
+            return NextResponse.json(
+                { error: "Training service not configured. MODAL_TRAINING_URL is missing." },
+                { status: 500 }
+            );
+        }
+
+        // ─── Call Modal ───
         try {
             const result = await startLoraTraining({
                 characterId,
@@ -133,24 +159,21 @@ export async function POST(
             });
 
             if (!result.success) {
-                // Modal rejected immediately — refund and reset
-                await supabaseAdmin
+                await admin
                     .from("credits")
                     .update({ image_credits: credits.image_credits })
                     .eq("user_id", user.id);
-
-                await supabaseAdmin.from("credit_transactions").insert({
+                await admin.from("credit_transactions").insert({
                     user_id: user.id,
                     credit_type: "image_credits",
                     amount: TRAINING_COST,
                     balance_after: credits.image_credits,
-                    reason: "training_refund_immediate_failure",
+                    reason: "training_refund_modal_rejected",
                     related_id: characterId,
                 });
-
-                await supabaseAdmin
+                await admin
                     .from("characters")
-                    .update({ status: "failed", error_message: "Failed to start training" })
+                    .update({ status: "failed", training_error: result.errors?.join(", ") || "Modal rejected" })
                     .eq("id", characterId);
 
                 return NextResponse.json(
@@ -166,15 +189,17 @@ export async function POST(
                 config: result.config,
             });
         } catch (modalError) {
-            // Modal request failed — refund and reset
-            console.error("[Train] Modal request failed:", modalError);
+            // ─── THIS IS WHERE YOUR ERROR IS HAPPENING ───
+            const errorMessage = modalError instanceof Error ? modalError.message : String(modalError);
+            console.error("[Train] Modal request failed:", errorMessage);
+            console.error("[Train] Full error:", modalError);
 
-            await supabaseAdmin
+            // Refund
+            await admin
                 .from("credits")
                 .update({ image_credits: credits.image_credits })
                 .eq("user_id", user.id);
-
-            await supabaseAdmin.from("credit_transactions").insert({
+            await admin.from("credit_transactions").insert({
                 user_id: user.id,
                 credit_type: "image_credits",
                 amount: TRAINING_COST,
@@ -182,24 +207,28 @@ export async function POST(
                 reason: "training_refund_modal_error",
                 related_id: characterId,
             });
-
-            await supabaseAdmin
+            await admin
                 .from("characters")
                 .update({
                     status: "failed",
-                    error_message: modalError instanceof Error ? modalError.message : "Modal request failed",
+                    training_error: errorMessage,
                 })
                 .eq("id", characterId);
 
             return NextResponse.json(
-                { error: "Failed to connect to training service" },
+                {
+                    error: "Failed to connect to training service",
+                    details: errorMessage,
+                    modal_url: modalUrl,
+                },
                 { status: 502 }
             );
         }
     } catch (error) {
-        console.error("[Train] Unexpected error:", error);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("[Train] Unexpected error:", msg);
         return NextResponse.json(
-            { error: "Internal server error" },
+            { error: "Internal server error", details: msg },
             { status: 500 }
         );
     }

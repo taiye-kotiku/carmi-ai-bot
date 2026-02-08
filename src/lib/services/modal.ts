@@ -1,13 +1,6 @@
 // src/lib/services/modal.ts
-/**
- * Modal API client for FLUX LoRA training and inference.
- */
-
-const MODAL_TRAINING_URL =
-    process.env.MODAL_TRAINING_URL || process.env.MODAL_TRAIN_ENDPOINT_URL;
+const MODAL_TRAINING_URL = process.env.MODAL_TRAINING_URL;
 const MODAL_INFERENCE_URL = process.env.MODAL_INFERENCE_URL;
-
-// ─── Training ───
 
 interface StartTrainingParams {
     characterId: string;
@@ -36,19 +29,10 @@ export async function startLoraTraining(
     params: StartTrainingParams
 ): Promise<ModalTrainingResponse> {
     if (!MODAL_TRAINING_URL) {
-        throw new Error(
-            "MODAL_TRAINING_URL or MODAL_TRAIN_ENDPOINT_URL is not configured. " +
-                "Set it in Vercel/env to your Modal web endpoint URL."
-        );
+        throw new Error("MODAL_TRAINING_URL environment variable is not set");
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (!appUrl) {
-        throw new Error(
-            "NEXT_PUBLIC_APP_URL is not set. Required for webhook callbacks."
-        );
-    }
-    const webhookUrl = `${appUrl.replace(/\/$/, "")}/api/webhooks/training-complete`;
+    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/training-complete`;
 
     const body = {
         character_id: params.characterId,
@@ -61,28 +45,42 @@ export async function startLoraTraining(
         resolution: params.resolution ?? 1024,
     };
 
-    console.log("[Modal] Starting training:", {
-        character_id: params.characterId,
-        character_name: params.characterName,
-        num_images: params.referenceImageUrls.length,
-        webhook_url: webhookUrl,
-    });
+    console.log("[Modal] Calling:", MODAL_TRAINING_URL);
+    console.log("[Modal] Body:", JSON.stringify({
+        ...body,
+        reference_image_urls: `[${body.reference_image_urls.length} urls]`,
+    }));
 
-    const response = await fetch(MODAL_TRAINING_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-    });
+    try {
+        const response = await fetch(MODAL_TRAINING_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("[Modal] Training request failed:", response.status, errorText);
-        throw new Error(`Modal training request failed: ${response.status} - ${errorText}`);
+        console.log("[Modal] Response status:", response.status);
+
+        const responseText = await response.text();
+        console.log("[Modal] Response body:", responseText.slice(0, 500));
+
+        if (!response.ok) {
+            throw new Error(
+                `Modal returned ${response.status}: ${responseText.slice(0, 200)}`
+            );
+        }
+
+        try {
+            return JSON.parse(responseText);
+        } catch {
+            throw new Error(`Modal returned non-JSON: ${responseText.slice(0, 200)}`);
+        }
+    } catch (fetchError) {
+        if (fetchError instanceof Error) {
+            console.error("[Modal] Fetch error:", fetchError.message);
+            throw fetchError;
+        }
+        throw new Error(`Modal fetch failed: ${String(fetchError)}`);
     }
-
-    const result = await response.json();
-    console.log("[Modal] Training response:", result);
-    return result;
 }
 
 // ─── Inference ───
@@ -112,7 +110,7 @@ export async function generateWithLora(
     params: GenerateWithLoraParams
 ): Promise<ModalGenerationResult> {
     if (!MODAL_INFERENCE_URL) {
-        throw new Error("MODAL_INFERENCE_URL is not configured");
+        throw new Error("MODAL_INFERENCE_URL environment variable is not set");
     }
 
     const body = {
@@ -128,11 +126,8 @@ export async function generateWithLora(
         lora_scale: params.loraScale ?? 0.85,
     };
 
-    console.log("[Modal] Generating image:", {
-        prompt: params.prompt.slice(0, 80),
-        model_url: params.modelUrl.slice(0, 60) + "...",
-        trigger_word: params.triggerWord,
-    });
+    console.log("[Modal] Generating:", MODAL_INFERENCE_URL);
+    console.log("[Modal] Prompt:", params.prompt.slice(0, 80));
 
     const response = await fetch(MODAL_INFERENCE_URL, {
         method: "POST",
@@ -140,17 +135,12 @@ export async function generateWithLora(
         body: JSON.stringify(body),
     });
 
+    console.log("[Modal] Inference status:", response.status);
+
     if (!response.ok) {
         const errorText = await response.text();
-        console.error("[Modal] Inference failed:", response.status, errorText);
-        throw new Error(`Modal inference failed: ${response.status} - ${errorText}`);
+        throw new Error(`Modal inference ${response.status}: ${errorText.slice(0, 200)}`);
     }
 
-    const result = await response.json();
-    console.log("[Modal] Generation result:", {
-        success: result.success,
-        has_url: !!result.image_url,
-        seed: result.seed,
-    });
-    return result;
+    return response.json();
 }

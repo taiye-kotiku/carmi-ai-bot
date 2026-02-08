@@ -49,6 +49,7 @@ const CATEGORIES = [
     { value: "tech", label: "טכנולוגי" },
     { value: "office", label: "משרדי" },
     { value: "abstract", label: "בניינים" },
+    { value: "nature", label: "טבע" },
 ];
 
 const SLIDE_COUNTS = [3, 4, 5, 6, 7, 8];

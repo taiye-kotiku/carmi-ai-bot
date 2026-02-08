@@ -67,11 +67,17 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
             const path = require("path");
             const templatePathJpg = path.join(process.cwd(), "public/carousel-templates", `${templateId}.jpg`);
             const templatePathPng = path.join(process.cwd(), "public/carousel-templates", `${templateId}.png`);
-            const file = fs.existsSync(templatePathJpg) ? `${templateId}.jpg` : 
-                        fs.existsSync(templatePathPng) ? `${templateId}.png` : null;
+            
+            let file: string | null = null;
+            if (fs.existsSync(templatePathJpg)) {
+                file = `${templateId}.jpg`;
+            } else if (fs.existsSync(templatePathPng)) {
+                file = `${templateId}.png`;
+            }
             
             if (!file) {
-                throw new Error(`Template ${templateId} not found`);
+                console.error(`Template ${templateId} not found. Checked:`, { templatePathJpg, templatePathPng });
+                throw new Error(`Template ${templateId} not found in public/carousel-templates`);
             }
             
             // Auto-create template entry

@@ -46,48 +46,67 @@ Rules:
 Return ONLY a JSON array of strings, one per slide. No markdown, no explanation.
 Example: ["הנה *ההזדמנות* שלך", "Slide 2 text", "Slide 3 text"]`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    console.log("Gemini response:", responseText.substring(0, 200));
-
-    // Parse JSON from response
     try {
-        // Clean up response - remove markdown code blocks if present
-        let cleanedResponse = responseText
-            .replace(/```json\n?/g, "")
-            .replace(/```\n?/g, "")
-            .replace(/^\[/, "[") // Ensure starts with [
-            .replace(/\]$/, "]") // Ensure ends with ]
-            .trim();
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        console.log("Gemini response:", responseText.substring(0, 200));
 
-        // Try to extract JSON array if wrapped in text
-        const jsonMatch = cleanedResponse.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-            cleanedResponse = jsonMatch[0];
+        // Parse JSON from response
+        try {
+            // Clean up response - remove markdown code blocks if present
+            let cleanedResponse = responseText
+                .replace(/```json\n?/g, "")
+                .replace(/```\n?/g, "")
+                .trim();
+
+            // Try to extract JSON array if wrapped in text
+            const jsonMatch = cleanedResponse.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                cleanedResponse = jsonMatch[0];
+            } else {
+                // If no array found, try to find array-like structure
+                const arrayLikeMatch = cleanedResponse.match(/\[.*\]/s);
+                if (arrayLikeMatch) {
+                    cleanedResponse = arrayLikeMatch[0];
+                }
+            }
+
+            if (!cleanedResponse.startsWith("[")) {
+                throw new Error("Response does not contain a JSON array");
+            }
+
+            const slides = JSON.parse(cleanedResponse);
+
+            if (!Array.isArray(slides)) {
+                console.error("Response is not an array:", slides);
+                throw new Error("Response is not an array");
+            }
+
+            if (slides.length === 0) {
+                throw new Error("Generated empty slides array");
+            }
+
+            const finalSlides = slides.slice(0, slideCount).filter((s: any) => s && typeof s === "string" && s.trim().length > 0);
+            
+            if (finalSlides.length === 0) {
+                throw new Error("No valid slides after filtering");
+            }
+
+            console.log(`Generated ${finalSlides.length} slides`);
+            return finalSlides;
+        } catch (parseError) {
+            console.error("Failed to parse carousel content:", parseError);
+            console.error("Raw response:", responseText);
+            throw new Error(`Failed to parse carousel content: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
         }
-
-        const slides = JSON.parse(cleanedResponse);
-
-        if (!Array.isArray(slides)) {
-            console.error("Response is not an array:", slides);
-            throw new Error("Response is not an array");
+    } catch (apiError) {
+        console.error("Gemini API error:", apiError);
+        if (apiError instanceof Error) {
+            if (apiError.message.includes("API_KEY")) {
+                throw new Error("GOOGLE_AI_API_KEY חסר או לא תקין");
+            }
+            throw new Error(`Failed to generate carousel content: ${apiError.message}`);
         }
-
-        if (slides.length === 0) {
-            throw new Error("Generated empty slides array");
-        }
-
-        const finalSlides = slides.slice(0, slideCount).filter((s: any) => s && typeof s === "string" && s.trim().length > 0);
-        
-        if (finalSlides.length === 0) {
-            throw new Error("No valid slides after filtering");
-        }
-
-        console.log(`Generated ${finalSlides.length} slides`);
-        return finalSlides;
-    } catch (error) {
-        console.error("Failed to parse carousel content:", error);
-        console.error("Raw response:", responseText);
-        throw new Error(`Failed to generate carousel content: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Failed to generate carousel content: ${String(apiError)}`);
     }
 }

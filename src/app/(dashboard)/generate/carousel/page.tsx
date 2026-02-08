@@ -157,8 +157,6 @@ export default function CarouselGenerationPage() {
         e.target.value = "";
     }
 
-    const filteredTemplates = getTemplatesByCategory(categoryFilter);
-
     const hasLogo = !!logoUrl || !!logoBase64;
 
     async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {

@@ -53,6 +53,11 @@ const CATEGORIES = [
 
 const SLIDE_COUNTS = [3, 4, 5, 6, 7, 8];
 
+const FONT_FAMILIES = [
+    { value: "Assistant-Bold", label: "אסיסטנט מודגש (ברירת מחדל)", file: "Assistant-Bold.ttf" },
+    // More fonts can be added by placing .ttf files in public/fonts/
+];
+
 export default function CarouselGenerationPage() {
     const [topic, setTopic] = useState("");
     const [customSlides, setCustomSlides] = useState<string[]>([]);
@@ -64,6 +69,13 @@ export default function CarouselGenerationPage() {
     const [logoBase64, setLogoBase64] = useState<string | null>(null);
     const [logoPosition, setLogoPosition] = useState<string>("top-right");
     const [categoryFilter, setCategoryFilter] = useState("all");
+    
+    // Font customization states
+    const [fontFamily, setFontFamily] = useState("Assistant-Bold");
+    const [headlineFontSize, setHeadlineFontSize] = useState(95);
+    const [bodyFontSize, setBodyFontSize] = useState(70);
+    const [fontColor, setFontColor] = useState("#FFFFFF");
+    const [showFontSettings, setShowFontSettings] = useState(false);
 
     const [loading, setLoading] = useState(false);
     const [logoUploading, setLogoUploading] = useState(false);
@@ -227,6 +239,10 @@ export default function CarouselGenerationPage() {
                     logo_url: logoUrl || undefined,
                     logo_base64: logoBase64 || undefined,
                     logo_position: logoPosition,
+                    font_family: fontFamily,
+                    headline_font_size: headlineFontSize,
+                    body_font_size: bodyFontSize,
+                    font_color: fontColor,
                 }),
             });
 
@@ -392,6 +408,106 @@ export default function CarouselGenerationPage() {
                                                 {pos.label}
                                             </button>
                                         ))}
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* הגדרות פונט */}
+                    <Card>
+                        <CardContent className="p-6">
+                            <button
+                                onClick={() => setShowFontSettings(!showFontSettings)}
+                                className="w-full flex items-center justify-between text-base font-medium hover:text-pink-600 transition-colors"
+                            >
+                                <span>⚙️ הגדרות פונט וטקסט</span>
+                                <span className="text-sm text-gray-400">{showFontSettings ? "▼" : "▲"}</span>
+                            </button>
+                            
+                            {showFontSettings && (
+                                <div className="mt-4 space-y-4 border-t pt-4">
+                                    {/* בחירת פונט */}
+                                    <div>
+                                        <Label>משפחת פונט</Label>
+                                        <select
+                                            value={fontFamily}
+                                            onChange={(e) => setFontFamily(e.target.value)}
+                                            className="w-full mt-2 p-2 border rounded-lg bg-white"
+                                        >
+                                            {FONT_FAMILIES.map((font) => (
+                                                <option key={font.value} value={font.value}>
+                                                    {font.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* צבע טקסט */}
+                                    <div>
+                                        <Label>צבע טקסט</Label>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <input
+                                                type="color"
+                                                value={fontColor}
+                                                onChange={(e) => setFontColor(e.target.value)}
+                                                className="w-16 h-10 rounded border cursor-pointer"
+                                            />
+                                            <Input
+                                                type="text"
+                                                value={fontColor}
+                                                onChange={(e) => setFontColor(e.target.value)}
+                                                placeholder="#FFFFFF"
+                                                className="flex-1"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* גודל כותרת */}
+                                    <div>
+                                        <Label>גודל כותרת (טקסט מודגש *כותרת*)</Label>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <input
+                                                type="range"
+                                                min="60"
+                                                max="140"
+                                                step="5"
+                                                value={headlineFontSize}
+                                                onChange={(e) => setHeadlineFontSize(Number(e.target.value))}
+                                                className="flex-1"
+                                            />
+                                            <span className="w-12 text-center font-medium">{headlineFontSize}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            טקסט בין כוכביות (*טקסט*) יופיע בגודל זה
+                                        </p>
+                                    </div>
+
+                                    {/* גודל טקסט רגיל */}
+                                    <div>
+                                        <Label>גודל טקסט רגיל</Label>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <input
+                                                type="range"
+                                                min="40"
+                                                max="100"
+                                                step="5"
+                                                value={bodyFontSize}
+                                                onChange={(e) => setBodyFontSize(Number(e.target.value))}
+                                                className="flex-1"
+                                            />
+                                            <span className="w-12 text-center font-medium">{bodyFontSize}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* דוגמה */}
+                                    <div className="bg-gray-900 rounded-lg p-4 text-center" style={{ direction: "rtl" }}>
+                                        <p style={{ color: fontColor, fontSize: `${bodyFontSize / 4}px` }}>
+                                            זהו טקסט רגיל בגודל {bodyFontSize}
+                                        </p>
+                                        <p style={{ color: fontColor, fontSize: `${headlineFontSize / 4}px`, fontWeight: "bold", marginTop: "8px" }}>
+                                            זו כותרת מודגשת בגודל {headlineFontSize}
+                                        </p>
                                     </div>
                                 </div>
                             )}

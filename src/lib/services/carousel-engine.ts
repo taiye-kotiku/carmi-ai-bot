@@ -32,6 +32,9 @@ export interface CarouselEngineOptions {
     logoPosition?: LogoPosition;
     accentColor?: string;
     textColor?: string;
+    fontFamily?: string;
+    headlineFontSize?: number;
+    bodyFontSize?: number;
 }
 
 function getLogoPosition(
@@ -105,13 +108,16 @@ function drawCleanText(
     y: number,
     defaultColor: string,
     highlightColor: string,
-    fontPath: string
+    fontPath: string,
+    headlineFontSize?: number,
+    bodyFontSize?: number
 ) {
     const maxWidth = WIDTH - MARGIN * 2.5;
     const maxHeight = HEIGHT * 0.5;
 
-    let currentFontSize = 95;
+    let currentFontSize = bodyFontSize || 95;
     const minFontSize = 40;
+    const highlightFontSize = headlineFontSize || currentFontSize;
 
     ctx.direction = "rtl";
     ctx.textAlign = "right";
@@ -154,15 +160,21 @@ function drawCleanText(
 
     for (const line of lines) {
         const parts = line.split("*");
-        const lineSegments: { text: string; color: string }[] = [];
+        const lineSegments: { text: string; color: string; isHighlight: boolean }[] = [];
         for (let i = 0; i < parts.length; i++) {
             if (!parts[i]) continue;
-            const color = i % 2 !== 0 ? highlightColor : defaultColor;
-            lineSegments.push({ text: parts[i], color });
+            const isHighlight = i % 2 !== 0;
+            const color = isHighlight ? highlightColor : defaultColor;
+            lineSegments.push({ text: parts[i], color, isHighlight });
         }
 
-        const fullCleanLine = lineSegments.map((s) => s.text).join("");
-        const totalLineW = ctx.measureText(fullCleanLine).width;
+        // Calculate total width with mixed font sizes
+        let totalLineW = 0;
+        for (const seg of lineSegments) {
+            const fontSize = seg.isHighlight ? highlightFontSize : currentFontSize;
+            ctx.font = `bold ${fontSize}px CarouselFont`;
+            totalLineW += ctx.measureText(seg.text).width;
+        }
         const startX = x + totalLineW / 2; // RTL: anchor at right edge
 
         // Draw each segment (logical order = right-to-left for Hebrew)
@@ -172,11 +184,13 @@ function drawCleanText(
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
         let offsetX = 0;
+        const maxSegmentFontSize = Math.max(...lineSegments.map(s => s.isHighlight ? highlightFontSize : currentFontSize));
         for (const seg of lineSegments) {
             ctx.fillStyle = seg.color;
-            ctx.font = `${currentFontSize}px CarouselFont`;
+            const fontSize = seg.isHighlight ? highlightFontSize : currentFontSize;
+            ctx.font = `bold ${fontSize}px CarouselFont`;
             const w = ctx.measureText(seg.text).width;
-            ctx.fillText(seg.text, startX - offsetX, currentY + currentFontSize / 2);
+            ctx.fillText(seg.text, startX - offsetX, currentY + maxSegmentFontSize / 2);
             offsetX += w;
         }
         ctx.shadowColor = "transparent";
@@ -184,7 +198,7 @@ function drawCleanText(
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
 
-        currentY += currentFontSize + lineSpacing;
+        currentY += maxSegmentFontSize + lineSpacing;
     }
 }
 
@@ -244,13 +258,20 @@ export async function createCarouselWithEngine(
         logoPosition = "top-right",
         accentColor = template.accent,
         textColor = template.text_color,
+        fontFamily,
+        headlineFontSize,
+        bodyFontSize,
     } = options;
 
-    const defaultFontPath = path.join(
-        process.cwd(),
-        "public/fonts/Assistant-Bold.ttf"
-    );
-    const fontPath = customFontPath || defaultFontPath;
+    // Determine font path based on fontFamily or customFontPath
+    let fontPath: string;
+    if (customFontPath) {
+        fontPath = customFontPath;
+    } else if (fontFamily) {
+        fontPath = path.join(process.cwd(), `public/fonts/${fontFamily}.ttf`);
+    } else {
+        fontPath = path.join(process.cwd(), "public/fonts/Assistant-Bold.ttf");
+    }
 
     if (!fs.existsSync(fontPath)) {
         throw new Error(`Font not found: ${fontPath}`);
@@ -331,7 +352,9 @@ export async function createCarouselWithEngine(
             HEIGHT / 2,
             textColor,
             HIGHLIGHT_COLOR,
-            fontPath
+            fontPath,
+            headlineFontSize,
+            bodyFontSize
         );
 
         // Draw logo

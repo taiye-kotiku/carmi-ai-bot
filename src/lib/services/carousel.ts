@@ -18,6 +18,10 @@ interface GenerateCarouselOptions {
     brandColor?: string;
     logoPosition?: LogoPosition;
     fontPath?: string;
+    fontFamily?: string;
+    headlineFontSize?: number;
+    bodyFontSize?: number;
+    fontColor?: string;
 }
 
 interface CarouselResult {
@@ -34,6 +38,10 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         brandColor,
         logoPosition = "top-right",
         fontPath,
+        fontFamily,
+        headlineFontSize,
+        bodyFontSize,
+        fontColor,
     } = options;
 
     const template = CAROUSEL_TEMPLATES[templateId];
@@ -64,7 +72,10 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         logoBuffer,
         logoPosition,
         accentColor,
-        textColor: template.text_color,
+        textColor: fontColor || template.text_color,
+        fontFamily,
+        headlineFontSize,
+        bodyFontSize,
     });
 
     return { images, template };

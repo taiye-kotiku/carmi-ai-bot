@@ -32,6 +32,10 @@ export async function POST(req: Request) {
             logo_url: customLogoUrl,
             logo_base64: logoBase64,
             logo_position = "top-right",
+            font_family,
+            headline_font_size,
+            body_font_size,
+            font_color,
         } = body;
 
         // Validate
@@ -106,6 +110,10 @@ export async function POST(req: Request) {
             brandColor,
             logoPosition,
             requiredCredits,
+            fontFamily: font_family,
+            headlineFontSize: headline_font_size,
+            bodyFontSize: body_font_size,
+            fontColor: font_color,
         });
 
         return NextResponse.json({ jobId });
@@ -126,6 +134,10 @@ interface ProcessOptions {
     brandColor?: string;
     logoPosition?: string;
     requiredCredits: number;
+    fontFamily?: string;
+    headlineFontSize?: number;
+    bodyFontSize?: number;
+    fontColor?: string;
 }
 
 async function processCarousel(jobId: string, userId: string, options: ProcessOptions) {
@@ -169,6 +181,10 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
             logoBase64: options.logoBase64,
             brandColor: options.brandColor,
             logoPosition: options.logoPosition as any,
+            fontFamily: options.fontFamily,
+            headlineFontSize: options.headlineFontSize,
+            bodyFontSize: options.bodyFontSize,
+            fontColor: options.fontColor,
         });
 
         await supabaseAdmin

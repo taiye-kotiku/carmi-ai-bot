@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Loader2, Download, Upload, Palette } from "lucide-react";
 import { toast } from "sonner";
 
@@ -12,6 +14,9 @@ export default function CartoonizePage() {
     const [resultUrl, setResultUrl] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [subjectDescription, setSubjectDescription] = useState("");
+    const [settingEnvironment, setSettingEnvironment] = useState("");
+    const [hobbyProfession, setHobbyProfession] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,6 +51,15 @@ export default function CartoonizePage() {
         try {
             const formData = new FormData();
             formData.append("image", selectedFile);
+            if (subjectDescription.trim()) {
+                formData.append("subject_description", subjectDescription.trim());
+            }
+            if (settingEnvironment.trim()) {
+                formData.append("setting_environment", settingEnvironment.trim());
+            }
+            if (hobbyProfession.trim()) {
+                formData.append("hobby_profession", hobbyProfession.trim());
+            }
 
             const response = await fetch("/api/generate/cartoonize", {
                 method: "POST",
@@ -82,6 +96,9 @@ export default function CartoonizePage() {
         setPreviewUrl(null);
         setResultUrl(null);
         setError(null);
+        setSubjectDescription("");
+        setSettingEnvironment("");
+        setHobbyProfession("");
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -150,6 +167,61 @@ export default function CartoonizePage() {
                                             התוצאה תופיע כאן
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {previewUrl && (
+                            <div className="space-y-4 pt-4 border-t">
+                                <div>
+                                    <Label htmlFor="subject_description" className="text-sm font-medium">
+                                        תיאור הדמות (אופציונלי)
+                                    </Label>
+                                    <Input
+                                        id="subject_description"
+                                        type="text"
+                                        placeholder="לדוגמה: גבר צעיר עם שיער שחור, חולצה כחולה"
+                                        value={subjectDescription}
+                                        onChange={(e) => setSubjectDescription(e.target.value)}
+                                        className="mt-1"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        תאר את הדמות בתמונה. אם לא תזין, המערכת תזהה אוטומטית.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="setting_environment" className="text-sm font-medium">
+                                        סביבה/רקע (אופציונלי)
+                                    </Label>
+                                    <Input
+                                        id="setting_environment"
+                                        type="text"
+                                        placeholder="לדוגמה: משרד מודרני, חוף ים, פארק ירוק"
+                                        value={settingEnvironment}
+                                        onChange={(e) => setSettingEnvironment(e.target.value)}
+                                        className="mt-1"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        תאר את הסביבה או הרקע הרצוי לקריקטורה.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="hobby_profession" className="text-sm font-medium">
+                                        תחביב/מקצוע (אופציונלי)
+                                    </Label>
+                                    <Input
+                                        id="hobby_profession"
+                                        type="text"
+                                        placeholder="לדוגמה: תכנות, צילום, מוזיקה, בישול"
+                                        value={hobbyProfession}
+                                        onChange={(e) => setHobbyProfession(e.target.value)}
+                                        className="mt-1"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        ציין תחביב או מקצוע שיוצג בקריקטורה.
+                                    </p>
                                 </div>
                             </div>
                         )}

@@ -44,6 +44,9 @@ export async function POST(req: Request) {
 
         const formData = await req.formData();
         const file = formData.get("image") as File | null;
+        const userSubjectDescription = formData.get("subject_description") as string | null;
+        const userSettingEnvironment = formData.get("setting_environment") as string | null;
+        const userHobbyProfession = formData.get("hobby_profession") as string | null;
 
         if (!file || !file.type.startsWith("image/")) {
             return NextResponse.json(
@@ -123,13 +126,18 @@ export async function POST(req: Request) {
 
         const info = extractInfo(imageDescription);
         
+        // Use user inputs if provided, otherwise use extracted values
+        const finalSubjectDescription = userSubjectDescription?.trim() || info.subjectDescription;
+        const finalSettingEnvironment = userSettingEnvironment?.trim() || info.setting;
+        const finalHobbyProfession = userHobbyProfession?.trim() || info.hobby;
+        
         // Build the caricature prompt using the template
         const caricaturePrompt = CARTOONIZE_PROMPT_TEMPLATE
-            .replace('[SUBJECT DESCRIPTION]', info.subjectDescription)
+            .replace('[SUBJECT DESCRIPTION]', finalSubjectDescription)
             .replace('[SPECIFIC FACIAL FEATURE]', info.facialFeature)
             .replace('[SPECIFIC EXPRESSION]', info.expression)
-            .replace('[SETTING/ENVIRONMENT]', info.setting)
-            .replace('[HOBBY/PROFESSION]', info.hobby)
+            .replace('[SETTING/ENVIRONMENT]', finalSettingEnvironment)
+            .replace('[HOBBY/PROFESSION]', finalHobbyProfession)
             .replace('[PROP 1]', info.prop1)
             .replace('[PROP 2]', info.prop2)
             .replace('[ART STYLE: e.g., 3D Pixar-inspired / Hand-drawn ink and watercolor / Sharp vector art]', '3D Pixar-inspired');

@@ -38,7 +38,7 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
 
         const validFiles = Array.from(files).filter((file) => {
             if (!file.type.startsWith("image/")) return false;
-            if (file.size > 10 * 1024 * 1024) return false; // 10MB max
+            if (file.size > 10 * 1024 * 1024) return false;
             return true;
         });
 
@@ -55,20 +55,23 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
             try {
                 const formData = new FormData();
                 formData.append("file", file);
-                formData.append("bucket", "character-images");
 
                 const res = await fetch("/api/upload", {
                     method: "POST",
                     body: formData,
                 });
 
+                const data = await res.json();
+
                 if (res.ok) {
-                    const data = await res.json();
+                    // Handle different response formats
                     if (data.url) {
                         newUrls.push(data.url);
+                    } else if (data.urls && data.urls[0]) {
+                        newUrls.push(data.urls[0]);
                     }
                 } else {
-                    console.error(`Upload failed for ${file.name}: ${res.status}`);
+                    console.error(`Upload failed for ${file.name}:`, data.error);
                 }
             } catch (err) {
                 console.error(`Upload error for ${file.name}:`, err);
@@ -78,17 +81,17 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
             setUploadProgress(Math.round((completed / validFiles.length) * 100));
         }
 
-        setUploadedUrls((prev) => [...prev, ...newUrls]);
+        if (newUrls.length > 0) {
+            setUploadedUrls((prev) => [...prev, ...newUrls]);
+        }
+
         setUploading(false);
         setUploadProgress(0);
 
         if (newUrls.length < validFiles.length) {
-            setError(
-                `${newUrls.length} מתוך ${validFiles.length} תמונות הועלו בהצלחה`
-            );
+            setError(`${newUrls.length} מתוך ${validFiles.length} תמונות הועלו בהצלחה`);
         }
 
-        // Reset file input
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }

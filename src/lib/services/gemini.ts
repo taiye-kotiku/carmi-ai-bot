@@ -12,7 +12,7 @@ export async function enhancePrompt(
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const systemPrompt = type === "image"
-            ? `Translate Hebrew to English if needed. Enhance for image generation with lighting, style, quality. Under 150 words. Return ONLY the prompt.`
+            ? `Translate Hebrew to English if needed. Enhance for image generation with lighting, style, quality. Ensure the prompt specifies: realistic, photorealistic, high quality, professional photography, impressive, detailed, sharp focus, 1080x1080 square format. Under 150 words. Return ONLY the enhanced prompt.`
             : `Translate Hebrew to English if needed. Enhance for video with camera movement, mood, cinematic details. Under 100 words. Return ONLY the prompt.`;
 
         const result = await model.generateContent(`${systemPrompt}\n\nPrompt: ${prompt}`);
@@ -33,7 +33,19 @@ export async function generateImage(prompt: string): Promise<string[]> {
             } as any,
         });
 
-        const response = await model.generateContent(prompt);
+        // Add system prompt for high quality, realistic, 1080x1080px images
+        const systemPrompt = `Create a realistic, photorealistic, high-quality, professional, impressive image. 
+Technical requirements:
+- Square format: 1080x1080 pixels
+- Photorealistic and realistic style
+- High quality, professional photography
+- Sharp focus, detailed, impressive
+- No text, watermarks, or signatures
+- Professional lighting and composition
+
+User request: ${prompt}`;
+
+        const response = await model.generateContent(systemPrompt);
         const result = response.response;
 
         const images: string[] = [];

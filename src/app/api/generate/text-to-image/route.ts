@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { generateImage, enhancePrompt } from "@/lib/services/gemini";
+import sharp from "sharp";
 
 export async function POST(req: Request) {
     try {
@@ -91,18 +92,27 @@ async function processTextToImage(
             .update({ progress: 70 })
             .eq("id", jobId);
 
-        // Upload images to Supabase Storage
+        // Upload images to Supabase Storage (resize to 1080x1080px)
         const uploadedUrls: string[] = [];
 
         for (let i = 0; i < images.length; i++) {
             const base64Data = images[i].replace(/^data:image\/\w+;base64,/, "");
-            const buffer = Buffer.from(base64Data, "base64");
+            const originalBuffer = Buffer.from(base64Data, "base64");
+
+            // Resize to exactly 1080x1080px
+            const resizedBuffer = await sharp(originalBuffer)
+                .resize(1080, 1080, {
+                    fit: "cover", // Cover the entire area, may crop if needed
+                    position: "center",
+                })
+                .png({ quality: 100 })
+                .toBuffer();
 
             const fileName = `${userId}/${jobId}/image_${i + 1}.png`;
 
             const { error: uploadError } = await supabaseAdmin.storage
                 .from("content")
-                .upload(fileName, buffer, {
+                .upload(fileName, resizedBuffer, {
                     contentType: "image/png",
                     upsert: true,
                 });

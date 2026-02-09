@@ -4,21 +4,39 @@ export const maxDuration = 120;
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import sharp from "sharp";
 
-const VISION_PROMPT = `Analyze this photograph in detail. Describe:
-- The person's appearance (face, hair, clothing, pose)
-- The setting/background
-- Lighting and mood
-- Key visual elements
+const VISION_PROMPT = `Analyze this photograph in EXTREME detail. Extract the following information with precise accuracy:
+1. Subject description: Describe the person's appearance in detail - face shape, hair color/style/texture, eye color, skin tone, clothing colors and style, body type, pose, age range
+2. Facial features: Identify EVERY distinctive facial feature - exact eye shape and color, nose shape and size, mouth shape, lip thickness, eyebrow shape and thickness, cheekbones, jawline, face shape (round/oval/square/heart), any unique features like dimples, freckles, facial hair
+3. Expression: Describe the person's exact expression - smile type, eye expression, overall mood
+4. Setting/environment: Describe the background and surroundings
+5. Hobby/profession clues: Identify any props, clothing, or context that suggests their interests or profession
+6. Key props: List any notable objects or accessories visible
 
-Be very specific about facial features, expression, and pose. This description will be used to recreate the image in cartoon style.`;
+CRITICAL: Be extremely specific about facial features, proportions, and unique characteristics. This will be used to create a caricature that MUST look like the same person.`;
 
-const CARTOONIZE_PROMPT = `Create a high-quality cartoon/illustration version of this person. 
-Style: Clean lines, flat or semi-flat colors, stylized cartoon aesthetic (anime, digital art, or classic cartoon).
-Preserve the exact identity, facial features, pose, and composition from the description.
-Maintain the same framing and background elements.
-Do NOT add text, watermarks, or alter the subject's appearance beyond style transformation.
-High quality, professional cartoon illustration.`;
+const CARTOONIZE_PROMPT_TEMPLATE = `A professional digital caricature of [SUBJECT DESCRIPTION]. 
+
+CRITICAL IDENTITY PRESERVATION REQUIREMENTS:
+- The caricature MUST look like the exact same person from the reference photo
+- Preserve ALL distinctive facial features: [SPECIFIC FACIAL FEATURE]
+- Maintain the exact same expression: [SPECIFIC EXPRESSION]
+- Keep the same hair color, style, and texture
+- Preserve eye color, shape, and spacing
+- Maintain facial proportions and unique characteristics
+- The person MUST be instantly recognizable as the same individual
+
+Art style: Highly expressive, oversized head on a smaller, dynamic body. Focus on exaggerating [SPECIFIC FACIAL FEATURE] while maintaining perfect likeness. The subject should be placed in a [SETTING/ENVIRONMENT] that reflects their passion for [HOBBY/PROFESSION]. Include key props like [PROP 1] and [PROP 2]. The aesthetic should be 3D Pixar-inspired, with vibrant colors, cinematic lighting, and a clean, high-contrast background.
+
+Technical requirements:
+- Square format, 1080x1080 pixels
+- High quality, professional digital art
+- Exaggerated caricature proportions (large head, smaller body) BUT maintain facial identity
+- Vibrant, saturated colors
+- Clean, high-contrast background
+- No text, watermarks, or additional elements
+- The result MUST be recognizable as the same person from the original photo`;
 
 export async function POST(req: Request) {
     try {
@@ -39,6 +57,9 @@ export async function POST(req: Request) {
 
         const formData = await req.formData();
         const file = formData.get("image") as File | null;
+        const userSubjectDescription = formData.get("subject_description") as string | null;
+        const userSettingEnvironment = formData.get("setting_environment") as string | null;
+        const userHobbyProfession = formData.get("hobby_profession") as string | null;
 
         if (!file || !file.type.startsWith("image/")) {
             return NextResponse.json(
@@ -68,16 +89,92 @@ export async function POST(req: Request) {
         const imageDescription = visionResult.response.text();
         console.log("Image description:", imageDescription);
 
-        // Step 2: Generate cartoon image from description (use Nano Banana Pro)
+        // Step 2: Extract key information from description and build caricature prompt
+        const extractInfo = (description: string) => {
+            const lines = description.split('\n').map(l => l.trim()).filter(l => l);
+            
+            // Extract subject description (usually first section)
+            const subjectMatch = description.match(/subject description[:\-]?\s*(.+?)(?=\n|$)/i) 
+                || description.match(/1[.\-]\s*subject[:\-]?\s*(.+?)(?=\n|$)/i);
+            const subjectDescription = subjectMatch?.[1]?.trim() || description.split('\n')[0] || "the person in the image";
+            
+            // Extract facial features
+            const facialMatch = description.match(/facial features[:\-]?\s*(.+?)(?=\n|$)/i)
+                || description.match(/2[.\-]\s*facial[:\-]?\s*(.+?)(?=\n|$)/i);
+            const facialFeature = facialMatch?.[1]?.trim() || "distinctive eyes and facial structure";
+            
+            // Extract expression
+            const expressionMatch = description.match(/expression[:\-]?\s*(.+?)(?=\n|$)/i)
+                || description.match(/3[.\-]\s*expression[:\-]?\s*(.+?)(?=\n|$)/i);
+            const expression = expressionMatch?.[1]?.trim() || "their natural expression";
+            
+            // Extract setting
+            const settingMatch = description.match(/setting[:\-]?\s*(.+?)(?=\n|$)/i)
+                || description.match(/4[.\-]\s*setting[:\-]?\s*(.+?)(?=\n|$)/i);
+            const setting = settingMatch?.[1]?.trim() || "a clean, modern environment";
+            
+            // Extract hobby/profession
+            const hobbyMatch = description.match(/hobby[:\-]?\s*(.+?)(?=\n|$)/i)
+                || description.match(/5[.\-]\s*hobby[:\-]?\s*(.+?)(?=\n|$)/i);
+            const hobby = hobbyMatch?.[1]?.trim() || "their interests";
+            
+            // Extract props
+            const propsMatch = description.match(/props[:\-]?\s*(.+?)(?=\n|$)/i)
+                || description.match(/6[.\-]\s*key props[:\-]?\s*(.+?)(?=\n|$)/i);
+            const props = propsMatch?.[1]?.trim() || "";
+            const propList = props.split(',').map(p => p.trim()).filter(p => p);
+            const prop1 = propList[0] || "their accessories";
+            const prop2 = propList[1] || "their personal items";
+            
+            return {
+                subjectDescription,
+                facialFeature,
+                expression,
+                setting,
+                hobby,
+                prop1,
+                prop2,
+            };
+        };
+
+        const info = extractInfo(imageDescription);
+        
+        // Use user inputs if provided, otherwise use extracted values
+        const finalSubjectDescription = userSubjectDescription?.trim() || info.subjectDescription;
+        const finalSettingEnvironment = userSettingEnvironment?.trim() || info.setting;
+        const finalHobbyProfession = userHobbyProfession?.trim() || info.hobby;
+        
+        // Build the caricature prompt using the template
+        const caricaturePrompt = CARTOONIZE_PROMPT_TEMPLATE
+            .replace('[SUBJECT DESCRIPTION]', finalSubjectDescription)
+            .replace('[SPECIFIC FACIAL FEATURE]', info.facialFeature)
+            .replace('[SPECIFIC EXPRESSION]', info.expression)
+            .replace('[SETTING/ENVIRONMENT]', finalSettingEnvironment)
+            .replace('[HOBBY/PROFESSION]', finalHobbyProfession)
+            .replace('[PROP 1]', info.prop1)
+            .replace('[PROP 2]', info.prop2)
+            .replace('[ART STYLE: e.g., 3D Pixar-inspired / Hand-drawn ink and watercolor / Sharp vector art]', '3D Pixar-inspired');
+
+        console.log("Caricature prompt:", caricaturePrompt);
+
+        // Step 3: Generate cartoon image from refined prompt (include original image for better likeness)
         const imageModel = genAI.getGenerativeModel({
-            model: "gemini-3-pro-image-preview", // Nano Banana Pro
+            model: "gemini-3-pro-image-preview",
             generationConfig: {
                 responseModalities: ["IMAGE"],
             } as any,
         });
 
-        const fullPrompt = `${CARTOONIZE_PROMPT}\n\nBased on this description: ${imageDescription}`;
-        const imageResult = await imageModel.generateContent(fullPrompt);
+        // Include the original image in the generation request for better likeness
+        const imageResult = await imageModel.generateContent([
+            {
+                inlineData: {
+                    data: base64,
+                    mimeType,
+                },
+            },
+            caricaturePrompt,
+        ]);
 
         const response = imageResult.response;
         const imagePart = response.candidates?.[0]?.content?.parts?.find(
@@ -92,7 +189,18 @@ export async function POST(req: Request) {
             );
         }
 
-        const resultDataUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+        // Step 4: Resize image to exactly 1080x1080 pixels
+        const generatedImageBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+        const resizedImageBuffer = await sharp(generatedImageBuffer)
+            .resize(1080, 1080, {
+                fit: "cover", // Cover the entire area, may crop if needed
+                position: "center",
+            })
+            .png({ quality: 100 })
+            .toBuffer();
+
+        const resizedBase64 = resizedImageBuffer.toString("base64");
+        const resultDataUrl = `data:image/png;base64,${resizedBase64}`;
 
         return NextResponse.json({
             success: true,

@@ -141,17 +141,37 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
 async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 20): Promise<Buffer[]> {
     try {
         // Option 1: Use RENDER_API_URL service (frame-extractor service)
-        const renderApiUrl = process.env.RENDER_API_URL || "https://frame-extractor-oou7.onrender.com";
+        let renderApiUrl = process.env.RENDER_API_URL;
+        
+        // Ensure we have a valid URL
+        if (!renderApiUrl || renderApiUrl.trim() === "" || renderApiUrl === "undefined") {
+            renderApiUrl = "https://frame-extractor-oou7.onrender.com";
+        }
+        
+        // Remove trailing slash if present
+        renderApiUrl = renderApiUrl.replace(/\/$/, "");
+        
+        // Validate URL format
+        try {
+            new URL(renderApiUrl);
+        } catch {
+            throw new Error(`Invalid RENDER_API_URL: ${renderApiUrl}`);
+        }
+        
+        console.log(`Using render API URL: ${renderApiUrl}`);
         
         // Try multiple possible endpoints
         const endpoints = ["/extract-frames", "/extract-reel", "/frames"];
         
         for (const endpoint of endpoints) {
             try {
+                const fullUrl = `${renderApiUrl}${endpoint}`;
+                console.log(`Trying endpoint: ${fullUrl}`);
+                
                 // Convert video buffer to base64
                 const videoBase64 = videoBuffer.toString("base64");
                 
-                const response = await fetch(`${renderApiUrl}${endpoint}`, {
+                const response = await fetch(fullUrl, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -179,25 +199,37 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
                     const errorText = await response.text();
                     console.warn(`Frame extraction API ${endpoint} returned ${response.status}:`, errorText);
                 }
-            } catch (apiError) {
-                console.warn(`Frame extraction API ${endpoint} failed:`, apiError);
+            } catch (apiError: any) {
+                const errorMsg = apiError?.message || String(apiError);
+                console.warn(`Frame extraction API ${endpoint} failed:`, errorMsg);
                 // Continue to next endpoint
             }
         }
 
         // Option 2: Try FRAME_EXTRACTOR_API_URL if set
         const extractorApi = process.env.FRAME_EXTRACTOR_API_URL;
-        if (extractorApi && extractorApi.trim() !== "") {
+        if (extractorApi && extractorApi.trim() !== "" && extractorApi !== "undefined") {
             try {
+                // Validate URL
+                let apiUrl = extractorApi.trim().replace(/\/$/, "");
+                try {
+                    new URL(apiUrl);
+                } catch {
+                    console.warn(`Invalid FRAME_EXTRACTOR_API_URL: ${apiUrl}`);
+                    throw new Error("Invalid FRAME_EXTRACTOR_API_URL");
+                }
+                
+                apiUrl = apiUrl.endsWith("/") 
+                    ? `${apiUrl}extract-frames` 
+                    : `${apiUrl}/extract-frames`;
+                
+                console.log(`Trying alternative API: ${apiUrl}`);
+                
                 const formData = new FormData();
                 const blob = new Blob([videoBuffer], { type: "video/mp4" });
                 formData.append("video", blob, "video.mp4");
                 formData.append("frame_count", String(frameCount * 2));
 
-                const apiUrl = extractorApi.endsWith("/") 
-                    ? `${extractorApi}extract-frames` 
-                    : `${extractorApi}/extract-frames`;
-                
                 const response = await fetch(apiUrl, {
                     method: "POST",
                     body: formData,
@@ -206,11 +238,13 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
                 if (response.ok) {
                     const data = await response.json();
                     if (data.frames && Array.isArray(data.frames)) {
+                        console.log("Successfully extracted frames using alternative API");
                         return data.frames.map((f: string) => Buffer.from(f, "base64"));
                     }
                 }
-            } catch (apiError) {
-                console.warn("Alternative frame extraction API failed:", apiError);
+            } catch (apiError: any) {
+                const errorMsg = apiError?.message || String(apiError);
+                console.warn("Alternative frame extraction API failed:", errorMsg);
             }
         }
 

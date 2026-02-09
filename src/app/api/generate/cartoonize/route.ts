@@ -4,26 +4,39 @@ export const maxDuration = 120;
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import sharp from "sharp";
 
-const VISION_PROMPT = `Analyze this photograph in detail. Extract the following information:
-1. Subject description: Describe the person's appearance (face, hair, clothing, body type, pose)
-2. Facial features: Identify the most distinctive facial features (eyes, nose, mouth, eyebrows, face shape)
-3. Expression: Describe the person's expression and mood
+const VISION_PROMPT = `Analyze this photograph in EXTREME detail. Extract the following information with precise accuracy:
+1. Subject description: Describe the person's appearance in detail - face shape, hair color/style/texture, eye color, skin tone, clothing colors and style, body type, pose, age range
+2. Facial features: Identify EVERY distinctive facial feature - exact eye shape and color, nose shape and size, mouth shape, lip thickness, eyebrow shape and thickness, cheekbones, jawline, face shape (round/oval/square/heart), any unique features like dimples, freckles, facial hair
+3. Expression: Describe the person's exact expression - smile type, eye expression, overall mood
 4. Setting/environment: Describe the background and surroundings
 5. Hobby/profession clues: Identify any props, clothing, or context that suggests their interests or profession
 6. Key props: List any notable objects or accessories visible
 
-Be very specific and detailed. This information will be used to create a professional caricature.`;
+CRITICAL: Be extremely specific about facial features, proportions, and unique characteristics. This will be used to create a caricature that MUST look like the same person.`;
 
-const CARTOONIZE_PROMPT_TEMPLATE = `A professional digital caricature of [SUBJECT DESCRIPTION]. The art style should feature a highly expressive, oversized head on a smaller, dynamic body. Focus on exaggerating [SPECIFIC FACIAL FEATURE] and [SPECIFIC EXPRESSION]. The subject should be placed in a [SETTING/ENVIRONMENT] that reflects their passion for [HOBBY/PROFESSION]. Include key props like [PROP 1] and [PROP 2]. The aesthetic should be [ART STYLE: e.g., 3D Pixar-inspired / Hand-drawn ink and watercolor / Sharp vector art], with vibrant colors, cinematic lighting, and a clean, high-contrast background.
+const CARTOONIZE_PROMPT_TEMPLATE = `A professional digital caricature of [SUBJECT DESCRIPTION]. 
+
+CRITICAL IDENTITY PRESERVATION REQUIREMENTS:
+- The caricature MUST look like the exact same person from the reference photo
+- Preserve ALL distinctive facial features: [SPECIFIC FACIAL FEATURE]
+- Maintain the exact same expression: [SPECIFIC EXPRESSION]
+- Keep the same hair color, style, and texture
+- Preserve eye color, shape, and spacing
+- Maintain facial proportions and unique characteristics
+- The person MUST be instantly recognizable as the same individual
+
+Art style: Highly expressive, oversized head on a smaller, dynamic body. Focus on exaggerating [SPECIFIC FACIAL FEATURE] while maintaining perfect likeness. The subject should be placed in a [SETTING/ENVIRONMENT] that reflects their passion for [HOBBY/PROFESSION]. Include key props like [PROP 1] and [PROP 2]. The aesthetic should be 3D Pixar-inspired, with vibrant colors, cinematic lighting, and a clean, high-contrast background.
 
 Technical requirements:
+- Square format, 1080x1080 pixels
 - High quality, professional digital art
-- Exaggerated caricature proportions (large head, smaller body)
+- Exaggerated caricature proportions (large head, smaller body) BUT maintain facial identity
 - Vibrant, saturated colors
 - Clean, high-contrast background
 - No text, watermarks, or additional elements
-- Preserve the subject's recognizable identity while stylizing`;
+- The result MUST be recognizable as the same person from the original photo`;
 
 export async function POST(req: Request) {
     try {
@@ -144,7 +157,7 @@ export async function POST(req: Request) {
 
         console.log("Caricature prompt:", caricaturePrompt);
 
-        // Step 3: Generate cartoon image from refined prompt
+        // Step 3: Generate cartoon image from refined prompt (include original image for better likeness)
         const imageModel = genAI.getGenerativeModel({
             model: "gemini-3-pro-image-preview",
             generationConfig: {
@@ -152,7 +165,16 @@ export async function POST(req: Request) {
             } as any,
         });
 
-        const imageResult = await imageModel.generateContent(caricaturePrompt);
+        // Include the original image in the generation request for better likeness
+        const imageResult = await imageModel.generateContent([
+            {
+                inlineData: {
+                    data: base64,
+                    mimeType,
+                },
+            },
+            caricaturePrompt,
+        ]);
 
         const response = imageResult.response;
         const imagePart = response.candidates?.[0]?.content?.parts?.find(
@@ -167,7 +189,18 @@ export async function POST(req: Request) {
             );
         }
 
-        const resultDataUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+        // Step 4: Resize image to exactly 1080x1080 pixels
+        const generatedImageBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+        const resizedImageBuffer = await sharp(generatedImageBuffer)
+            .resize(1080, 1080, {
+                fit: "cover", // Cover the entire area, may crop if needed
+                position: "center",
+            })
+            .png({ quality: 100 })
+            .toBuffer();
+
+        const resizedBase64 = resizedImageBuffer.toString("base64");
+        const resultDataUrl = `data:image/png;base64,${resizedBase64}`;
 
         return NextResponse.json({
             success: true,

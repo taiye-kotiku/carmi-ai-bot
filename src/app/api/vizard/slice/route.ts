@@ -1,3 +1,4 @@
+// src/app/api/vizard/slice/route.ts
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
@@ -16,13 +17,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const body = await request.json();
+
         const {
             videoUrl,
-            videoType = 1,  // 1=remote file, 2=YouTube, etc.
+            videoType = 1,  // 1=remote file, 2=YouTube
             language = "auto",
-            preferLength = [0],  // 0=auto, 1=<30s, 2=30-60s, 3=60-90s, 4=90s-3min
-            ext = "mp4"
-        } = await request.json();
+            preferLength = [2, 3],  // Default: 30-60s and 60-90s (meaningful shorts)
+            ext = "mp4",
+            // Advanced options
+            ratioOfClip = 1,  // 1=9:16 vertical (TikTok, Reels, Shorts)
+            templateId,
+            maxClipNumber,
+            keywords,
+            projectName,
+        } = body;
 
         if (!videoUrl) {
             return NextResponse.json(
@@ -31,18 +40,50 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create project with Vizard
-        const createBody: any = {
+        // Build request body
+        const createBody: Record<string, any> = {
             videoUrl,
             videoType,
             lang: language,
             preferLength: Array.isArray(preferLength) ? preferLength : [preferLength],
+
+            // Recommended settings for quality shorts
+            ratioOfClip,
+            removeSilenceSwitch: 1,  // Remove silence and filler words
+            subtitleSwitch: 1,        // Show subtitles
+            highlightSwitch: 1,       // Highlight keywords
+            autoBrollSwitch: 1,       // Auto B-roll
+            headlineSwitch: 1,        // AI-generated headline hook
         };
 
         // ext is required only for videoType 1 (remote file)
         if (videoType === 1) {
             createBody.ext = ext;
         }
+
+        // Optional parameters
+        if (templateId) {
+            createBody.templateId = templateId;
+        }
+
+        if (maxClipNumber && maxClipNumber > 0 && maxClipNumber <= 100) {
+            createBody.maxClipNumber = maxClipNumber;
+        }
+
+        if (keywords) {
+            createBody.keywords = keywords;
+        }
+
+        if (projectName) {
+            createBody.projectName = projectName;
+        }
+
+        console.log("[Vizard] Creating project:", {
+            videoUrl: videoUrl.slice(0, 50) + "...",
+            videoType,
+            preferLength: createBody.preferLength,
+            ratioOfClip,
+        });
 
         const createResponse = await fetch(`${VIZARD_BASE_URL}/project/create`, {
             method: "POST",
@@ -53,24 +94,39 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify(createBody),
         });
 
+        const responseText = await createResponse.text();
+
         if (!createResponse.ok) {
-            const errorText = await createResponse.text();
-            console.error("Vizard create error:", errorText);
+            console.error("[Vizard] Create error:", responseText);
             return NextResponse.json(
-                { error: "יצירת הפרויקט נכשלה" },
+                { error: "יצירת הפרויקט נכשלה", details: responseText },
                 { status: createResponse.status }
             );
         }
 
-        const project = await createResponse.json();
+        let project;
+        try {
+            project = JSON.parse(responseText);
+        } catch {
+            console.error("[Vizard] Invalid JSON response:", responseText);
+            return NextResponse.json(
+                { error: "תגובה לא תקינה מ-Vizard" },
+                { status: 500 }
+            );
+        }
+
+        const projectId = project.projectId || project.data?.projectId;
+
+        console.log("[Vizard] Project created:", projectId);
 
         return NextResponse.json({
             success: true,
-            projectId: project.projectId || project.data?.projectId,
+            projectId,
             message: "הפרויקט נוצר בהצלחה. הקליפים יהיו מוכנים בקרוב.",
         });
+
     } catch (error: any) {
-        console.error("Vizard slice error:", error);
+        console.error("[Vizard] Slice error:", error);
         return NextResponse.json(
             { error: error.message || "חיתוך הוידאו נכשל" },
             { status: 500 }

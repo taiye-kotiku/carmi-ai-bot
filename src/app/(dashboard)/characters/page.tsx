@@ -1,350 +1,283 @@
-// src/app/(dashboard)/characters/page.tsx
-// Add this at the top of the component, before the return:
-
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { Plus, Loader2, Image as ImageIcon, Video, MoreVertical, Trash2 } from "lucide-react";
 import { CreateCharacterModal } from "@/components/features/create-character-modal";
+import Link from "next/link";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { DeleteCharacterModal } from "@/components/features/delete-character-modal";
-import type { Character } from "@/types/database";
 
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
-
-const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
-    pending: { label: "ממתין לאימון", variant: "outline" },
-    training: { label: "באימון", variant: "secondary" },
-    ready: { label: "מוכן", variant: "default" },
-    failed: { label: "נכשל", variant: "destructive" },
-};
-
-const DEFAULT_STATUS = { label: "לא ידוע", variant: "outline" as BadgeVariant };
-
-function getStatusConfig(status: string) {
-    return STATUS_CONFIG[status] || DEFAULT_STATUS;
-}
-
-function getTrainingProgress(startedAt: string | null): number {
-    if (!startedAt) return 0;
-    const elapsed = Date.now() - new Date(startedAt).getTime();
-    const estimatedTotal = 45 * 60 * 1000;
-    return Math.min(Math.round((elapsed / estimatedTotal) * 100), 95);
-}
-
-function getElapsedMinutes(startedAt: string | null): number {
-    if (!startedAt) return 0;
-    return Math.round((Date.now() - new Date(startedAt).getTime()) / 60000);
+interface Character {
+    id: string;
+    name: string;
+    description: string;
+    image_urls: string[];
+    status: "draft" | "pending" | "training" | "ready" | "failed";
+    created_at: string;
+    trigger_word?: string;
 }
 
 export default function CharactersPage() {
-    const [mounted, setMounted] = useState(false);
     const [characters, setCharacters] = useState<Character[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState<Character | null>(null);
-    const [trainingId, setTrainingId] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-    // Fix hydration mismatch
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    // For delete modal
+    const [deleteId, setDeleteId] = useState<string | null>(null);
 
-    const fetchCharacters = useCallback(async () => {
+    // Polling Ref
+    const pollInterval = useRef<NodeJS.Timeout | null>(null);
+
+    const fetchCharacters = async () => {
         try {
             const res = await fetch("/api/characters");
-            if (!res.ok) throw new Error("Failed to fetch");
             const data = await res.json();
-            setCharacters(data.characters || []);
-        } catch (err) {
-            console.error("Failed to fetch characters:", err);
+
+            if (data.characters) {
+                setCharacters(data.characters);
+
+                // Check if any character is training
+                const isTraining = data.characters.some((c: Character) => c.status === "training");
+
+                if (isTraining) {
+                    startPolling();
+                } else {
+                    stopPolling();
+                }
+            }
+        } catch (error) {
+            console.error("Failed to load characters", error);
         } finally {
             setLoading(false);
         }
-    }, []);
+    };
 
+    const startPolling = () => {
+        if (pollInterval.current) return; // Already polling
+        console.log("🔄 Starting polling for training status...");
+        pollInterval.current = setInterval(fetchCharacters, 5000); // Poll every 5s
+    };
+
+    const stopPolling = () => {
+        if (pollInterval.current) {
+            console.log("✅ All training done. Stopping polling.");
+            clearInterval(pollInterval.current);
+            pollInterval.current = null;
+        }
+    };
+
+    // Initial load
     useEffect(() => {
         fetchCharacters();
-    }, [fetchCharacters]);
+        return () => stopPolling();
+    }, []);
 
-    useEffect(() => {
-        const hasTraining = characters.some((c) => c.status === "training");
-        if (!hasTraining) return;
-
-        const interval = setInterval(fetchCharacters, 10000);
-        return () => clearInterval(interval);
-    }, [characters, fetchCharacters]);
-
-    const handleStartTraining = async (characterId: string) => {
-        setTrainingId(characterId);
-        setError(null);
-
+    // Handle Delete
+    const handleDelete = async () => {
+        if (!deleteId) return;
         try {
-            const res = await fetch(`/api/characters/${characterId}/train`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({}),
-            });
-
-            const data = await res.json();
-
-            if (!res.ok) {
-                setError(data.error || "שגיאה בהתחלת האימון");
-                return;
-            }
-
-            await fetchCharacters();
-        } catch (err) {
-            console.error("Training error:", err);
-            setError("שגיאה בהתחלת האימון");
-        } finally {
-            setTrainingId(null);
+            await fetch(`/api/characters/${deleteId}`, { method: "DELETE" });
+            fetchCharacters();
+            setDeleteId(null);
+        } catch (e) {
+            console.error(e);
         }
     };
 
-    const handleDelete = async (characterId: string) => {
-        try {
-            const res = await fetch(`/api/characters/${characterId}`, {
-                method: "DELETE",
-            });
-
-            if (res.ok) {
-                setCharacters((prev) => prev.filter((c) => c.id !== characterId));
-            } else {
-                const data = await res.json();
-                setError(data.error || "שגיאה במחיקה");
-            }
-        } catch (err) {
-            console.error("Delete error:", err);
-            setError("שגיאה במחיקה");
+    // Render Status Badge
+    const renderStatus = (status: string) => {
+        switch (status) {
+            case "ready":
+                return (
+                    <span className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-green-200">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                        מוכן לשימוש
+                    </span>
+                );
+            case "training":
+                return (
+                    <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-blue-200 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        מאמן מודל...
+                    </span>
+                );
+            case "failed":
+                return (
+                    <span className="inline-flex items-center gap-1.5 bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-red-200">
+                        נכשל
+                    </span>
+                );
+            default: // draft / pending
+                return (
+                    <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-200">
+                        טיוטה
+                    </span>
+                );
         }
-        setDeleteTarget(null);
     };
-
-    // Prevent hydration mismatch
-    if (!mounted) {
-        return (
-            <div className="container mx-auto p-6" dir="rtl">
-                <div className="flex items-center justify-between mb-8">
-                    <div className="h-9 w-40 bg-muted animate-pulse rounded" />
-                    <div className="h-10 w-36 bg-muted animate-pulse rounded" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-72 bg-muted animate-pulse rounded-xl" />
-                    ))}
-                </div>
-            </div>
-        );
-    }
-
-    if (loading) {
-        return (
-            <div className="container mx-auto p-6" dir="rtl">
-                <div className="flex items-center justify-between mb-8">
-                    <div className="h-9 w-40 bg-muted animate-pulse rounded" />
-                    <div className="h-10 w-36 bg-muted animate-pulse rounded" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-72 bg-muted animate-pulse rounded-xl" />
-                    ))}
-                </div>
-            </div>
-        );
-    }
 
     return (
-        <div className="container mx-auto p-6" dir="rtl">
-            <div className="flex items-center justify-between mb-8">
+        <div className="container mx-auto p-6 max-w-7xl" dir="rtl">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-8">
                 <div>
                     <h1 className="text-3xl font-bold">הדמויות שלי</h1>
-                    <p className="text-muted-foreground mt-1">
-                        צור ואמן דמויות מותאמות אישית ליצירת תוכן
-                    </p>
+                    <p className="text-muted-foreground">נהל את הדמויות שלך וצור תוכן</p>
                 </div>
-                <Button onClick={() => setShowCreateModal(true)} size="lg">
-                    + דמות חדשה
+                <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-lg">
+                    <Plus className="w-4 h-4" />
+                    דמות חדשה
                 </Button>
             </div>
 
-            {error && (
-                <div className="bg-destructive/10 text-destructive rounded-lg p-4 mb-6 flex items-center justify-between">
-                    <span>{error}</span>
-                    <button onClick={() => setError(null)} className="text-sm underline">
-                        סגור
-                    </button>
-                </div>
-            )}
-
-            {characters.length === 0 ? (
-                <Card className="p-16 text-center">
-                    <h2 className="text-2xl font-semibold mb-3">אין דמויות עדיין</h2>
-                    <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                        העלה תמונות של אדם כדי לאמן מודל AI מותאם אישית.
-                        לאחר האימון תוכל ליצור תמונות חדשות של הדמות בכל סגנון וסצנה.
-                    </p>
-                    <Button onClick={() => setShowCreateModal(true)} size="lg">
-                        צור את הדמות הראשונה שלך
-                    </Button>
-                </Card>
-            ) : (
+            {/* Loading State */}
+            {loading && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {characters.map((character) => {
-                        const statusConfig = getStatusConfig(character.status);
-                        const isTraining = character.status === "training";
-                        const isReady = character.status === "ready";
-                        const isPending = character.status === "pending";
-                        const isFailed = character.status === "failed";
-
-                        return (
-                            <Card
-                                key={character.id}
-                                className={`overflow-hidden transition-all hover:shadow-lg ${isTraining ? "ring-2 ring-blue-400 ring-offset-2" : ""
-                                    }`}
-                            >
-                                {/* Image preview */}
-                                <div className="grid grid-cols-3 gap-0.5 h-36 bg-muted">
-                                    {(character.image_urls || []).length > 0 ? (
-                                        (character.image_urls || []).slice(0, 3).map((url, i) => (
-                                            <div key={i} className="overflow-hidden">
-                                                <img
-                                                    src={url}
-                                                    alt={`${character.name} ${i + 1}`}
-                                                    className="w-full h-full object-cover hover:scale-105 transition-transform"
-                                                    onError={(e) => {
-                                                        (e.target as HTMLImageElement).style.display = "none";
-                                                    }}
-                                                />
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="col-span-3 flex items-center justify-center text-muted-foreground text-sm">
-                                            אין תמונות
-                                        </div>
-                                    )}
-                                </div>
-
-                                {(character.image_urls?.length || 0) > 3 && (
-                                    <div className="bg-muted/50 text-center text-xs text-muted-foreground py-1">
-                                        +{(character.image_urls?.length || 0) - 3} תמונות נוספות
-                                    </div>
-                                )}
-
-                                <div className="p-4 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-lg font-bold truncate ml-2">
-                                            {character.name}
-                                        </h3>
-                                        <Badge variant={statusConfig.variant}>
-                                            {statusConfig.label}
-                                        </Badge>
-                                    </div>
-
-                                    {character.description && (
-                                        <p className="text-sm text-muted-foreground line-clamp-2">
-                                            {character.description}
-                                        </p>
-                                    )}
-
-                                    <div className="text-xs text-muted-foreground">
-                                        {(character.image_urls || []).length} תמונות אימון
-                                    </div>
-
-                                    {isTraining && (
-                                        <div className="space-y-2">
-                                            <Progress
-                                                value={getTrainingProgress(character.training_started_at)}
-                                            />
-                                            <p className="text-xs text-blue-600 animate-pulse">
-                                                אימון בתהליך - {getElapsedMinutes(character.training_started_at)} דקות
-                                                (בערך 30-60 דקות)
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {isFailed && character.error_message && (
-                                        <div className="bg-destructive/10 rounded-md p-2">
-                                            <p className="text-xs text-destructive">
-                                                {character.error_message}
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    <div className="flex gap-2 pt-2">
-                                        {isPending && (
-                                            <Button
-                                                onClick={() => handleStartTraining(character.id)}
-                                                disabled={trainingId === character.id}
-                                                className="flex-1"
-                                            >
-                                                {trainingId === character.id
-                                                    ? "מתחיל..."
-                                                    : "התחל אימון"}
-                                            </Button>
-                                        )}
-
-                                        {isFailed && (
-                                            <Button
-                                                onClick={() => handleStartTraining(character.id)}
-                                                disabled={trainingId === character.id}
-                                                variant="outline"
-                                                className="flex-1"
-                                            >
-                                                נסה שוב
-                                            </Button>
-                                        )}
-
-                                        {isReady && (
-                                            <Button asChild className="flex-1">
-                                                <a href={`/generate/character?id=${character.id}`}>
-                                                    צור תמונה
-                                                </a>
-                                            </Button>
-                                        )}
-
-                                        {isTraining && (
-                                            <Button disabled variant="outline" className="flex-1">
-                                                ממתין לאימון...
-                                            </Button>
-                                        )}
-
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => setDeleteTarget(character)}
-                                            disabled={isTraining}
-                                            className="shrink-0 text-muted-foreground hover:text-destructive"
-                                            title="מחק דמות"
-                                        >
-                                            X
-                                        </Button>
-                                    </div>
-                                </div>
-                            </Card>
-                        );
-                    })}
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-64 bg-muted/20 animate-pulse rounded-xl border" />
+                    ))}
                 </div>
             )}
 
-            {showCreateModal && (
-                <CreateCharacterModal
-                    onClose={() => setShowCreateModal(false)}
-                    onCreated={() => {
-                        setShowCreateModal(false);
-                        fetchCharacters();
-                    }}
-                />
+            {/* Empty State */}
+            {!loading && characters.length === 0 && (
+                <div className="text-center py-20 bg-muted/10 rounded-2xl border-2 border-dashed">
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                        👤
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2">אין לך דמויות עדיין</h3>
+                    <p className="text-muted-foreground mb-6">צור את הדמות הראשונה שלך כדי להתחיל</p>
+                    <Button onClick={() => setIsCreateOpen(true)}>צור דמות ראשונה</Button>
+                </div>
             )}
 
-            {deleteTarget && (
+            {/* Character Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {characters.map((char) => (
+                    <Card key={char.id} className="overflow-hidden group hover:shadow-md transition-shadow relative">
+                        {/* Status Badge (Absolute Top Left) */}
+                        <div className="absolute top-3 left-3 z-10">
+                            {renderStatus(char.status)}
+                        </div>
+
+                        {/* Dropdown Menu (Absolute Top Right) */}
+                        <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-white/90 shadow-sm backdrop-blur">
+                                        <MoreVertical className="w-4 h-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                        className="text-destructive focus:text-destructive"
+                                        onClick={() => setDeleteId(char.id)}
+                                    >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        מחק דמות
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+
+                        {/* Image Area */}
+                        <div className="aspect-square bg-muted relative">
+                            {char.image_urls?.[0] ? (
+                                <img
+                                    src={char.image_urls[0]}
+                                    alt={char.name}
+                                    className={`w-full h-full object-cover transition-opacity ${char.status === 'training' ? 'opacity-80' : ''
+                                        }`}
+                                />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-blue-50 to-purple-50">
+                                    👤
+                                </div>
+                            )}
+
+                            {/* Overlay for Training */}
+                            {char.status === 'training' && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+                                    <div className="bg-white/90 px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                        <span className="text-sm font-medium">לומד את הפנים...</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Content Area */}
+                        <div className="p-5">
+                            <h3 className="font-bold text-lg mb-1">{char.name}</h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4">
+                                {char.description || "ללא תיאור"}
+                            </p>
+
+                            {/* Actions */}
+                            <div className="grid grid-cols-2 gap-2">
+                                {char.status === "ready" ? (
+                                    <>
+                                        <Button asChild variant="default" size="sm" className="w-full">
+                                            <Link href={`/generate/character?id=${char.id}`}>
+                                                <ImageIcon className="w-4 h-4 ml-2" />
+                                                תמונה
+                                            </Link>
+                                        </Button>
+                                        <Button asChild variant="outline" size="sm" className="w-full">
+                                            <Link href={`/generate/character-video`}>
+                                                <Video className="w-4 h-4 ml-2" />
+                                                וידאו
+                                            </Link>
+                                        </Button>
+                                    </>
+                                ) : char.status === "training" ? (
+                                    <Button disabled className="w-full col-span-2 bg-muted text-muted-foreground">
+                                        <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                                        תהליך אימון בעיצומו...
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        className="w-full col-span-2"
+                                        onClick={() => {
+                                            // Handle Resume Training (opens modal logic if needed)
+                                            // Ideally pass this char to modal to finish setup
+                                            alert("Please create a new character for now to restart process");
+                                        }}
+                                    >
+                                        המשך הגדרה
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+
+            {/* Modals */}
+            <CreateCharacterModal
+                open={isCreateOpen}
+                onClose={() => setIsCreateOpen(false)}
+                onCreated={() => {
+                    setIsCreateOpen(false);
+                    fetchCharacters(); // Refresh list immediately
+                }}
+            />
+
+            {deleteId && (
                 <DeleteCharacterModal
-                    character={deleteTarget}
-                    onClose={() => setDeleteTarget(null)}
-                    onConfirm={() => handleDelete(deleteTarget.id)}
+                    isOpen={!!deleteId}
+                    onClose={() => setDeleteId(null)}
+                    onConfirm={async () => {
+                        await handleDelete();
+                        setDeleteId(null);
+                    }}
                 />
             )}
         </div>

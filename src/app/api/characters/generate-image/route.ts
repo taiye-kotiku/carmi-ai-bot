@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { generateWithLora } from "@/lib/services/modal";
+import { enhancePrompt } from "@/lib/services/prompt-enhancer"; // <--- IMPORT THIS
 
 export async function POST(request: NextRequest) {
     try {
@@ -16,43 +17,49 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { characterId, prompt, aspectRatio = "1:1" } = await request.json();
+        const body = await request.json();
+        const {
+            characterId,
+            prompt,
+            aspectRatio = "1:1",
+            loraScale = 1.0,
+            numInferenceSteps = 28,
+            guidanceScale = 3.5,
+        } = body;
 
-        if (!characterId) {
-            return NextResponse.json({ error: "characterId is required" }, { status: 400 });
+        if (!characterId || !prompt) {
+            return NextResponse.json(
+                { error: "characterId and prompt are required" },
+                { status: 400 }
+            );
         }
 
-        if (!prompt) {
-            return NextResponse.json({ error: "prompt is required" }, { status: 400 });
-        }
+        // --- STEP 1: Translate/Enhance Prompt ---
+        // This runs in parallel with fetching character data to save time
+        const [enhancedPrompt, charResult] = await Promise.all([
+            enhancePrompt(prompt),
+            supabaseAdmin
+                .from("characters")
+                .select("*")
+                .eq("id", characterId)
+                .eq("user_id", user.id)
+                .single()
+        ]);
 
-        // Get character with LoRA
-        const { data: character, error: charError } = await supabaseAdmin
-            .from("characters")
-            .select("*")
-            .eq("id", characterId)
-            .eq("user_id", user.id)
-            .single();
+        const { data: character, error: charError } = charResult;
 
         if (charError || !character) {
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (character.status !== "ready") {
+        if (character.status !== "ready" || !character.lora_url) {
             return NextResponse.json(
                 { error: `Character not ready. Status: ${character.status}` },
                 { status: 400 }
             );
         }
 
-        if (!character.lora_url) {
-            return NextResponse.json(
-                { error: "Character not trained yet - no LoRA URL" },
-                { status: 400 }
-            );
-        }
-
-        // Check credits
+        // --- Check Credits ---
         const GENERATION_COST = 1;
         const { data: credits } = await supabaseAdmin
             .from("credits")
@@ -61,154 +68,91 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (!credits || credits.image_credits < GENERATION_COST) {
-            return NextResponse.json(
-                { error: `Insufficient credits. Need ${GENERATION_COST}, have ${credits?.image_credits ?? 0}` },
-                { status: 402 }
-            );
+            return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
         }
 
         // Deduct credits
-        const newBalance = credits.image_credits - GENERATION_COST;
         await supabaseAdmin
             .from("credits")
-            .update({ image_credits: newBalance })
+            .update({ image_credits: credits.image_credits - GENERATION_COST })
             .eq("user_id", user.id);
 
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: user.id,
-            credit_type: "image_credits",
-            amount: -GENERATION_COST,
-            balance_after: newBalance,
-            reason: "character_image_generation",
-            related_id: characterId,
-        });
+        // --- Prepare Generation ---
+        // Calculate dimensions
+        let width = 1024, height = 1024;
+        if (aspectRatio === "9:16") { width = 768; height = 1344; }
+        else if (aspectRatio === "16:9") { width = 1344; height = 768; }
+        else if (aspectRatio === "4:5") { width = 896; height = 1120; }
 
-        // Calculate dimensions based on aspect ratio
-        let width = 1024;
-        let height = 1024;
-        if (aspectRatio === "9:16") {
-            width = 768;
-            height = 1344;
-        } else if (aspectRatio === "16:9") {
-            width = 1344;
-            height = 768;
-        } else if (aspectRatio === "4:5") {
-            width = 896;
-            height = 1120;
+        const triggerWord = character.trigger_word || "ohwx";
+
+        // Combine Trigger + Enhanced Prompt
+        // Note: prompt-enhancer is told NOT to add the trigger word
+        let finalPrompt = enhancedPrompt;
+        if (!finalPrompt.toLowerCase().includes(triggerWord.toLowerCase())) {
+            finalPrompt = `${triggerWord} person, ${finalPrompt}`;
         }
 
-        const triggerWord = character.trigger_word || "TOK";
-
-        console.log("[Generate] Using MODAL for inference");
-        console.log("[Generate] Character:", character.name);
-        console.log("[Generate] LoRA URL:", character.lora_url);
-        console.log("[Generate] Trigger:", triggerWord);
-        console.log("[Generate] Prompt:", prompt);
-        console.log("[Generate] Size:", width, "x", height);
+        console.log(`[Generate] Original: "${prompt}"`);
+        console.log(`[Generate] Final:    "${finalPrompt}"`);
 
         try {
-            // Generate with MODAL (not FAL!)
+            // Generate with Modal
             const result = await generateWithLora({
-                prompt: prompt,
+                prompt: finalPrompt,
                 modelUrl: character.lora_url,
                 triggerWord: triggerWord,
                 width,
                 height,
-                numInferenceSteps: 28,
-                guidanceScale: 3.5,
-                loraScale: 0.85,
+                numInferenceSteps,
+                guidanceScale,
+                loraScale: Math.min(loraScale, 1.5),
             });
 
-            console.log("[Generate] Modal result:", JSON.stringify(result));
-
-            if (!result.success) {
-                throw new Error(result.error || "Modal generation failed");
+            if (!result.success || !result.image_url) {
+                throw new Error(result.error || "Generation failed");
             }
 
-            // Modal returns image_url (uploaded to Supabase) or image_base64
-            let imageUrl = result.image_url;
+            const imageUrl = result.image_url;
 
-            // If Modal returned base64, we need to upload it
-            if (!imageUrl && result.image_base64) {
-                console.log("[Generate] Got base64, uploading to Supabase...");
-
-                const buffer = Buffer.from(result.image_base64, "base64");
-                const fileName = `${crypto.randomUUID()}.png`;
-                const filePath = `generations/${fileName}`;
-
-                const { error: uploadError } = await supabaseAdmin.storage
-                    .from("generations")
-                    .upload(filePath, buffer, {
-                        contentType: "image/png",
-                        upsert: true,
-                    });
-
-                if (uploadError) {
-                    console.error("[Generate] Upload error:", uploadError);
-                    throw new Error("Failed to upload generated image");
-                }
-
-                const { data: { publicUrl } } = supabaseAdmin.storage
-                    .from("generations")
-                    .getPublicUrl(filePath);
-
-                imageUrl = publicUrl;
-            }
-
-            if (!imageUrl) {
-                throw new Error("No image URL returned from Modal");
-            }
-
-            // Save to generations table
+            // Save generation
             const generationId = crypto.randomUUID();
             await supabaseAdmin.from("generations").insert({
                 id: generationId,
                 user_id: user.id,
                 type: "image",
                 feature: "character_image",
-                prompt: `${triggerWord} ${prompt}`,
+                prompt: finalPrompt, // Save the English prompt for debugging
+                // original_prompt: prompt, // REMOVED: Column does not exist in database/types
                 result_urls: [imageUrl],
                 status: "completed",
             });
-
-            console.log("[Generate] Success! Image:", imageUrl);
 
             return NextResponse.json({
                 success: true,
                 imageUrl,
                 seed: result.seed,
                 generationId,
+                translatedPrompt: enhancedPrompt // Return this so UI can show it if needed
             });
 
         } catch (genError: any) {
-            console.error("[Generate] Modal error:", genError);
+            console.error("[Generate] Error:", genError);
 
-            // Refund credits
+            // Refund credits on failure
             await supabaseAdmin
                 .from("credits")
                 .update({ image_credits: credits.image_credits })
                 .eq("user_id", user.id);
 
-            await supabaseAdmin.from("credit_transactions").insert({
-                user_id: user.id,
-                credit_type: "image_credits",
-                amount: GENERATION_COST,
-                balance_after: credits.image_credits,
-                reason: "generation_refund_error",
-                related_id: characterId,
-            });
-
             return NextResponse.json(
-                { error: genError.message || "Modal generation failed" },
+                { error: genError.message || "Generation failed" },
                 { status: 502 }
             );
         }
 
     } catch (error: any) {
-        console.error("[Generate] Error:", error);
-        return NextResponse.json(
-            { error: error.message || "Generation failed" },
-            { status: 500 }
-        );
+        console.error("[Generate] Unexpected:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

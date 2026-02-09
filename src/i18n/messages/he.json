@@ -1,0 +1,26 @@
+{
+    "common": {
+        "dashboard": "לוח בקרה",
+        "generate": "יצירה",
+        "gallery": "גלריה",
+        "settings": "הגדרות",
+        "help": "עזרה",
+        "logout": "התנתקות",
+        "login": "התחברות",
+        "signup": "הרשמה"
+    },
+    "generate": {
+        "image": "יצירת תמונה",
+        "video": "יצירת וידאו",
+        "carousel": "יצירת קרוסלה",
+        "character": "יצירת דמות"
+    },
+    "actions": {
+        "submit": "שלח",
+        "cancel": "ביטול",
+        "save": "שמור",
+        "delete": "מחק",
+        "edit": "ערוך",
+        "download": "הורד"
+    }
+}

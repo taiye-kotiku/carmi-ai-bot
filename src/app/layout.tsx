@@ -1,6 +1,8 @@
+// src/app/layout.tsx
 import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import { Toaster } from "sonner";
+import { TranslationProvider } from "@/lib/i18n/provider";
 import "./globals.css";
 
 const heebo = Heebo({
@@ -22,10 +24,10 @@ export default function RootLayout({
     <html lang="he" dir="rtl" suppressHydrationWarning>
       <head />
       <body className={heebo.className} suppressHydrationWarning>
-        <main suppressHydrationWarning>
-          {children}
-        </main>
-        <Toaster position="top-center" richColors />
+        <TranslationProvider>
+          <main>{children}</main>
+          <Toaster position="top-center" richColors />
+        </TranslationProvider>
       </body>
     </html>
   );

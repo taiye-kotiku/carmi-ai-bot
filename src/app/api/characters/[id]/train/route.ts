@@ -38,7 +38,7 @@ export async function POST(
             return NextResponse.json({ error: "Character is already being trained" }, { status: 409 });
         }
 
-        const imageUrls = character.reference_images || [];
+        const imageUrls = character.image_urls || [];
         if (imageUrls.length < 5) {
             return NextResponse.json(
                 { error: `Need at least 5 reference images. Currently have ${imageUrls.length}.` },

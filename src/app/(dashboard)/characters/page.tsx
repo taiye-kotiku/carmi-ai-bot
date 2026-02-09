@@ -208,8 +208,8 @@ export default function CharactersPage() {
                             >
                                 {/* Image preview */}
                                 <div className="grid grid-cols-3 gap-0.5 h-36 bg-muted">
-                                    {(character.reference_images || []).length > 0 ? (
-                                        (character.reference_images || []).slice(0, 3).map((url, i) => (
+                                    {(character.image_urls || []).length > 0 ? (
+                                        (character.image_urls || []).slice(0, 3).map((url, i) => (
                                             <div key={i} className="overflow-hidden">
                                                 <img
                                                     src={url}
@@ -228,9 +228,9 @@ export default function CharactersPage() {
                                     )}
                                 </div>
 
-                                {(character.reference_images?.length || 0) > 3 && (
+                                {(character.image_urls?.length || 0) > 3 && (
                                     <div className="bg-muted/50 text-center text-xs text-muted-foreground py-1">
-                                        +{(character.reference_images?.length || 0) - 3} תמונות נוספות
+                                        +{(character.image_urls?.length || 0) - 3} תמונות נוספות
                                     </div>
                                 )}
 
@@ -251,7 +251,7 @@ export default function CharactersPage() {
                                     )}
 
                                     <div className="text-xs text-muted-foreground">
-                                        {(character.reference_images || []).length} תמונות אימון
+                                        {(character.image_urls || []).length} תמונות אימון
                                     </div>
 
                                     {isTraining && (

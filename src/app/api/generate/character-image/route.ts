@@ -150,7 +150,6 @@ export async function POST(req: Request) {
             feature: "character_image",
             prompt: fullPrompt,
             result_urls: images,
-            thumbnail_url: images[0],
             status: "completed",
             completed_at: new Date().toISOString(),
         });

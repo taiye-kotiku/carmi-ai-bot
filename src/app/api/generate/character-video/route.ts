@@ -184,7 +184,6 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
             feature: "character_video",
             prompt: options.topic || scenes.join(" | "),
             result_urls: [result.videoUrl, ...result.imageUrls],
-            thumbnail_url: result.thumbnailUrl,
             duration: result.duration,
             status: "completed",
             job_id: jobId,
@@ -237,7 +236,6 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
                 progress: 100,
                 result: {
                     videoUrl: result.videoUrl,
-                    thumbnailUrl: result.thumbnailUrl,
                     imageUrls: result.imageUrls,
                     scenes,
                     duration: result.duration,

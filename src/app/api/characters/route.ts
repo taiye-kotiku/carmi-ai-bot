@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { name, description, reference_images } = body;
+        const { name, description, image_urls } = body;
 
         // Validation
         if (!name || typeof name !== "string" || !name.trim()) {
@@ -64,13 +64,13 @@ export async function POST(request: NextRequest) {
         }
 
         if (
-            !reference_images ||
-            !Array.isArray(reference_images) ||
-            reference_images.length < 5
+            !image_urls ||
+            !Array.isArray(image_urls) ||
+            image_urls.length < 5
         ) {
             return NextResponse.json(
                 {
-                    error: `At least 5 reference images are required. Got ${reference_images?.length ?? 0
+                    error: `At least 5 reference images are required. Got ${image_urls?.length ?? 0
                         }.`,
                 },
                 { status: 400 }
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Use the first image as thumbnail
-        const thumbnailUrl = reference_images[0] || null;
+        const thumbnailUrl = image_urls[0] || null;
 
         const { data: character, error } = await supabaseAdmin
             .from("characters")
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
                 user_id: user.id,
                 name: name.trim(),
                 description: description?.trim() || null,
-                reference_images: reference_images,
+                image_urls: image_urls,
                 thumbnail_url: thumbnailUrl,
                 status: "pending",
                 trigger_word: "TOK", // Default trigger word

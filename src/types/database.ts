@@ -245,7 +245,8 @@ export type Database = {
                     user_id: string;
                     name: string;
                     description: string | null;
-                    image_urls: string[] | null;
+                    reference_images: string[];
+                    thumbnail_url: string | null;
                     status: 'pending' | 'training' | 'ready' | 'failed';
                     trigger_word: string | null;
                     lora_url: string | null;
@@ -261,8 +262,8 @@ export type Database = {
                     user_id: string;
                     name: string;
                     description?: string | null;
+                    reference_images: string[];
                     thumbnail_url?: string | null;
-                    image_urls?: string[] | null;
                     status?: 'pending' | 'training' | 'ready' | 'failed';
                     trigger_word?: string | null;
                     lora_url?: string | null;
@@ -274,7 +275,8 @@ export type Database = {
                 Update: {
                     name?: string;
                     description?: string | null;
-                    image_urls?: string[] | null;
+                    reference_images?: string[];
+                    thumbnail_url?: string | null;
                     status?: 'pending' | 'training' | 'ready' | 'failed';
                     trigger_word?: string | null;
                     lora_url?: string | null;

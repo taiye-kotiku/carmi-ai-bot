@@ -1018,7 +1018,7 @@ export default function CarouselGenerationPage() {
                                                 />
                                                 {selectedTemplate === template.id && (
                                                     <div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center">
-                                                        <Check className="w-6 h-6 text-white drop-shadow-lg" />
+                                                        <Check className="w-6 w-6 text-white drop-shadow-lg" />
                                                     </div>
                                                 )}
                                                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate">
@@ -1026,7 +1026,8 @@ export default function CarouselGenerationPage() {
                                                 </div>
                                             </button>
                                         ))}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

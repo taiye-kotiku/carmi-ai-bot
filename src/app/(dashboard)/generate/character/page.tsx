@@ -246,10 +246,10 @@ export default function CharacterGeneratePage() {
                                         }`}
                                 >
                                     <div className="aspect-square">
-                                        {char.image_urls && char.image_urls[0] ? (
+                                        {char.reference_images && char.reference_images[0] ? (
                                             <img
                                                 src={
-                                                    char.image_urls[0]
+                                                    char.reference_images[0]
                                                 }
                                                 alt={char.name}
                                                 className="w-full h-full object-cover"

@@ -143,22 +143,27 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
         // Option 1: Use RENDER_API_URL service (frame-extractor service)
         let renderApiUrl = process.env.RENDER_API_URL;
         
-        // Ensure we have a valid URL
-        if (!renderApiUrl || renderApiUrl.trim() === "" || renderApiUrl === "undefined") {
+        // Ensure we have a valid URL - check for undefined, null, empty string, or string "undefined"
+        if (!renderApiUrl || 
+            typeof renderApiUrl !== "string" || 
+            renderApiUrl.trim() === "" || 
+            renderApiUrl.toLowerCase() === "undefined" ||
+            renderApiUrl.toLowerCase() === "null") {
             renderApiUrl = "https://frame-extractor-oou7.onrender.com";
+            console.log("Using default RENDER_API_URL:", renderApiUrl);
+        } else {
+            // Remove trailing slash if present
+            renderApiUrl = renderApiUrl.trim().replace(/\/$/, "");
         }
-        
-        // Remove trailing slash if present
-        renderApiUrl = renderApiUrl.replace(/\/$/, "");
         
         // Validate URL format
         try {
-            new URL(renderApiUrl);
-        } catch {
-            throw new Error(`Invalid RENDER_API_URL: ${renderApiUrl}`);
+            const urlObj = new URL(renderApiUrl);
+            console.log(`Using render API URL: ${urlObj.origin}`);
+        } catch (urlError) {
+            console.error(`Invalid RENDER_API_URL: ${renderApiUrl}`, urlError);
+            throw new Error(`Invalid RENDER_API_URL: ${renderApiUrl}. Please set a valid URL or use the default service.`);
         }
-        
-        console.log(`Using render API URL: ${renderApiUrl}`);
         
         // Try multiple possible endpoints
         const endpoints = ["/extract-frames", "/extract-reel", "/frames"];

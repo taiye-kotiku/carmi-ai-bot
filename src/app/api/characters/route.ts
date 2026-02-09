@@ -86,7 +86,8 @@ export async function POST(request: NextRequest) {
                 user_id: user.id,
                 name: name.trim(),
                 description: description?.trim() || null,
-                image_urls: reference_images,
+                reference_images: reference_images,
+                thumbnail_url: thumbnailUrl,
                 status: "pending",
                 trigger_word: "TOK", // Default trigger word
             })

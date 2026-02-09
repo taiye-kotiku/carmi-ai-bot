@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
     LayoutGrid,
     Wand2,
@@ -24,7 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CAROUSEL_TEMPLATES, getTemplatesByCategory } from "@/lib/carousel/templates";
+import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
+import type { CarouselTemplate } from "@/lib/carousel/templates";
 
 const LOGO_POSITIONS = [
     { value: "top-left", label: "פינה עליונה שמאל", grid: "col-start-1 row-start-1" },
@@ -49,9 +50,23 @@ const CATEGORIES = [
     { value: "tech", label: "טכנולוגי" },
     { value: "office", label: "משרדי" },
     { value: "abstract", label: "בניינים" },
+    { value: "nature", label: "טבע" },
 ];
 
 const SLIDE_COUNTS = [3, 4, 5, 6, 7, 8];
+
+const FONT_FAMILIES = [
+    { value: "Assistant-Bold", label: "אסיסטנט מודגש (ברירת מחדל)", file: "Assistant-Bold.ttf" },
+    { value: "Assistant-ExtraBold", label: "אסיסטנט מודגש מאוד", file: "Assistant-ExtraBold.ttf" },
+    { value: "Assistant-SemiBold", label: "אסיסטנט מודגש בינוני", file: "Assistant-SemiBold.ttf" },
+    { value: "Assistant-Medium", label: "אסיסטנט בינוני", file: "Assistant-Medium.ttf" },
+    { value: "Assistant-Regular", label: "אסיסטנט רגיל", file: "Assistant-Regular.ttf" },
+    { value: "Assistant-Light", label: "אסיסטנט דק", file: "Assistant-Light.ttf" },
+    { value: "Assistant-ExtraLight", label: "אסיסטנט דק מאוד", file: "Assistant-ExtraLight.ttf" },
+    { value: "Antiochus-Bold", label: "אנטיוכוס מודגש", file: "Antiochus-Bold.ttf" },
+    { value: "Rubik-Medium-Italic", label: "רוביק בינוני נטוי", file: "Rubik-Medium-Italic.ttf" },
+    { value: "GveretLevin-AlefAlefAlef-Regular", label: "גברת לוין אלף", file: "GveretLevin-AlefAlefAlef-Regular.ttf" },
+];
 
 export default function CarouselGenerationPage() {
     const [topic, setTopic] = useState("");
@@ -63,7 +78,22 @@ export default function CarouselGenerationPage() {
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [logoBase64, setLogoBase64] = useState<string | null>(null);
     const [logoPosition, setLogoPosition] = useState<string>("top-right");
+    const [logoSize, setLogoSize] = useState<"small" | "medium" | "large">("medium");
     const [categoryFilter, setCategoryFilter] = useState("all");
+    
+    // Background image upload
+    const [backgroundImage, setBackgroundImage] = useState<File | null>(null);
+    const [backgroundImagePreview, setBackgroundImagePreview] = useState<string | null>(null);
+    const [backgroundImageBase64, setBackgroundImageBase64] = useState<string | null>(null);
+    const [useCustomBackground, setUseCustomBackground] = useState(false);
+    const backgroundInputRef = useRef<HTMLInputElement>(null);
+    
+    // Font customization states
+    const [fontFamily, setFontFamily] = useState("Assistant-Bold");
+    const [headlineFontSize, setHeadlineFontSize] = useState(95);
+    const [bodyFontSize, setBodyFontSize] = useState(70);
+    const [fontColor, setFontColor] = useState("#FFFFFF");
+    const [showFontSettings, setShowFontSettings] = useState(false);
 
     const [loading, setLoading] = useState(false);
     const [logoUploading, setLogoUploading] = useState(false);
@@ -78,9 +108,72 @@ export default function CarouselGenerationPage() {
     const [error, setError] = useState<string | null>(null);
     const [templateDesc, setTemplateDesc] = useState("");
     const [templateSuggestLoading, setTemplateSuggestLoading] = useState(false);
+    const [allTemplates, setAllTemplates] = useState<CarouselTemplate[]>([]);
+    const [templatesLoading, setTemplatesLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const filteredTemplates = getTemplatesByCategory(categoryFilter);
+    // Load all templates from API on mount
+    useEffect(() => {
+        async function loadTemplates() {
+            try {
+                const res = await fetch("/api/templates?t=" + Date.now(), {
+                    cache: "no-store", // Force no cache
+                });
+                if (!res.ok) {
+                    throw new Error(`Failed to fetch templates: ${res.status}`);
+                }
+                const data = await res.json();
+                console.log("Templates API response:", data);
+                console.log("Templates count:", data.templates?.length || 0);
+                console.log("Registered:", data.registered);
+                console.log("Auto-registered:", data.autoRegistered);
+                
+                if (data.templates && Array.isArray(data.templates) && data.templates.length > 0) {
+                    console.log("Setting templates:", data.templates.length);
+                    setAllTemplates(data.templates);
+                } else {
+                    console.warn("Invalid templates data, using fallback:", data);
+                    // Fallback to registered templates
+                    setAllTemplates(Object.values(CAROUSEL_TEMPLATES));
+                }
+            } catch (err) {
+                console.error("Failed to load templates:", err);
+                // Fallback to registered templates on error
+                setAllTemplates(Object.values(CAROUSEL_TEMPLATES));
+            } finally {
+                setTemplatesLoading(false);
+            }
+        }
+        loadTemplates();
+    }, []);
+
+    const filteredTemplates = categoryFilter === "all" 
+        ? allTemplates 
+        : allTemplates.filter((t) => t.category === categoryFilter);
+    
+    // Handle background image upload
+    async function handleBackgroundUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            toast.error("נא להעלות קובץ תמונה (PNG, JPG)");
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error("גודל מקסימלי 10MB");
+            return;
+        }
+        setBackgroundImage(file);
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result as string;
+            setBackgroundImagePreview(base64);
+            setBackgroundImageBase64(base64);
+            setUseCustomBackground(true);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = "";
+    }
 
     const hasLogo = !!logoUrl || !!logoBase64;
 
@@ -220,13 +313,19 @@ export default function CarouselGenerationPage() {
                 body: JSON.stringify({
                     topic: useTopic ? topic : undefined,
                     slides: slides || undefined,
-                    template_id: selectedTemplate,
+                    template_id: useCustomBackground && backgroundImageBase64 ? "custom" : selectedTemplate,
                     slide_count: slides ? slides.length : slideCount,
                     style,
                     use_brand: false,
                     logo_url: logoUrl || undefined,
                     logo_base64: logoBase64 || undefined,
                     logo_position: logoPosition,
+                    logo_size: logoSize,
+                    font_family: fontFamily,
+                    headline_font_size: headlineFontSize,
+                    body_font_size: bodyFontSize,
+                    font_color: fontColor,
+                    custom_background_base64: useCustomBackground ? backgroundImageBase64 : undefined,
                 }),
             });
 
@@ -376,22 +475,275 @@ export default function CarouselGenerationPage() {
                             </div>
 
                             {hasLogo && (
-                                <div className="mt-4">
-                                    <Label className="text-base font-medium">מיקום הלוגו</Label>
-                                    <div className="grid grid-cols-3 gap-2 mt-2">
-                                        {LOGO_POSITIONS.map((pos) => (
+                                <>
+                                    <div className="mt-4">
+                                        <Label className="text-base font-medium">מיקום הלוגו</Label>
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
+                                            {LOGO_POSITIONS.map((pos) => (
+                                                <button
+                                                    key={pos.value}
+                                                    onClick={() => setLogoPosition(pos.value)}
+                                                    className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                        logoPosition === pos.value
+                                                            ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                            : "border-gray-200 hover:border-gray-300"
+                                                    }`}
+                                                >
+                                                    {pos.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="mt-4">
+                                        <Label className="text-base font-medium">גודל הלוגו</Label>
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
                                             <button
-                                                key={pos.value}
-                                                onClick={() => setLogoPosition(pos.value)}
+                                                onClick={() => setLogoSize("small")}
                                                 className={`p-2 rounded-lg border text-xs text-center transition-colors ${
-                                                    logoPosition === pos.value
+                                                    logoSize === "small"
                                                         ? "border-pink-500 bg-pink-50 text-pink-700"
                                                         : "border-gray-200 hover:border-gray-300"
                                                 }`}
                                             >
-                                                {pos.label}
+                                                קטן
                                             </button>
-                                        ))}
+                                            <button
+                                                onClick={() => setLogoSize("medium")}
+                                                className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                    logoSize === "medium"
+                                                        ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                        : "border-gray-200 hover:border-gray-300"
+                                                }`}
+                                            >
+                                                בינוני
+                                            </button>
+                                            <button
+                                                onClick={() => setLogoSize("large")}
+                                                className={`p-2 rounded-lg border text-xs text-center transition-colors ${
+                                                    logoSize === "large"
+                                                        ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                        : "border-gray-200 hover:border-gray-300"
+                                                }`}
+                                            >
+                                                גדול
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* העלאת רקע מותאם אישית */}
+                    <Card>
+                        <CardContent className="p-6">
+                            <Label className="text-base font-medium mb-3 block">רקע מותאם אישית</Label>
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="useCustomBackground"
+                                        checked={useCustomBackground}
+                                        onChange={(e) => {
+                                            setUseCustomBackground(e.target.checked);
+                                            if (!e.target.checked) {
+                                                setBackgroundImage(null);
+                                                setBackgroundImagePreview(null);
+                                                setBackgroundImageBase64(null);
+                                            }
+                                        }}
+                                        className="rounded"
+                                    />
+                                    <label htmlFor="useCustomBackground" className="text-sm">
+                                        השתמש ברקע מותאם אישית במקום תבנית
+                                    </label>
+                                </div>
+                                
+                                {useCustomBackground && (
+                                    <>
+                                        <input
+                                            ref={backgroundInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={handleBackgroundUpload}
+                                        />
+                                        {backgroundImagePreview ? (
+                                            <div className="relative">
+                                                <img
+                                                    src={backgroundImagePreview}
+                                                    alt="רקע"
+                                                    className="w-full h-48 object-cover rounded-lg border"
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        setBackgroundImage(null);
+                                                        setBackgroundImagePreview(null);
+                                                        setBackgroundImageBase64(null);
+                                                        if (backgroundInputRef.current) {
+                                                            backgroundInputRef.current.value = "";
+                                                        }
+                                                    }}
+                                                    className="absolute top-2 left-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div
+                                                onClick={() => backgroundInputRef.current?.click()}
+                                                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-pink-400 hover:bg-pink-50/50 transition-colors"
+                                            >
+                                                <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                                                <p className="text-sm text-gray-600">לחץ להעלאת תמונת רקע</p>
+                                                <p className="text-xs text-gray-400 mt-1">PNG או JPG, עד 10MB</p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* הגדרות פונט */}
+                    <Card>
+                        <CardContent className="p-6">
+                            <button
+                                onClick={() => setShowFontSettings(!showFontSettings)}
+                                className="w-full flex items-center justify-between text-base font-medium hover:text-pink-600 transition-colors"
+                            >
+                                <span>⚙️ הגדרות פונט וטקסט</span>
+                                <span className="text-sm text-gray-400">{showFontSettings ? "▼" : "▲"}</span>
+                            </button>
+                            
+                            {showFontSettings && (
+                                <div className="mt-4 space-y-4 border-t pt-4">
+                                    {/* בחירת פונט */}
+                                    <div>
+                                        <Label>משפחת פונט</Label>
+                                        <select
+                                            value={fontFamily}
+                                            onChange={(e) => setFontFamily(e.target.value)}
+                                            className="w-full mt-2 p-2 border rounded-lg bg-white"
+                                        >
+                                            {FONT_FAMILIES.map((font) => (
+                                                <option key={font.value} value={font.value}>
+                                                    {font.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* צבע טקסט */}
+                                    <div>
+                                        <Label>צבע טקסט</Label>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <input
+                                                type="color"
+                                                value={fontColor}
+                                                onChange={(e) => setFontColor(e.target.value)}
+                                                className="w-16 h-10 rounded border cursor-pointer"
+                                            />
+                                            <Input
+                                                type="text"
+                                                value={fontColor}
+                                                onChange={(e) => setFontColor(e.target.value)}
+                                                placeholder="#FFFFFF"
+                                                className="flex-1"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* גודל כותרת */}
+                                    <div>
+                                        <Label>גודל כותרת (טקסט מודגש *כותרת*)</Label>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <input
+                                                type="range"
+                                                min="60"
+                                                max="140"
+                                                step="5"
+                                                value={headlineFontSize}
+                                                onChange={(e) => setHeadlineFontSize(Number(e.target.value))}
+                                                className="flex-1"
+                                            />
+                                            <span className="w-12 text-center font-medium">{headlineFontSize}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            טקסט בין כוכביות (*טקסט*) יופיע בגודל זה
+                                        </p>
+                                    </div>
+
+                                    {/* גודל טקסט רגיל */}
+                                    <div>
+                                        <Label>גודל טקסט רגיל</Label>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <input
+                                                type="range"
+                                                min="40"
+                                                max="100"
+                                                step="5"
+                                                value={bodyFontSize}
+                                                onChange={(e) => setBodyFontSize(Number(e.target.value))}
+                                                className="flex-1"
+                                            />
+                                            <span className="w-12 text-center font-medium">{bodyFontSize}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* תצוגה מקדימה של הפונט */}
+                                    <div>
+                                        <Label>תצוגה מקדימה</Label>
+                                        <div 
+                                            className="bg-gray-900 rounded-lg p-6 text-center border-2 border-gray-700" 
+                                            style={{ 
+                                                direction: "rtl",
+                                                fontFamily: fontFamily === "Assistant-Bold" ? "var(--font-heebo)" : undefined
+                                            }}
+                                        >
+                                            <style>{`
+                                                @font-face {
+                                                    font-family: 'PreviewFont';
+                                                    src: url('/fonts/${fontFamily}.ttf') format('truetype');
+                                                }
+                                                .font-preview {
+                                                    font-family: 'PreviewFont', sans-serif;
+                                                }
+                                            `}</style>
+                                            <p 
+                                                className="font-preview"
+                                                style={{ 
+                                                    color: fontColor, 
+                                                    fontSize: `${bodyFontSize / 4}px`,
+                                                    lineHeight: 1.5
+                                                }}
+                                            >
+                                                זהו טקסט רגיל בגודל {bodyFontSize}px
+                                            </p>
+                                            <p 
+                                                className="font-preview"
+                                                style={{ 
+                                                    color: fontColor, 
+                                                    fontSize: `${headlineFontSize / 4}px`, 
+                                                    fontWeight: "bold", 
+                                                    marginTop: "12px",
+                                                    lineHeight: 1.5
+                                                }}
+                                            >
+                                                זו כותרת מודגשת בגודל {headlineFontSize}px
+                                            </p>
+                                            <p 
+                                                className="font-preview"
+                                                style={{ 
+                                                    color: fontColor, 
+                                                    fontSize: `${bodyFontSize / 4}px`,
+                                                    marginTop: "8px",
+                                                    opacity: 0.8
+                                                }}
+                                            >
+                                                דוגמה: *התחדשות עירונית* היא הזדמנות
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -612,27 +964,70 @@ export default function CarouselGenerationPage() {
                                         ))}
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-                                    {filteredTemplates.map((template) => (
-                                        <button
-                                            key={template.id}
-                                            onClick={() => setSelectedTemplate(template.id)}
-                                            className={`relative aspect-[4/5] rounded-lg overflow-hidden border-2 ${
-                                                selectedTemplate === template.id ? "border-purple-500 ring-2 ring-purple-200" : "border-transparent"
-                                            }`}
-                                        >
-                                            <img
-                                                src={`/carousel-templates/${template.file}`}
-                                                alt={template.style}
-                                                className="w-full h-full object-cover"
-                                            />
-                                            {selectedTemplate === template.id && (
-                                                <div className="absolute inset-0 bg-purple-500/20 flex items-center justify-center">
-                                                    <Check className="w-6 h-6 text-white" />
+                                <div className="space-y-3">
+                                    <div className="text-xs text-gray-500 flex items-center justify-between">
+                                        <span>
+                                            {templatesLoading ? "טוען תבניות..." : `${filteredTemplates.length} תבניות זמינות`}
+                                        </span>
+                                        {!templatesLoading && allTemplates.length > 0 && (
+                                            <button
+                                                onClick={async () => {
+                                                    setTemplatesLoading(true);
+                                                    try {
+                                                        const res = await fetch("/api/templates?t=" + Date.now(), { cache: "no-store" });
+                                                        const data = await res.json();
+                                                        if (data.templates && Array.isArray(data.templates)) {
+                                                            setAllTemplates(data.templates);
+                                                            toast.success(`נטענו ${data.templates.length} תבניות`);
+                                                        }
+                                                    } catch (err) {
+                                                        toast.error("שגיאה בטעינת תבניות");
+                                                    } finally {
+                                                        setTemplatesLoading(false);
+                                                    }
+                                                }}
+                                                className="text-xs text-purple-600 hover:text-purple-800 underline"
+                                            >
+                                                רענן
+                                            </button>
+                                        )}
+                                    </div>
+                                    {templatesLoading ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                                        </div>
+                                    ) : filteredTemplates.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500">
+                                            לא נמצאו תבניות. נסה לרענן.
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-4 gap-2 max-h-[500px] overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                                            {filteredTemplates.map((template) => (
+                                            <button
+                                                key={template.id}
+                                                onClick={() => setSelectedTemplate(template.id)}
+                                                className={`relative aspect-[4/5] rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${
+                                                    selectedTemplate === template.id ? "border-purple-500 ring-2 ring-purple-200 shadow-lg" : "border-gray-300 hover:border-purple-300"
+                                                }`}
+                                            >
+                                                <img
+                                                    src={`/carousel-templates/${template.file}`}
+                                                    alt={template.style}
+                                                    className="w-full h-full object-cover"
+                                                    loading="lazy"
+                                                />
+                                                {selectedTemplate === template.id && (
+                                                    <div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center">
+                                                        <Check className="w-6 w-6 text-white drop-shadow-lg" />
+                                                    </div>
+                                                )}
+                                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate">
+                                                    {template.style}
                                                 </div>
-                                            )}
-                                        </button>
-                                    ))}
+                                            </button>
+                                        ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

@@ -17,7 +17,13 @@ interface GenerateCarouselOptions {
     logoBase64?: string;
     brandColor?: string;
     logoPosition?: LogoPosition;
+    logoSize?: "small" | "medium" | "large";
     fontPath?: string;
+    fontFamily?: string;
+    headlineFontSize?: number;
+    bodyFontSize?: number;
+    fontColor?: string;
+    customBackgroundBase64?: string;
 }
 
 interface CarouselResult {
@@ -33,12 +39,69 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         logoBase64,
         brandColor,
         logoPosition = "top-right",
+        logoSize = "medium",
         fontPath,
+        fontFamily,
+        headlineFontSize,
+        bodyFontSize,
+        fontColor,
+        customBackgroundBase64,
     } = options;
 
-    const template = CAROUSEL_TEMPLATES[templateId];
-    if (!template) {
-        throw new Error(`Template ${templateId} not found`);
+    // Handle custom background or auto-registered templates
+    let template: CarouselTemplate;
+    if (templateId === "custom" && customBackgroundBase64) {
+        // Create a temporary template for custom background
+        template = {
+            id: "custom",
+            style: "Custom Background",
+            file: "", // Not used for custom backgrounds
+            text_color: fontColor || "#FFFFFF",
+            accent: brandColor || "#2563EB",
+            y_pos: 675,
+            category: "abstract",
+        };
+    } else {
+        template = CAROUSEL_TEMPLATES[templateId];
+        if (!template) {
+            // Auto-register template if file exists
+            const fs = require("fs");
+            const path = require("path");
+            const templatePathJpg = path.join(process.cwd(), "public/carousel-templates", `${templateId}.jpg`);
+            const templatePathPng = path.join(process.cwd(), "public/carousel-templates", `${templateId}.png`);
+            
+            let file: string | null = null;
+            if (fs.existsSync(templatePathJpg)) {
+                file = `${templateId}.jpg`;
+            } else if (fs.existsSync(templatePathPng)) {
+                file = `${templateId}.png`;
+            }
+            
+            if (!file) {
+                console.error(`Template ${templateId} not found. Checked:`, { templatePathJpg, templatePathPng });
+                throw new Error(`Template ${templateId} not found in public/carousel-templates`);
+            }
+            
+            // Auto-create template entry
+            let category: CarouselTemplate["category"] = "abstract";
+            if (templateId.startsWith("T_")) {
+                const num = parseInt(templateId.replace("T_", ""));
+                if (num >= 96 && num <= 144) category = "nature";
+                else if (num >= 20 && num <= 30) category = "gradient";
+                else if (num >= 60 && num <= 80) category = "tech";
+                else if (num >= 145 && num <= 170) category = "dark";
+            }
+            
+            template = {
+                id: templateId,
+                style: templateId,
+                file,
+                text_color: category === "dark" ? "#FFFFFF" : "#1A1A1A",
+                accent: category === "dark" ? "#60A5FA" : "#2563EB",
+                y_pos: 675,
+                category,
+            };
+        }
     }
 
     const accentColor = brandColor || template.accent;
@@ -63,8 +126,13 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         fontPath,
         logoBuffer,
         logoPosition,
+        logoSize,
         accentColor,
-        textColor: template.text_color,
+        textColor: fontColor || template.text_color,
+        fontFamily,
+        headlineFontSize,
+        bodyFontSize,
+        customBackgroundBase64,
     });
 
     return { images, template };

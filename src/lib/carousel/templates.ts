@@ -6,7 +6,7 @@ export interface CarouselTemplate {
     text_color: string;
     accent: string;
     y_pos: number;
-    category: "tech" | "gradient" | "office" | "abstract" | "dark";
+    category: "tech" | "gradient" | "office" | "abstract" | "dark" | "nature";
 }
 
 export const CAROUSEL_TEMPLATES: Record<string, CarouselTemplate> = {

@@ -46,26 +46,61 @@ Rules:
 Return ONLY a JSON array of strings, one per slide. No markdown, no explanation.
 Example: ["הנה *ההזדמנות* שלך", "Slide 2 text", "Slide 3 text"]`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-
-    // Parse JSON from response
     try {
-        // Clean up response - remove markdown code blocks if present
-        const cleanedResponse = responseText
-            .replace(/```json\n?/g, "")
-            .replace(/```\n?/g, "")
-            .trim();
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        console.log("Gemini response:", responseText.substring(0, 200));
 
-        const slides = JSON.parse(cleanedResponse);
+        // Parse JSON from response
+        try {
+            // Clean up response - remove markdown code blocks if present
+            let cleanedResponse = responseText
+                .replace(/```json\n?/g, "")
+                .replace(/```\n?/g, "")
+                .trim();
 
-        if (!Array.isArray(slides)) {
-            throw new Error("Response is not an array");
+            // Try to extract JSON array if wrapped in text
+            const jsonMatch = cleanedResponse.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                cleanedResponse = jsonMatch[0];
+            }
+
+            if (!cleanedResponse.startsWith("[")) {
+                throw new Error("Response does not contain a JSON array");
+            }
+
+            const slides = JSON.parse(cleanedResponse);
+
+            if (!Array.isArray(slides)) {
+                console.error("Response is not an array:", slides);
+                throw new Error("Response is not an array");
+            }
+
+            if (slides.length === 0) {
+                throw new Error("Generated empty slides array");
+            }
+
+            const finalSlides = slides.slice(0, slideCount).filter((s: any) => s && typeof s === "string" && s.trim().length > 0);
+            
+            if (finalSlides.length === 0) {
+                throw new Error("No valid slides after filtering");
+            }
+
+            console.log(`Generated ${finalSlides.length} slides`);
+            return finalSlides;
+        } catch (parseError) {
+            console.error("Failed to parse carousel content:", parseError);
+            console.error("Raw response:", responseText);
+            throw new Error(`Failed to parse carousel content: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
         }
-
-        return slides.slice(0, slideCount);
-    } catch (error) {
-        console.error("Failed to parse carousel content:", error);
-        throw new Error("Failed to generate carousel content");
+    } catch (apiError) {
+        console.error("Gemini API error:", apiError);
+        if (apiError instanceof Error) {
+            if (apiError.message.includes("API_KEY")) {
+                throw new Error("GOOGLE_AI_API_KEY חסר או לא תקין");
+            }
+            throw new Error(`Failed to generate carousel content: ${apiError.message}`);
+        }
+        throw new Error(`Failed to generate carousel content: ${String(apiError)}`);
     }
 }

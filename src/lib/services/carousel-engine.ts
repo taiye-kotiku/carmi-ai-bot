@@ -30,8 +30,13 @@ export interface CarouselEngineOptions {
     fontPath?: string;
     logoBuffer?: Buffer;
     logoPosition?: LogoPosition;
+    logoSize?: "small" | "medium" | "large";
     accentColor?: string;
     textColor?: string;
+    fontFamily?: string;
+    headlineFontSize?: number;
+    bodyFontSize?: number;
+    customBackgroundBase64?: string;
 }
 
 function getLogoPosition(
@@ -39,21 +44,51 @@ function getLogoPosition(
     logoWidth: number,
     logoHeight: number
 ): { x: number; y: number } {
+    // Progress bar constants
+    const PROGRESS_BAR_HEIGHT = 14;
+    const PROGRESS_BAR_BOTTOM_MARGIN = 50;
+    const PROGRESS_BAR_TOP = HEIGHT - PROGRESS_BAR_BOTTOM_MARGIN - PROGRESS_BAR_HEIGHT; // HEIGHT - 64
+    
+    // Top position - safe margin from top
     const topY = 60;
-    const bottomY = HEIGHT - 60 - logoHeight;
+    
+    // Bottom position - above progress bar with safe gap
+    const LOGO_BOTTOM_GAP = 25; // Gap between logo and progress bar
+    const bottomY = PROGRESS_BAR_TOP - logoHeight - LOGO_BOTTOM_GAP;
+    
+    // Horizontal positions
     const leftX = MARGIN;
     const rightX = WIDTH - MARGIN - logoWidth;
     const centerX = (WIDTH - logoWidth) / 2;
+    
+    // Safety checks for horizontal positions
+    const safeLeftX = Math.max(MARGIN, Math.min(leftX, WIDTH - logoWidth - MARGIN));
+    const safeRightX = Math.max(MARGIN, Math.min(rightX, WIDTH - logoWidth - MARGIN));
+    const safeCenterX = Math.max(MARGIN, Math.min(centerX, WIDTH - logoWidth - MARGIN));
+    
+    // Safety checks for vertical positions
+    const safeTopY = Math.max(0, Math.min(topY, HEIGHT - logoHeight - PROGRESS_BAR_BOTTOM_MARGIN - PROGRESS_BAR_HEIGHT - LOGO_BOTTOM_GAP));
+    // Ensure bottom logo doesn't overlap with progress bar or go off-screen
+    const minBottomY = topY + logoHeight + 50; // Minimum distance from top
+    const maxBottomY = PROGRESS_BAR_TOP - logoHeight - LOGO_BOTTOM_GAP;
+    const safeBottomY = Math.max(minBottomY, Math.min(bottomY, maxBottomY));
 
     const pos: Record<string, { x: number; y: number }> = {
-        "top-left": { x: leftX, y: topY },
-        "top-right": { x: rightX, y: topY },
-        "top-middle": { x: centerX, y: topY },
-        "bottom-left": { x: leftX, y: bottomY },
-        "bottom-right": { x: rightX, y: bottomY },
-        "bottom-middle": { x: centerX, y: bottomY },
+        "top-left": { x: safeLeftX, y: safeTopY },
+        "top-right": { x: safeRightX, y: safeTopY },
+        "top-middle": { x: safeCenterX, y: safeTopY },
+        "bottom-left": { x: safeLeftX, y: safeBottomY },
+        "bottom-right": { x: safeRightX, y: safeBottomY },
+        "bottom-middle": { x: safeCenterX, y: safeBottomY },
     };
-    return pos[position] || pos["top-right"];
+    
+    const result = pos[position] || pos["top-right"];
+    
+    // Final safety check - ensure logo is completely within canvas bounds
+    return {
+        x: Math.max(0, Math.min(result.x, WIDTH - logoWidth)),
+        y: Math.max(0, Math.min(result.y, HEIGHT - logoHeight))
+    };
 }
 
 /** Apply background effects: blur, scrim overlay, grain. Stronger for text readability. */
@@ -105,13 +140,16 @@ function drawCleanText(
     y: number,
     defaultColor: string,
     highlightColor: string,
-    fontPath: string
+    fontPath: string,
+    headlineFontSize?: number,
+    bodyFontSize?: number
 ) {
     const maxWidth = WIDTH - MARGIN * 2.5;
     const maxHeight = HEIGHT * 0.5;
 
-    let currentFontSize = 95;
+    let currentFontSize = bodyFontSize || 95;
     const minFontSize = 40;
+    const highlightFontSize = headlineFontSize || currentFontSize;
 
     ctx.direction = "rtl";
     ctx.textAlign = "right";
@@ -154,16 +192,35 @@ function drawCleanText(
 
     for (const line of lines) {
         const parts = line.split("*");
-        const lineSegments: { text: string; color: string }[] = [];
+        const lineSegments: { text: string; color: string; isHighlight: boolean }[] = [];
         for (let i = 0; i < parts.length; i++) {
             if (!parts[i]) continue;
-            const color = i % 2 !== 0 ? highlightColor : defaultColor;
-            lineSegments.push({ text: parts[i], color });
+            const isHighlight = i % 2 !== 0;
+            const color = isHighlight ? highlightColor : defaultColor;
+            lineSegments.push({ text: parts[i], color, isHighlight });
         }
 
-        const fullCleanLine = lineSegments.map((s) => s.text).join("");
-        const totalLineW = ctx.measureText(fullCleanLine).width;
-        const startX = x + totalLineW / 2; // RTL: anchor at right edge
+        // Calculate total width with mixed font sizes
+        let totalLineW = 0;
+        for (const seg of lineSegments) {
+            const fontSize = seg.isHighlight ? highlightFontSize : currentFontSize;
+            ctx.font = `bold ${fontSize}px CarouselFont`;
+            totalLineW += ctx.measureText(seg.text).width;
+        }
+        
+        // Calculate startX for RTL text, ensuring it stays within canvas bounds
+        let startX = x + totalLineW / 2; // RTL: anchor at right edge
+        
+        // Clamp to ensure text doesn't overflow canvas bounds
+        const rightBound = WIDTH - MARGIN;
+        const leftBound = MARGIN;
+        if (startX > rightBound) {
+            startX = rightBound;
+        }
+        // Ensure text doesn't go past left edge
+        if (startX - totalLineW < leftBound) {
+            startX = leftBound + totalLineW;
+        }
 
         // Draw each segment (logical order = right-to-left for Hebrew)
         // Add text shadow for better visibility on any background
@@ -172,11 +229,13 @@ function drawCleanText(
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
         let offsetX = 0;
+        const maxSegmentFontSize = Math.max(...lineSegments.map(s => s.isHighlight ? highlightFontSize : currentFontSize));
         for (const seg of lineSegments) {
             ctx.fillStyle = seg.color;
-            ctx.font = `${currentFontSize}px CarouselFont`;
+            const fontSize = seg.isHighlight ? highlightFontSize : currentFontSize;
+            ctx.font = `bold ${fontSize}px CarouselFont`;
             const w = ctx.measureText(seg.text).width;
-            ctx.fillText(seg.text, startX - offsetX, currentY + currentFontSize / 2);
+            ctx.fillText(seg.text, startX - offsetX, currentY + maxSegmentFontSize / 2);
             offsetX += w;
         }
         ctx.shadowColor = "transparent";
@@ -184,7 +243,7 @@ function drawCleanText(
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
 
-        currentY += currentFontSize + lineSpacing;
+        currentY += maxSegmentFontSize + lineSpacing;
     }
 }
 
@@ -242,41 +301,162 @@ export async function createCarouselWithEngine(
         fontPath: customFontPath,
         logoBuffer,
         logoPosition = "top-right",
+        logoSize = "medium",
         accentColor = template.accent,
         textColor = template.text_color,
+        fontFamily,
+        headlineFontSize,
+        bodyFontSize,
+        customBackgroundBase64,
     } = options;
 
-    const defaultFontPath = path.join(
-        process.cwd(),
-        "public/fonts/Assistant-Bold.ttf"
-    );
-    const fontPath = customFontPath || defaultFontPath;
-
-    if (!fs.existsSync(fontPath)) {
-        throw new Error(`Font not found: ${fontPath}`);
+    // Determine font path based on fontFamily or customFontPath
+    let fontPath: string;
+    if (customFontPath) {
+        fontPath = customFontPath;
+    } else if (fontFamily) {
+        fontPath = path.join(process.cwd(), `public/fonts/${fontFamily}.ttf`);
+    } else {
+        fontPath = path.join(process.cwd(), "public/fonts/Assistant-Bold.ttf");
     }
-
-    GlobalFonts.registerFromPath(fontPath, "CarouselFont");
-
-    const templatePath = path.join(
-        process.cwd(),
-        "public/carousel-templates",
-        template.file
-    );
-    if (!fs.existsSync(templatePath)) {
-        throw new Error(`Template not found: ${templatePath}`);
+    
+    if (!fs.existsSync(fontPath)) {
+        console.error(`Font not found: ${fontPath}. Available fonts:`, fs.readdirSync(path.join(process.cwd(), "public/fonts")).join(", "));
+        // Fallback to default font
+        const defaultFont = path.join(process.cwd(), "public/fonts/Assistant-Bold.ttf");
+        if (fs.existsSync(defaultFont)) {
+            console.warn(`Using fallback font: ${defaultFont}`);
+            fontPath = defaultFont;
+        } else {
+            throw new Error(`Font not found: ${fontPath} and fallback font also not found`);
+        }
+    }
+    
+    try {
+        GlobalFonts.registerFromPath(fontPath, "CarouselFont");
+    } catch (fontError) {
+        console.error(`Failed to register font ${fontPath}:`, fontError);
+        throw new Error(`Failed to load font: ${fontError instanceof Error ? fontError.message : String(fontError)}`);
     }
 
     const total = slides.length;
     const bgTotalW = WIDTH + (total - 1) * SHIFT_PX;
 
-    // Load and prepare wide background (like Python's ImageOps.fit)
-    const bgResized = await sharp(templatePath)
-        .resize(bgTotalW, HEIGHT, { fit: "cover" })
-        .png()
-        .toBuffer();
+    // Load and prepare wide background
+    let bgResized: Buffer;
+    let useStaticBackground = false; // Flag to indicate if we should use static (no parallax) background
+    
+    if (customBackgroundBase64) {
+        useStaticBackground = true; // Custom backgrounds should not move
+        
+        try {
+            // Use custom background - resize to COVER the entire canvas (no black bars)
+            if (!customBackgroundBase64 || typeof customBackgroundBase64 !== "string") {
+                throw new Error("Invalid custom background base64 data");
+            }
+            
+            // Clean base64 string - handle various formats
+            let base64 = customBackgroundBase64.trim();
+            if (base64.includes(",")) {
+                base64 = base64.split(",")[1]; // Extract base64 part after comma
+            } else {
+                base64 = base64.replace(/^data:image\/\w+;base64,/, "");
+            }
+            
+            if (!base64 || base64.length === 0) {
+                throw new Error("Empty base64 string");
+            }
+            
+            const customBgBuffer = Buffer.from(base64, "base64");
+            
+            if (customBgBuffer.length === 0) {
+                throw new Error("Failed to decode base64 image");
+            }
+            
+            // Resize image to COVER the canvas (fills entire area, may crop edges)
+            // This ensures no black bars - the image fills the entire canvas
+            bgResized = await sharp(customBgBuffer)
+                .resize(WIDTH, HEIGHT, {
+                    fit: "cover", // Cover entire canvas, crop if needed (NO black bars)
+                    position: "center", // Center the image when cropping
+                    kernel: sharp.kernel.lanczos3, // High quality resampling
+                })
+                .png({ 
+                    quality: 100, 
+                    compressionLevel: 0,
+                })
+                .toBuffer();
+                
+        } catch (error) {
+            console.error("Error processing custom background:", error);
+            
+            try {
+                // Fallback: still use cover fit
+                let base64 = customBackgroundBase64.trim();
+                if (base64.includes(",")) {
+                    base64 = base64.split(",")[1];
+                } else {
+                    base64 = base64.replace(/^data:image\/\w+;base64,/, "");
+                }
+                
+                const customBgBuffer = Buffer.from(base64, "base64");
+                
+                bgResized = await sharp(customBgBuffer)
+                    .resize(WIDTH, HEIGHT, {
+                        fit: "cover",
+                        position: "center",
+                    })
+                    .png()
+                    .toBuffer();
+            } catch (fallbackError) {
+                console.error("Fallback also failed:", fallbackError);
+                throw new Error(`Failed to process custom background image: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    } else {
+        // Use template background - check if template file exists
+        if (!template.file) {
+            throw new Error(`Template ${template.id} has no file specified`);
+        }
+        
+        const templatePath = path.join(
+            process.cwd(),
+            "public/carousel-templates",
+            template.file
+        );
+        
+        if (!fs.existsSync(templatePath)) {
+            throw new Error(`Template file not found: ${templatePath}`);
+        }
+        
+        // Use template background - keep cover for templates
+        bgResized = await sharp(templatePath)
+            .resize(bgTotalW, HEIGHT, { fit: "cover" })
+            .png()
+            .toBuffer();
+    }
 
-    const bgWithEffects = await applyBackgroundEffects(bgResized, 165, 5, 18);
+    // Apply background effects - reduce blur for custom backgrounds to maintain sharpness
+    const blurRadius = useStaticBackground ? 0 : 5; // No blur for custom backgrounds
+    const opacity = useStaticBackground ? 120 : 165; // Lighter overlay for custom backgrounds
+    
+    // Verify background dimensions before applying effects
+    const bgMetadata = await sharp(bgResized).metadata();
+    const expectedWidth = useStaticBackground ? WIDTH : bgTotalW;
+    const expectedHeight = HEIGHT;
+    
+    console.log(`Background dimensions: ${bgMetadata.width}x${bgMetadata.height}, Expected: ${expectedWidth}x${expectedHeight}, useStaticBackground: ${useStaticBackground}`);
+    
+    // Ensure background is exactly the right size (especially for static backgrounds)
+    if (useStaticBackground && (bgMetadata.width !== WIDTH || bgMetadata.height !== HEIGHT)) {
+        console.warn(`Resizing background to exact dimensions: ${WIDTH}x${HEIGHT}`);
+        bgResized = await sharp(bgResized)
+            .resize(WIDTH, HEIGHT, { fit: "cover", position: "center" })
+            .png()
+            .toBuffer();
+    }
+    
+    const bgWithEffects = await applyBackgroundEffects(bgResized, opacity, blurRadius, 18);
 
     const bgImage = await loadImage(bgWithEffects);
     const images: Buffer[] = [];
@@ -288,40 +468,85 @@ export async function createCarouselWithEngine(
     if (logoBuffer && logoBuffer.length > 0) {
         try {
             logoImage = await loadImage(logoBuffer);
-            const maxLogo = 260;
+            
+            // Define logo size multipliers
+            const logoSizeMultipliers = {
+                small: 0.6,   // 60% of base size
+                medium: 1.0,   // 100% of base size (default)
+                large: 1.5,   // 150% of base size
+            };
+            
+            const sizeMultiplier = logoSizeMultipliers[logoSize] || 1.0;
+            
+            // Base max logo size (will be multiplied by sizeMultiplier)
+            const baseMaxLogo = 260;
+            const maxLogo = Math.round(baseMaxLogo * sizeMultiplier);
+            const minLogo = Math.round(20 * sizeMultiplier); // Minimum logo size
+            
+            // Calculate logo dimensions based on size option
             if (logoImage.width > maxLogo || logoImage.height > maxLogo) {
                 const scale = Math.min(
                     maxLogo / logoImage.width,
                     maxLogo / logoImage.height
                 );
-                logoW = Math.round(logoImage.width * scale);
-                logoH = Math.round(logoImage.height * scale);
+                logoW = Math.max(minLogo, Math.round(logoImage.width * scale));
+                logoH = Math.max(minLogo, Math.round(logoImage.height * scale));
             } else {
-                logoW = logoImage.width;
-                logoH = logoImage.height;
+                // Scale up/down based on size option while maintaining aspect ratio
+                logoW = Math.max(minLogo, Math.round(logoImage.width * sizeMultiplier));
+                logoH = Math.max(minLogo, Math.round(logoImage.height * sizeMultiplier));
             }
+            
+            // Ensure logo doesn't exceed canvas dimensions
+            logoW = Math.min(logoW, WIDTH - MARGIN * 2);
+            logoH = Math.min(logoH, HEIGHT - 200); // Leave space for text and progress bar
         } catch (e) {
             console.warn("Could not load logo:", e);
+            logoImage = null; // Ensure logoImage is null on error
         }
     }
 
     for (let i = 0; i < slides.length; i++) {
-        const left = i * SHIFT_PX;
         const canvas = createCanvas(WIDTH, HEIGHT);
         const ctx = canvas.getContext("2d");
 
-        // Draw cropped background (each slide gets different portion)
-        ctx.drawImage(
-            bgImage,
-            left,
-            0,
-            WIDTH,
-            HEIGHT,
-            0,
-            0,
-            WIDTH,
-            HEIGHT
-        );
+        // Draw background - static for custom backgrounds, parallax for templates
+        if (useStaticBackground) {
+            // For custom backgrounds: draw the EXACT SAME image for all slides (no movement)
+            // Always draw from (0,0) of source image to fill entire canvas
+            try {
+                // Ensure we're drawing the full image from top-left corner
+                ctx.drawImage(
+                    bgImage,
+                    0,           // Source X: always start from left edge
+                    0,           // Source Y: always start from top edge
+                    bgImage.width,   // Source width: use full image width
+                    bgImage.height,  // Source height: use full image height
+                    0,           // Destination X: canvas left edge
+                    0,           // Destination Y: canvas top edge
+                    WIDTH,       // Destination width: fill entire canvas width
+                    HEIGHT       // Destination height: fill entire canvas height
+                );
+            } catch (drawError) {
+                console.error(`Error drawing static background on slide ${i + 1}:`, drawError);
+                console.error(`Background image size: ${bgImage.width}x${bgImage.height}, Canvas: ${WIDTH}x${HEIGHT}`);
+                throw drawError;
+            }
+        } else {
+            // For templates: use parallax effect (each slide gets different portion)
+            const left = i * SHIFT_PX;
+            ctx.drawImage(
+                bgImage,
+                left,
+                0,
+                WIDTH,
+                HEIGHT,
+                0,
+                0,
+                WIDTH,
+                HEIGHT
+            );
+        }
 
         // Draw text (centered, adaptive)
         drawCleanText(
@@ -331,16 +556,37 @@ export async function createCarouselWithEngine(
             HEIGHT / 2,
             textColor,
             HIGHLIGHT_COLOR,
-            fontPath
+            fontPath,
+            headlineFontSize,
+            bodyFontSize
         );
 
-        // Draw logo
-        if (logoImage) {
-            const logoPos = getLogoPosition(logoPosition, logoW, logoH);
-            ctx.drawImage(logoImage, logoPos.x, logoPos.y, logoW, logoH);
+        // Draw logo (before progress bar to ensure proper layering)
+        if (logoImage && logoW > 0 && logoH > 0) {
+            try {
+                const logoPos = getLogoPosition(logoPosition, logoW, logoH);
+                
+                // Final safety checks - ensure logo is completely within canvas bounds
+                const safeX = Math.max(MARGIN, Math.min(logoPos.x, WIDTH - logoW - MARGIN));
+                const safeY = Math.max(MARGIN, Math.min(logoPos.y, HEIGHT - logoH - MARGIN));
+                
+                // Validate logo fits within canvas
+                const fitsHorizontally = safeX >= 0 && safeX + logoW <= WIDTH;
+                const fitsVertically = safeY >= 0 && safeY + logoH <= HEIGHT;
+                const validDimensions = logoW > 0 && logoH > 0 && logoW <= WIDTH && logoH <= HEIGHT;
+                
+                if (fitsHorizontally && fitsVertically && validDimensions) {
+                    ctx.drawImage(logoImage, safeX, safeY, logoW, logoH);
+                } else {
+                    console.warn(`[Slide ${i + 1}] Logo skipped - out of bounds: x=${safeX}, y=${safeY}, w=${logoW}, h=${logoH}, canvas=${WIDTH}x${HEIGHT}`);
+                }
+            } catch (err) {
+                console.error(`[Slide ${i + 1}] Error drawing logo:`, err);
+                // Continue without logo rather than failing the entire generation
+            }
         }
 
-        // Progress bar
+        // Progress bar (drawn after logo to ensure it's on top)
         drawProgressBar(ctx, i, total, accentColor);
 
         // Counter (top-left like original)

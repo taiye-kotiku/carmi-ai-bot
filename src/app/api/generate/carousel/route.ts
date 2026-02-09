@@ -32,6 +32,12 @@ export async function POST(req: Request) {
             logo_url: customLogoUrl,
             logo_base64: logoBase64,
             logo_position = "top-right",
+            logo_size,
+            font_family,
+            headline_font_size,
+            body_font_size,
+            font_color,
+            custom_background_base64,
         } = body;
 
         // Validate
@@ -42,9 +48,35 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!template_id || !CAROUSEL_TEMPLATES[template_id]) {
+        // Allow "custom" template if custom_background_base64 is provided
+        // Also allow any template_id that exists as a file (auto-registered templates)
+        if (!template_id || (template_id !== "custom" && !CAROUSEL_TEMPLATES[template_id])) {
+            // Check if template file exists (for auto-registered templates)
+            if (template_id !== "custom") {
+                const fs = require("fs");
+                const path = require("path");
+                const templatePath = path.join(
+                    process.cwd(),
+                    "public/carousel-templates",
+                    `${template_id}.jpg`
+                );
+                const templatePathPng = path.join(
+                    process.cwd(),
+                    "public/carousel-templates",
+                    `${template_id}.png`
+                );
+                if (!fs.existsSync(templatePath) && !fs.existsSync(templatePathPng)) {
+                    return NextResponse.json(
+                        { error: "נא לבחור תבנית" },
+                        { status: 400 }
+                    );
+                }
+            }
+        }
+        
+        if (template_id === "custom" && !custom_background_base64) {
             return NextResponse.json(
-                { error: "נא לבחור תבנית" },
+                { error: "נא להעלות תמונת רקע מותאמת אישית" },
                 { status: 400 }
             );
         }
@@ -105,7 +137,13 @@ export async function POST(req: Request) {
             logoBase64,
             brandColor,
             logoPosition,
+            logoSize: logo_size || "medium",
             requiredCredits,
+            fontFamily: font_family,
+            headlineFontSize: headline_font_size,
+            bodyFontSize: body_font_size,
+            fontColor: font_color,
+            customBackgroundBase64: custom_background_base64,
         });
 
         return NextResponse.json({ jobId });
@@ -125,11 +163,18 @@ interface ProcessOptions {
     logoBase64?: string;
     brandColor?: string;
     logoPosition?: string;
+    logoSize?: "small" | "medium" | "large";
     requiredCredits: number;
+    fontFamily?: string;
+    headlineFontSize?: number;
+    bodyFontSize?: number;
+    fontColor?: string;
+    customBackgroundBase64?: string;
 }
 
 async function processCarousel(jobId: string, userId: string, options: ProcessOptions) {
     try {
+        console.log(`[Carousel ${jobId}] Starting generation with template: ${options.templateId}`);
         await supabaseAdmin
             .from("jobs")
             .update({ status: "processing", progress: 10 })
@@ -139,37 +184,59 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
         let slides = options.customSlides;
 
         if (!slides?.length && options.topic) {
+            console.log(`[Carousel ${jobId}] Generating content for topic: ${options.topic}`);
             await supabaseAdmin
                 .from("jobs")
                 .update({ progress: 20 })
                 .eq("id", jobId);
 
-            slides = await generateCarouselContent({
-                topic: options.topic,
-                slideCount: options.slideCount,
-                style: options.style as any,
-                language: "he",
-            });
+            try {
+                slides = await generateCarouselContent({
+                    topic: options.topic,
+                    slideCount: options.slideCount,
+                    style: options.style as any,
+                    language: "he",
+                });
+                console.log(`[Carousel ${jobId}] Generated ${slides?.length || 0} slides`);
+            } catch (contentError) {
+                console.error(`[Carousel ${jobId}] Content generation failed:`, contentError);
+                throw new Error(`Failed to generate content: ${contentError instanceof Error ? contentError.message : String(contentError)}`);
+            }
         }
 
         if (!slides?.length) {
-            throw new Error("No slides content");
+            throw new Error("No slides content - provide topic or custom slides");
         }
 
+        console.log(`[Carousel ${jobId}] Processing ${slides.length} slides`);
         await supabaseAdmin
             .from("jobs")
             .update({ progress: 40 })
             .eq("id", jobId);
 
         // Generate carousel images
-        const result = await generateCarousel({
-            slides,
-            templateId: options.templateId,
-            logoUrl: options.brandLogo,
-            logoBase64: options.logoBase64,
-            brandColor: options.brandColor,
-            logoPosition: options.logoPosition as any,
-        });
+        console.log(`[Carousel ${jobId}] Generating images with template: ${options.templateId}`);
+        let result;
+        try {
+            result = await generateCarousel({
+                slides,
+                templateId: options.templateId,
+                logoUrl: options.brandLogo,
+                logoBase64: options.logoBase64,
+                brandColor: options.brandColor,
+                logoPosition: options.logoPosition as any,
+                logoSize: options.logoSize,
+                fontFamily: options.fontFamily,
+                headlineFontSize: options.headlineFontSize,
+                bodyFontSize: options.bodyFontSize,
+                fontColor: options.fontColor,
+                customBackgroundBase64: options.customBackgroundBase64,
+            });
+            console.log(`[Carousel ${jobId}] Generated ${result.images.length} images`);
+        } catch (imageError) {
+            console.error(`[Carousel ${jobId}] Image generation failed:`, imageError);
+            throw new Error(`Failed to generate images: ${imageError instanceof Error ? imageError.message : String(imageError)}`);
+        }
 
         await supabaseAdmin
             .from("jobs")
@@ -257,10 +324,45 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
 
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error("Carousel processing error:", error);
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "failed", error: errorMessage })
-            .eq("id", jobId);
+        const errorStack = error instanceof Error ? error.stack : String(error);
+        console.error(`[Carousel ${jobId}] Processing error:`, errorMessage);
+        console.error(`[Carousel ${jobId}] Stack:`, errorStack);
+        
+        try {
+            await supabaseAdmin
+                .from("jobs")
+                .update({ 
+                    status: "failed", 
+                    error: errorMessage,
+                    progress: 0
+                })
+                .eq("id", jobId);
+            
+            // Refund credits on failure
+            const { data: currentCredits } = await supabaseAdmin
+                .from("credits")
+                .select("carousel_credits")
+                .eq("user_id", userId)
+                .single();
+            
+            if (currentCredits) {
+                const refundedBalance = (currentCredits.carousel_credits || 0) + options.requiredCredits;
+                await supabaseAdmin
+                    .from("credits")
+                    .update({ carousel_credits: refundedBalance })
+                    .eq("user_id", userId);
+                
+                await supabaseAdmin.from("credit_transactions").insert({
+                    user_id: userId,
+                    credit_type: "carousel",
+                    amount: options.requiredCredits,
+                    balance_after: refundedBalance,
+                    reason: "carousel_generation_failed_refund",
+                    related_id: jobId
+                });
+            }
+        } catch (dbError) {
+            console.error(`[Carousel ${jobId}] Failed to update job status:`, dbError);
+        }
     }
 }

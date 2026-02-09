@@ -13,6 +13,7 @@ interface ExtractedFrame {
 interface UploadedFrame {
     url: string;
     timestamp: number;
+    [key: string]: string | number; // Add index signature for Json compatibility
 }
 
 export async function POST(req: Request) {

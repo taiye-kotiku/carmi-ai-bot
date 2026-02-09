@@ -69,10 +69,19 @@ async function processTextToImage(
             .update({ status: "processing", progress: 10 })
             .eq("id", jobId);
 
-        // Enhance prompt if requested
+        // Enhance prompt if requested (skip if we want faster generation)
         let finalPrompt = prompt;
         if (enhanceWithAI) {
-            finalPrompt = await enhancePrompt(prompt, "image");
+            await supabaseAdmin
+                .from("jobs")
+                .update({ progress: 20 })
+                .eq("id", jobId);
+            
+            // Use Promise.race with timeout to prevent hanging
+            finalPrompt = await Promise.race([
+                enhancePrompt(prompt, "image"),
+                new Promise<string>((resolve) => setTimeout(() => resolve(prompt), 5000)) // 5s timeout
+            ]);
         }
 
         await supabaseAdmin
@@ -80,8 +89,13 @@ async function processTextToImage(
             .update({ progress: 30 })
             .eq("id", jobId);
 
-        // Generate image
-        const images = await generateImage(finalPrompt);
+        // Generate image with timeout protection
+        const images = await Promise.race([
+            generateImage(finalPrompt),
+            new Promise<never>((_, reject) => 
+                setTimeout(() => reject(new Error("Image generation timeout after 60 seconds")), 60000)
+            )
+        ]);
 
         if (images.length === 0) {
             throw new Error("No images generated");
@@ -99,14 +113,25 @@ async function processTextToImage(
             const base64Data = images[i].replace(/^data:image\/\w+;base64,/, "");
             const originalBuffer = Buffer.from(base64Data, "base64");
 
-            // Resize to exactly 1080x1080px
-            const resizedBuffer = await sharp(originalBuffer)
-                .resize(1080, 1080, {
-                    fit: "cover", // Cover the entire area, may crop if needed
-                    position: "center",
-                })
-                .png({ quality: 100 })
-                .toBuffer();
+            // Check if resizing is needed (only resize if not already 1080x1080)
+            let resizedBuffer = originalBuffer;
+            try {
+                const metadata = await sharp(originalBuffer).metadata();
+                if (metadata.width !== 1080 || metadata.height !== 1080) {
+                    // Resize to exactly 1080x1080px
+                    resizedBuffer = await sharp(originalBuffer)
+                        .resize(1080, 1080, {
+                            fit: "cover", // Cover the entire area, may crop if needed
+                            position: "center",
+                        })
+                        .png({ quality: 100 })
+                        .toBuffer();
+                }
+            } catch (resizeError) {
+                console.warn("Resize failed, using original:", resizeError);
+                // Use original if resize fails
+                resizedBuffer = originalBuffer;
+            }
 
             const fileName = `${userId}/${jobId}/image_${i + 1}.png`;
 

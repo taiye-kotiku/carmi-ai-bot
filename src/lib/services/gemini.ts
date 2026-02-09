@@ -33,17 +33,10 @@ export async function generateImage(prompt: string): Promise<string[]> {
             } as any,
         });
 
-        // Add system prompt for high quality, realistic, 1080x1080px images
-        const systemPrompt = `Create a realistic, photorealistic, high-quality, professional, impressive image. 
-Technical requirements:
-- Square format: 1080x1080 pixels
-- Photorealistic and realistic style
-- High quality, professional photography
-- Sharp focus, detailed, impressive
-- No text, watermarks, or signatures
-- Professional lighting and composition
+        // Add concise system prompt for high quality, realistic, 1080x1080px images
+        const systemPrompt = `Create a realistic, photorealistic, high-quality, professional image. Square format 1080x1080px. Sharp focus, detailed, impressive. No text or watermarks. Professional lighting.
 
-User request: ${prompt}`;
+${prompt}`;
 
         const response = await model.generateContent(systemPrompt);
         const result = response.response;

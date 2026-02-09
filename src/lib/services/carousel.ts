@@ -89,6 +89,7 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
                 if (num >= 96 && num <= 144) category = "nature";
                 else if (num >= 20 && num <= 30) category = "gradient";
                 else if (num >= 60 && num <= 80) category = "tech";
+                else if (num >= 145 && num <= 170) category = "dark";
             }
             
             template = {

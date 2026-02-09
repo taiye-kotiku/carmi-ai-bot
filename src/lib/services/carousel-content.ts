@@ -63,12 +63,6 @@ Example: ["הנה *ההזדמנות* שלך", "Slide 2 text", "Slide 3 text"]`;
             const jsonMatch = cleanedResponse.match(/\[[\s\S]*\]/);
             if (jsonMatch) {
                 cleanedResponse = jsonMatch[0];
-            } else {
-                // If no array found, try to find array-like structure
-                const arrayLikeMatch = cleanedResponse.match(/\[.*\]/s);
-                if (arrayLikeMatch) {
-                    cleanedResponse = arrayLikeMatch[0];
-                }
             }
 
             if (!cleanedResponse.startsWith("[")) {

@@ -1,60 +1,78 @@
+// src/app/api/webhooks/fal/training/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        console.log("FAL Training Webhook:", JSON.stringify(body, null, 2));
+        console.log("[FAL Webhook] Received:", JSON.stringify(body, null, 2));
 
-        const { request_id, status, payload } = body;
+        const { request_id, status, payload, error } = body;
 
         if (!request_id) {
             return NextResponse.json({ error: "No request_id" }, { status: 400 });
         }
 
         // Find character by job_id
-        const { data: character } = await supabaseAdmin
+        const { data: character, error: findError } = await supabaseAdmin
             .from("characters")
             .select("*")
-            .eq("job_id" as any, request_id)
+            .eq("job_id", request_id)
             .single();
 
-
-        if (!character) {
-            console.log("Character not found for request_id:", request_id);
+        if (findError || !character) {
+            console.error("[FAL Webhook] Character not found for:", request_id);
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
-        if (status === "OK" && payload?.diffusers_lora_file?.url) {
-            // Training completed
-            await supabaseAdmin
-                .from("characters")
-                .update({
-                    status: "ready",
-                    lora_url: payload.diffusers_lora_file.url,
-                    trained_at: new Date().toISOString(),
-                })
-                .eq("id", character.id);
+        console.log(`[FAL Webhook] Character: ${character.id}, Status: ${status}`);
 
+        if (status === "COMPLETED" || status === "OK") {
+            // FAL returns diffusers_lora_file with url
+            const loraUrl = payload?.diffusers_lora_file?.url;
 
-            console.log("Training completed for:", character.id);
-        } else if (status === "ERROR") {
+            if (loraUrl) {
+                await supabaseAdmin
+                    .from("characters")
+                    .update({
+                        status: "ready",
+                        lora_url: loraUrl,
+                        trained_at: new Date().toISOString(),
+                        error_message: null,
+                    })
+                    .eq("id", character.id);
+
+                console.log(`[FAL Webhook] Training completed!`);
+                console.log(`[FAL Webhook] LoRA URL: ${loraUrl}`);
+            } else {
+                console.error("[FAL Webhook] No LoRA URL in payload:", payload);
+                await supabaseAdmin
+                    .from("characters")
+                    .update({
+                        status: "failed",
+                        error_message: "No LoRA URL returned from FAL",
+                    })
+                    .eq("id", character.id);
+            }
+
+        } else if (status === "FAILED" || status === "ERROR") {
+            const errorMsg = error || payload?.error || "Training failed";
+
             await supabaseAdmin
                 .from("characters")
                 .update({
                     status: "failed",
-                    error_message: payload?.error || "Training failed",
+                    error_message: errorMsg,
                 })
                 .eq("id", character.id);
 
-
-            console.log("Training failed for:", character.id);
+            console.error(`[FAL Webhook] Training failed:`, errorMsg);
         }
 
         return NextResponse.json({ success: true });
 
     } catch (error: any) {
-        console.error("Webhook error:", error);
+        console.error("[FAL Webhook] Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

@@ -1,6 +1,6 @@
 # modal_endpoint/train_lora.py
 """
-FLUX LoRA Training - Using ai-toolkit
+FLUX LoRA Training - Using ai-toolkit with fixed numpy
 """
 
 import modal
@@ -15,36 +15,52 @@ training_image = (
         add_python="3.11",
     )
     .apt_install("git", "libgl1-mesa-glx", "libglib2.0-0", "wget", "ffmpeg")
-    .pip_install(
-        "torch==2.4.0",
-        "torchvision==0.19.0",
-        "torchaudio==2.4.0",  # Added missing dependency
-        extra_index_url="https://download.pytorch.org/whl/cu124",
+    .run_commands(
+        # Force install numpy 1.x FIRST before anything else
+        "pip install 'numpy==1.26.4' --force-reinstall",
     )
     .pip_install(
-        "accelerate",
-        "transformers",
-        "peft",
+        "torch==2.5.1",
+        "torchvision==0.20.1",
+        "torchaudio==2.5.1",
+        extra_index_url="https://download.pytorch.org/whl/cu124",
+    )
+    .run_commands(
+        # Reinstall numpy again to make sure it's 1.x
+        "pip install 'numpy==1.26.4' --force-reinstall",
+    )
+    .pip_install(
+        "accelerate>=0.34.0",
+        "transformers>=4.46.0",
+        "peft>=0.13.0",
         "safetensors",
         "Pillow",
         "requests",
-        "huggingface_hub",
-        "diffusers",
+        "fastapi",
+        "uvicorn",
+        "huggingface_hub>=0.26.0",
         "pyyaml",
         "oyaml",
         "tensorboard",
         "prodigyopt",
-        "lycoris-lora",
-        "flatten_json",
-        "pyyaml",
-        "oyaml",
-        "albumentations",
-        "opencv-python",
+        "bitsandbytes",
+        "opencv-python-headless",
         "timm",
     )
     .run_commands(
+        # Install diffusers AFTER numpy is set
+        "pip install 'diffusers>=0.32.0'",
+        # Verify numpy version
+        "python -c 'import numpy; print(f\"NumPy: {numpy.__version__}\")'",
+        # Clone ai-toolkit
         "git clone https://github.com/ostris/ai-toolkit.git /ai-toolkit",
-        "cd /ai-toolkit && pip install -r requirements.txt",
+        # Install ai-toolkit deps without reinstalling numpy
+        "cd /ai-toolkit && pip install -r requirements.txt --no-deps || true",
+        "pip install lycoris-lora>=2.0.0 --no-deps || true",
+        "pip install flatten_json || true",
+        "pip install albumentations --no-deps || true",
+        # Final numpy check
+        "pip install 'numpy==1.26.4' --force-reinstall",
     )
 )
 
@@ -72,7 +88,7 @@ def train_lora(
 ):
     import torch
     import requests
-    import json
+    import yaml
     from pathlib import Path
     from PIL import Image
     from io import BytesIO
@@ -80,7 +96,8 @@ def train_lora(
 
     os.environ["HF_HOME"] = "/cache"
     os.environ["TRANSFORMERS_CACHE"] = "/cache"
-    
+    os.environ["TORCH_HOME"] = "/cache/torch"
+
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         login(token=hf_token)
@@ -89,7 +106,16 @@ def train_lora(
     supabase_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
     print(f"🚀 Training LoRA for: {character_name}")
+    print(f"   PyTorch: {torch.__version__}")
+    print(f"   CUDA: {torch.cuda.get_device_name(0)}")
     print(f"   Steps: {steps}, LR: {lr}, Rank: {rank}")
+
+    import numpy as np
+    print(f"   NumPy: {np.__version__}")
+    
+    # Verify numpy is 1.x
+    if not np.__version__.startswith("1."):
+        print(f"   ⚠️ WARNING: NumPy {np.__version__} may cause issues!")
 
     work_dir = Path("/tmp/training")
     work_dir.mkdir(exist_ok=True)
@@ -180,7 +206,7 @@ def train_lora(
                         },
                         "sample": {
                             "sampler": "flowmatch",
-                            "sample_every": steps + 1,
+                            "sample_every": steps + 100,
                             "width": 512,
                             "height": 512,
                             "prompts": [],
@@ -200,9 +226,8 @@ def train_lora(
         }
 
         config_path = work_dir / "config.yaml"
-        import yaml
         with open(config_path, "w") as f:
-            yaml.dump(config, f)
+            yaml.dump(config, f, default_flow_style=False)
 
         print("\n🏋️ Starting training...")
 
@@ -215,17 +240,29 @@ def train_lora(
                 **os.environ,
                 "HF_HOME": "/cache",
                 "TRANSFORMERS_CACHE": "/cache",
+                "TORCH_HOME": "/cache/torch",
             },
         )
 
-        print("STDOUT:", result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout)
-        
+        if result.stdout:
+            lines = result.stdout.split('\n')
+            print("STDOUT (last 60 lines):")
+            for line in lines[-60:]:
+                print(line)
+
         if result.returncode != 0:
-            print("STDERR:", result.stderr[-2000:] if len(result.stderr) > 2000 else result.stderr)
+            if result.stderr:
+                print("\nSTDERR:")
+                lines = result.stderr.split('\n')
+                for line in lines[-30:]:
+                    print(line)
             raise RuntimeError(f"Training failed with code {result.returncode}")
 
-        # Find LoRA file
+        # Find LoRA
         lora_files = list(out_dir.rglob("*.safetensors"))
+        if not lora_files:
+            lora_files = list(Path("/tmp").rglob("*.safetensors"))
+
         if not lora_files:
             raise RuntimeError("No LoRA file found")
 
@@ -295,7 +332,7 @@ def train_lora(
     secrets=[modal.Secret.from_name("supabase-secret")],
     timeout=60,
 )
-@modal.web_endpoint(method="POST", label="carmi-train-lora")
+@modal.fastapi_endpoint(method="POST", label="carmi-train-lora")
 def start_training(request: dict):
     cid = request.get("character_id")
     cname = request.get("character_name")

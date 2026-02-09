@@ -1,8 +1,14 @@
 // src/app/api/characters/[id]/train/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { startLoraTraining } from "@/lib/services/modal";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { fal } from "@fal-ai/client";
+import JSZip from "jszip";
+
+fal.config({ credentials: process.env.FAL_KEY });
+
+export const runtime = "nodejs";
+export const maxDuration = 120;
 
 export async function POST(
     request: NextRequest,
@@ -12,149 +18,180 @@ export async function POST(
         const { id: characterId } = await params;
 
         const supabase = await createClient();
-        const {
-            data: { user },
-            error: authError,
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
 
-        if (authError || !user) {
+        if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const admin = createAdminClient();
-
-        const { data: character, error: fetchError } = await admin
+        // Get character
+        const { data: character, error: charError } = await supabaseAdmin
             .from("characters")
             .select("*")
             .eq("id", characterId)
             .eq("user_id", user.id)
             .single();
 
-        if (fetchError || !character) {
+        if (charError || !character) {
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
         if (character.status === "training") {
-            return NextResponse.json({ error: "Character is already being trained" }, { status: 409 });
+            return NextResponse.json({ error: "Already training" }, { status: 400 });
+        }
+
+        if (character.status === "ready" && character.lora_url) {
+            return NextResponse.json({ error: "Already trained" }, { status: 400 });
         }
 
         const imageUrls = character.image_urls || [];
-        if (imageUrls.length < 5) {
+        if (imageUrls.length < 4) {
             return NextResponse.json(
-                { error: `Need at least 5 reference images. Currently have ${imageUrls.length}.` },
+                { error: `Need at least 4 images. Got ${imageUrls.length}` },
                 { status: 400 }
             );
         }
 
         // Check credits
         const TRAINING_COST = 10;
-        const { data: credits, error: creditsError } = await admin
+        const { data: credits } = await supabaseAdmin
             .from("credits")
-            .select("*")
+            .select("image_credits")
             .eq("user_id", user.id)
             .single();
 
-        if (creditsError || !credits) {
-            return NextResponse.json({ error: "Could not fetch credits" }, { status: 500 });
-        }
-
-        if (credits.image_credits < TRAINING_COST) {
+        if (!credits || credits.image_credits < TRAINING_COST) {
             return NextResponse.json(
-                { error: `Insufficient credits. Training costs ${TRAINING_COST}. You have ${credits.image_credits}.` },
+                { error: `Need ${TRAINING_COST} credits. You have ${credits?.image_credits || 0}` },
                 { status: 402 }
             );
         }
 
         // Deduct credits
-        const newBalance = credits.image_credits - TRAINING_COST;
-        await admin.from("credits").update({ image_credits: newBalance }).eq("user_id", user.id);
-        await admin.from("credit_transactions").insert({
-            user_id: user.id,
-            credit_type: "image_credits",
-            amount: -TRAINING_COST,
-            balance_after: newBalance,
-            reason: "character_training",
-            related_id: characterId,
-        });
+        await supabaseAdmin
+            .from("credits")
+            .update({ image_credits: credits.image_credits - TRAINING_COST })
+            .eq("user_id", user.id);
 
         // Update status
-        await admin
+        await supabaseAdmin
             .from("characters")
             .update({
                 status: "training",
                 training_started_at: new Date().toISOString(),
-                training_error: null,
+                error_message: null,
             })
             .eq("id", characterId);
 
-        // Parse optional config
-        let trainingConfig: Record<string, number> = {};
+        console.log(`[Train] Starting FAL training for ${characterId}`);
+        console.log(`[Train] Images: ${imageUrls.length}`);
+
+        const triggerWord = "ohwx";
+
         try {
-            const body = await request.json();
-            if (body && typeof body === "object") {
-                trainingConfig = {
-                    num_train_steps: body.num_train_steps,
-                    learning_rate: body.learning_rate,
-                    lora_rank: body.lora_rank,
-                    resolution: body.resolution,
-                };
+            // Create ZIP archive with images
+            console.log("[Train] Creating ZIP archive...");
+            const zip = new JSZip();
+
+            for (let i = 0; i < imageUrls.length; i++) {
+                try {
+                    const response = await fetch(imageUrls[i]);
+                    if (!response.ok) continue;
+
+                    const buffer = await response.arrayBuffer();
+                    const ext = imageUrls[i].split('.').pop()?.toLowerCase() || 'jpg';
+                    zip.file(`image_${i.toString().padStart(3, '0')}.${ext}`, buffer);
+
+                    console.log(`[Train] Added image ${i + 1}/${imageUrls.length}`);
+                } catch (e) {
+                    console.error(`[Train] Failed to fetch image ${i}:`, e);
+                }
             }
-        } catch {
-            // empty body
-        }
 
-        // Check Modal URL
-        const modalUrl = process.env.MODAL_TRAINING_URL;
-        console.log("[Train] MODAL_TRAINING_URL:", modalUrl);
-        console.log("[Train] Character:", characterId, character.name);
-        console.log("[Train] Images:", imageUrls.length);
+            // Generate ZIP
+            const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+            console.log(`[Train] ZIP created: ${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB`);
 
-        if (!modalUrl) {
-            await admin.from("credits").update({ image_credits: credits.image_credits }).eq("user_id", user.id);
-            await admin.from("credit_transactions").insert({
-                user_id: user.id, credit_type: "image_credits", amount: TRAINING_COST,
-                balance_after: credits.image_credits, reason: "training_refund_no_modal_url", related_id: characterId,
-            });
-            await admin.from("characters").update({ status: "failed", training_error: "MODAL_TRAINING_URL not configured" }).eq("id", characterId);
-            return NextResponse.json({ error: "Training service not configured" }, { status: 500 });
-        }
-
-        // Call Modal
-        try {
-            const result = await startLoraTraining({
-                characterId,
-                characterName: character.name,
-                referenceImageUrls: imageUrls,
-                ...trainingConfig,
-            });
-
-            if (!result.success) {
-                await admin.from("credits").update({ image_credits: credits.image_credits }).eq("user_id", user.id);
-                await admin.from("credit_transactions").insert({
-                    user_id: user.id, credit_type: "image_credits", amount: TRAINING_COST,
-                    balance_after: credits.image_credits, reason: "training_refund_modal_rejected", related_id: characterId,
+            // Upload ZIP to Supabase
+            const zipFileName = `${characterId}/training_images.zip`;
+            const { error: uploadError } = await supabaseAdmin.storage
+                .from("training")
+                .upload(zipFileName, zipBuffer, {
+                    contentType: "application/zip",
+                    upsert: true,
                 });
-                await admin.from("characters").update({ status: "failed", training_error: result.errors?.join(", ") || "Modal rejected" }).eq("id", characterId);
-                return NextResponse.json({ error: "Failed to start training", details: result.errors }, { status: 500 });
+
+            if (uploadError) {
+                // Try creating bucket
+                await supabaseAdmin.storage.createBucket("training", { public: true });
+                await supabaseAdmin.storage
+                    .from("training")
+                    .upload(zipFileName, zipBuffer, {
+                        contentType: "application/zip",
+                        upsert: true,
+                    });
             }
 
-            return NextResponse.json({ success: true, message: result.message, character_id: characterId, config: result.config });
-        } catch (modalError) {
-            const errorMessage = modalError instanceof Error ? modalError.message : String(modalError);
-            console.error("[Train] Modal error:", errorMessage);
+            const { data: { publicUrl: zipUrl } } = supabaseAdmin.storage
+                .from("training")
+                .getPublicUrl(zipFileName);
 
-            await admin.from("credits").update({ image_credits: credits.image_credits }).eq("user_id", user.id);
-            await admin.from("credit_transactions").insert({
-                user_id: user.id, credit_type: "image_credits", amount: TRAINING_COST,
-                balance_after: credits.image_credits, reason: "training_refund_modal_error", related_id: characterId,
+            console.log(`[Train] ZIP uploaded: ${zipUrl}`);
+
+            // Start FAL training
+            const { request_id } = await fal.queue.submit("fal-ai/flux-lora-fast-training", {
+                input: {
+                    images_data_url: zipUrl,
+                    trigger_word: triggerWord,
+                    steps: 1000,
+                    create_masks: true,
+                    is_style: false,
+                },
+                webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/fal/training`,
             });
-            await admin.from("characters").update({ status: "failed", training_error: errorMessage }).eq("id", characterId);
 
-            return NextResponse.json({ error: "Failed to connect to training service", details: errorMessage }, { status: 502 });
+            console.log(`[Train] FAL request_id: ${request_id}`);
+
+            // Save request ID
+            await supabaseAdmin
+                .from("characters")
+                .update({
+                    job_id: request_id,
+                    trigger_word: triggerWord,
+                })
+                .eq("id", characterId);
+
+            return NextResponse.json({
+                success: true,
+                message: "Training started with FAL",
+                requestId: request_id,
+            });
+
+        } catch (falError: any) {
+            console.error("[Train] FAL error:", falError);
+
+            // Refund credits
+            await supabaseAdmin
+                .from("credits")
+                .update({ image_credits: credits.image_credits })
+                .eq("user_id", user.id);
+
+            await supabaseAdmin
+                .from("characters")
+                .update({
+                    status: "failed",
+                    error_message: falError.message,
+                })
+                .eq("id", characterId);
+
+            return NextResponse.json(
+                { error: falError.message || "FAL training failed" },
+                { status: 500 }
+            );
         }
-    } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error("[Train] Unexpected:", msg);
-        return NextResponse.json({ error: "Internal server error", details: msg }, { status: 500 });
+
+    } catch (error: any) {
+        console.error("[Train] Error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

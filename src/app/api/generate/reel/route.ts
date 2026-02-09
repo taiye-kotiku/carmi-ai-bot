@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { isValidInstagramUrl } from "@/lib/utils";
 import { extractReelFrames } from "@/lib/services/reel-extractor";
+import sharp from "sharp";
 
 // Define types for better type safety
 interface ExtractedFrame {

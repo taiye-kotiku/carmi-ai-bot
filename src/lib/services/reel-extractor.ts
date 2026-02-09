@@ -140,16 +140,57 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
  */
 async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 20): Promise<Buffer[]> {
     try {
-        // Option 1: Use external frame extraction API if available (preferred for serverless)
+        // Option 1: Use RENDER_API_URL service (frame-extractor service)
+        const renderApiUrl = process.env.RENDER_API_URL || "https://frame-extractor-oou7.onrender.com";
+        try {
+            // Convert video buffer to base64
+            const videoBase64 = videoBuffer.toString("base64");
+            
+            const response = await fetch(`${renderApiUrl}/extract-frames`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    video_base64: videoBase64,
+                    frame_count: frameCount * 2,
+                    fps: 1, // Extract 1 frame per second
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.frames && Array.isArray(data.frames)) {
+                    // Convert base64 strings back to buffers
+                    return data.frames.map((f: string) => {
+                        // Handle both base64 strings and data URLs
+                        const base64Data = f.includes(",") ? f.split(",")[1] : f;
+                        return Buffer.from(base64Data, "base64");
+                    });
+                }
+            } else {
+                const errorText = await response.text();
+                console.warn(`Frame extraction API returned ${response.status}:`, errorText);
+            }
+        } catch (apiError) {
+            console.warn("Frame extraction API failed:", apiError);
+            // Continue to alternative method
+        }
+
+        // Option 2: Try FRAME_EXTRACTOR_API_URL if set
         const extractorApi = process.env.FRAME_EXTRACTOR_API_URL;
-        if (extractorApi) {
+        if (extractorApi && extractorApi.trim() !== "") {
             try {
                 const formData = new FormData();
                 const blob = new Blob([videoBuffer], { type: "video/mp4" });
                 formData.append("video", blob, "video.mp4");
                 formData.append("frame_count", String(frameCount * 2));
 
-                const response = await fetch(`${extractorApi}/extract-frames`, {
+                const apiUrl = extractorApi.endsWith("/") 
+                    ? `${extractorApi}extract-frames` 
+                    : `${extractorApi}/extract-frames`;
+                
+                const response = await fetch(apiUrl, {
                     method: "POST",
                     body: formData,
                 });
@@ -161,66 +202,16 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
                     }
                 }
             } catch (apiError) {
-                console.warn("Frame extraction API failed:", apiError);
+                console.warn("Alternative frame extraction API failed:", apiError);
             }
         }
 
-        // Option 2: Use FFmpeg WebAssembly (works but can be slow in serverless)
-        // Note: This requires @ffmpeg/ffmpeg and @ffmpeg/util packages
-        try {
-            const { createFFmpeg, fetchFile } = await import("@ffmpeg/ffmpeg");
-            const { toBlobURL } = await import("@ffmpeg/util");
-            
-            console.log("Initializing FFmpeg...");
-            const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist";
-            const ffmpeg = createFFmpeg({ 
-                log: false,
-                corePath: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-                wasmPath: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-            });
-            
-            if (!ffmpeg.isLoaded()) {
-                console.log("Loading FFmpeg...");
-                await ffmpeg.load();
-            }
-
-            console.log("Writing video to FFmpeg...");
-            // Write video to FFmpeg's virtual file system
-            ffmpeg.FS("writeFile", "input.mp4", await fetchFile(new Uint8Array(videoBuffer)));
-
-            console.log("Extracting frames...");
-            // Extract frames (1 frame per second, high quality)
-            await ffmpeg.run(
-                "-i", "input.mp4",
-                "-vf", "fps=1",
-                "-q:v", "2",
-                "frame_%04d.jpg"
-            );
-
-            // Read extracted frames
-            const frames: Buffer[] = [];
-            const files = ffmpeg.FS("readdir", "/")
-                .filter((f: string) => f.startsWith("frame_") && f.endsWith(".jpg"))
-                .sort()
-                .slice(0, frameCount * 2);
-            
-            console.log(`Found ${files.length} frames`);
-            
-            for (const file of files) {
-                const frameData = ffmpeg.FS("readFile", file);
-                frames.push(Buffer.from(frameData));
-                ffmpeg.FS("unlink", file); // Clean up
-            }
-
-            // Cleanup
-            ffmpeg.FS("unlink", "input.mp4");
-            
-            console.log(`Extracted ${frames.length} frames using FFmpeg`);
-            return frames;
-        } catch (ffmpegError) {
-            console.error("FFmpeg extraction failed:", ffmpegError);
-            throw new Error("Frame extraction failed. Please configure FRAME_EXTRACTOR_API_URL or ensure @ffmpeg/ffmpeg is properly installed.");
-        }
+        // Option 3: FFmpeg fallback (disabled for serverless - too heavy)
+        // If both API methods fail, throw error
+        throw new Error(
+            "Frame extraction failed. The video processing service is unavailable. " +
+            "Please ensure RENDER_API_URL is configured correctly or set FRAME_EXTRACTOR_API_URL."
+        );
     } catch (error) {
         console.error("Error extracting frames:", error);
         throw new Error(`Failed to extract frames: ${error instanceof Error ? error.message : String(error)}`);

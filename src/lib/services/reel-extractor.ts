@@ -142,39 +142,47 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
     try {
         // Option 1: Use RENDER_API_URL service (frame-extractor service)
         const renderApiUrl = process.env.RENDER_API_URL || "https://frame-extractor-oou7.onrender.com";
-        try {
-            // Convert video buffer to base64
-            const videoBase64 = videoBuffer.toString("base64");
-            
-            const response = await fetch(`${renderApiUrl}/extract-frames`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    video_base64: videoBase64,
-                    frame_count: frameCount * 2,
-                    fps: 1, // Extract 1 frame per second
-                }),
-            });
+        
+        // Try multiple possible endpoints
+        const endpoints = ["/extract-frames", "/extract-reel", "/frames"];
+        
+        for (const endpoint of endpoints) {
+            try {
+                // Convert video buffer to base64
+                const videoBase64 = videoBuffer.toString("base64");
+                
+                const response = await fetch(`${renderApiUrl}${endpoint}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        video_base64: videoBase64,
+                        frame_count: frameCount * 2,
+                        fps: 1, // Extract 1 frame per second
+                    }),
+                });
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.frames && Array.isArray(data.frames)) {
-                    // Convert base64 strings back to buffers
-                    return data.frames.map((f: string) => {
-                        // Handle both base64 strings and data URLs
-                        const base64Data = f.includes(",") ? f.split(",")[1] : f;
-                        return Buffer.from(base64Data, "base64");
-                    });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.frames && Array.isArray(data.frames)) {
+                        console.log(`Successfully extracted frames using ${endpoint}`);
+                        // Convert base64 strings back to buffers
+                        return data.frames.map((f: string) => {
+                            // Handle both base64 strings and data URLs
+                            const base64Data = f.includes(",") ? f.split(",")[1] : f;
+                            return Buffer.from(base64Data, "base64");
+                        });
+                    }
+                } else if (response.status !== 404) {
+                    // If it's not a 404, log the error but try next endpoint
+                    const errorText = await response.text();
+                    console.warn(`Frame extraction API ${endpoint} returned ${response.status}:`, errorText);
                 }
-            } else {
-                const errorText = await response.text();
-                console.warn(`Frame extraction API returned ${response.status}:`, errorText);
+            } catch (apiError) {
+                console.warn(`Frame extraction API ${endpoint} failed:`, apiError);
+                // Continue to next endpoint
             }
-        } catch (apiError) {
-            console.warn("Frame extraction API failed:", apiError);
-            // Continue to alternative method
         }
 
         // Option 2: Try FRAME_EXTRACTOR_API_URL if set

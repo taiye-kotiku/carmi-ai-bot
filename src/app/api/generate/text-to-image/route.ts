@@ -115,18 +115,19 @@ async function processTextToImage(
             const originalBuffer = Buffer.from(base64Data, "base64");
 
             // Check if resizing is needed (only resize if not already 1080x1080)
-            let resizedBuffer = originalBuffer;
+            let resizedBuffer: Buffer = originalBuffer;
             try {
                 const metadata = await sharp(originalBuffer).metadata();
                 if (metadata.width !== 1080 || metadata.height !== 1080) {
                     // Resize to exactly 1080x1080px
-                    resizedBuffer = await sharp(originalBuffer)
+                    const resized = await sharp(originalBuffer)
                         .resize(1080, 1080, {
                             fit: "cover", // Cover the entire area, may crop if needed
                             position: "center",
                         })
                         .png({ quality: 100 })
                         .toBuffer();
+                    resizedBuffer = Buffer.from(resized);
                 }
             } catch (resizeError) {
                 console.warn("Resize failed, using original:", resizeError);
@@ -186,7 +187,6 @@ async function processTextToImage(
             .update({ image_credits: newBalance })
             .eq("user_id", userId);
 
-        const requiredCredits = 2;
         await supabaseAdmin.from("credit_transactions").insert({
             user_id: userId,
             credit_type: "image",

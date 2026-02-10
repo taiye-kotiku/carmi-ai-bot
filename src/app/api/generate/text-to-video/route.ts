@@ -137,8 +137,7 @@ export async function POST(request: NextRequest) {
 
         console.log("Public URL:", publicUrl);
 
-        // Deduct credits
-        const requiredCredits = 20;
+        // Deduct credits (requiredCredits already declared at line 48)
         const { data: currentCredits } = await supabaseAdmin
             .from("credits")
             .select("video_credits")

@@ -295,7 +295,9 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
                 console.log(`Trying alternative API: ${apiUrl}`);
                 
                 const formData = new FormData();
-                const blob = new Blob([videoBuffer], { type: "video/mp4" });
+                // Convert Buffer to Uint8Array for Blob compatibility
+                const uint8Array = new Uint8Array(videoBuffer);
+                const blob = new Blob([uint8Array], { type: "video/mp4" });
                 formData.append("video", blob, "video.mp4");
                 formData.append("frame_count", String(frameCount * 2));
 

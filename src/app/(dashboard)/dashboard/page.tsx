@@ -91,7 +91,7 @@ export default async function DashboardPage() {
                             <ArrowLeft className="h-4 w-4 mr-2" />
                         </Button>
                     </Link>
-                </CardContent>
+                </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
                         <CreditSlider

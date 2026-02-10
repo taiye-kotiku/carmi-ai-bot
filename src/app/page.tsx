@@ -32,9 +32,6 @@ export default async function HomePage() {
                 <Link href="/generate/carousel" className="text-slate-400 hover:text-white text-sm transition-colors">
                   קרוסלה
                 </Link>
-                <Link href="/brand" className="text-slate-400 hover:text-white text-sm transition-colors">
-                  מיתוג
-                </Link>
                 <Link href="/credits" className="text-slate-400 hover:text-white text-sm transition-colors">
                   מנוי וקרדיטים
                 </Link>

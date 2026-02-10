@@ -66,13 +66,6 @@ export default async function DashboardPage() {
             icon: Images,
             color: "bg-green-50 text-green-600 hover:bg-green-100",
         },
-        {
-            name: "הגדרת מותג",
-            description: "הוסף לוגו ומיתוג",
-            href: "/brand",
-            icon: Palette,
-            color: "bg-orange-50 text-orange-600 hover:bg-orange-100",
-        },
     ];
 
     return (

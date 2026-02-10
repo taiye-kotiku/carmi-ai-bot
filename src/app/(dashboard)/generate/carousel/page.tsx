@@ -1153,6 +1153,12 @@ export default function CarouselGenerationPage() {
                                         </button>
                                     ))}
                                 </div>
+                                <div className="mt-4">
+                                    <ExportFormats 
+                                        imageUrl={results[currentSlide]} 
+                                        baseFilename={`carousel-slide-${currentSlide + 1}`}
+                                    />
+                                </div>
                             </div>
                         )}
 

@@ -118,21 +118,38 @@ async function pollVideoOperation(operationName: string): Promise<string> {
     throw new Error("Video generation timed out");
 }
 
-// Image to Video with Veo 3.0 Fast
+// src/lib/services/gemini.ts
+
+// Replace the existing imageToVideo function with this:
+
 export async function imageToVideo(
     imageUrl: string,
     prompt: string,
     options: { aspectRatio?: string; duration?: number } = {}
 ): Promise<string> {
     let imageBase64 = imageUrl;
+    let mimeType = "image/png";
 
     if (imageUrl.startsWith("http")) {
         const imgResponse = await fetch(imageUrl);
+        if (!imgResponse.ok) {
+            throw new Error(`Failed to fetch image: ${imgResponse.statusText}`);
+        }
+        // Get the actual mime type from the response
+        mimeType = imgResponse.headers.get("content-type") || "image/png";
         const buffer = await imgResponse.arrayBuffer();
         imageBase64 = Buffer.from(buffer).toString("base64");
-    } else {
-        imageBase64 = imageUrl.replace(/^data:image\/\w+;base64,/, "");
+    } else if (imageUrl.startsWith("data:")) {
+        // Extract mime type and base64 from data URI
+        const match = imageUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+        if (match) {
+            mimeType = match[1];
+            imageBase64 = match[2];
+        } else {
+            imageBase64 = imageUrl.replace(/^data:image\/\w+;base64,/, "");
+        }
     }
+    // else: raw base64 string, keep default mimeType
 
     const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
@@ -142,7 +159,10 @@ export async function imageToVideo(
             body: JSON.stringify({
                 instances: [{
                     prompt,
-                    image: { bytesBase64Encoded: imageBase64 },
+                    image: {
+                        bytesBase64Encoded: imageBase64,
+                        mimeType: mimeType,
+                    },
                 }],
                 parameters: {
                     aspectRatio: options.aspectRatio || "16:9",

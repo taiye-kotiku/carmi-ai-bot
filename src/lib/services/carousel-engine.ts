@@ -31,6 +31,7 @@ export interface CarouselEngineOptions {
     logoBuffer?: Buffer;
     logoPosition?: LogoPosition;
     logoSize?: "small" | "medium" | "large";
+    logoTransparent?: boolean;
     accentColor?: string;
     textColor?: string;
     fontFamily?: string;
@@ -323,6 +324,7 @@ export async function createCarouselWithEngine(
         logoBuffer,
         logoPosition = "top-right",
         logoSize = "medium",
+        logoTransparent = false,
         accentColor = template.accent,
         textColor = template.text_color,
         fontFamily,
@@ -597,54 +599,67 @@ export async function createCarouselWithEngine(
                 const validDimensions = logoW > 0 && logoH > 0 && logoW <= WIDTH && logoH <= HEIGHT;
                 
                 if (fitsHorizontally && fitsVertically && validDimensions) {
-                    // Add background/border for logo visibility
-                    const padding = 8; // Padding around logo
-                    const borderRadius = 8;
+                    // Add background/border for logo visibility (unless transparent option is selected)
+                    if (!logoTransparent) {
+                        const padding = 8; // Padding around logo
+                        const borderRadius = 8;
+                        
+                        // Draw semi-transparent white background with border
+                        ctx.save();
+                        
+                        // Draw shadow/glow effect
+                        ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                        ctx.shadowBlur = 12;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 4;
+                        
+                        // Draw white background with rounded corners
+                        ctx.fillStyle = "rgba(255, 255, 255, 0.95)"; // 95% opaque white
+                        roundRect(
+                            ctx,
+                            safeX - padding,
+                            safeY - padding,
+                            logoW + padding * 2,
+                            logoH + padding * 2,
+                            borderRadius
+                        );
+                        ctx.fill();
+                        
+                        // Draw border
+                        ctx.strokeStyle = "rgba(0, 0, 0, 0.3)";
+                        ctx.lineWidth = 2;
+                        roundRect(
+                            ctx,
+                            safeX - padding,
+                            safeY - padding,
+                            logoW + padding * 2,
+                            logoH + padding * 2,
+                            borderRadius
+                        );
+                        ctx.stroke();
+                        
+                        // Reset shadow
+                        ctx.shadowColor = "transparent";
+                        ctx.shadowBlur = 0;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 0;
+                        
+                        ctx.restore();
+                    } else {
+                        // For transparent logo, add subtle shadow for visibility
+                        ctx.save();
+                        ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
+                        ctx.shadowBlur = 8;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 2;
+                    }
                     
-                    // Draw semi-transparent white background with border
-                    ctx.save();
-                    
-                    // Draw shadow/glow effect
-                    ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
-                    ctx.shadowBlur = 12;
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 4;
-                    
-                    // Draw white background with rounded corners
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.95)"; // 95% opaque white
-                    roundRect(
-                        ctx,
-                        safeX - padding,
-                        safeY - padding,
-                        logoW + padding * 2,
-                        logoH + padding * 2,
-                        borderRadius
-                    );
-                    ctx.fill();
-                    
-                    // Draw border
-                    ctx.strokeStyle = "rgba(0, 0, 0, 0.3)";
-                    ctx.lineWidth = 2;
-                    roundRect(
-                        ctx,
-                        safeX - padding,
-                        safeY - padding,
-                        logoW + padding * 2,
-                        logoH + padding * 2,
-                        borderRadius
-                    );
-                    ctx.stroke();
-                    
-                    // Reset shadow
-                    ctx.shadowColor = "transparent";
-                    ctx.shadowBlur = 0;
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 0;
-                    
-                    ctx.restore();
-                    
-                    // Draw logo on top of background
+                    // Draw logo
                     ctx.drawImage(logoImage, safeX, safeY, logoW, logoH);
+                    
+                    if (logoTransparent) {
+                        ctx.restore();
+                    }
                 } else {
                     console.warn(`[Slide ${i + 1}] Logo skipped - out of bounds: x=${safeX}, y=${safeY}, w=${logoW}, h=${logoH}, canvas=${WIDTH}x${HEIGHT}`);
                 }

@@ -79,6 +79,7 @@ export default function CarouselGenerationPage() {
     const [logoBase64, setLogoBase64] = useState<string | null>(null);
     const [logoPosition, setLogoPosition] = useState<string>("top-right");
     const [logoSize, setLogoSize] = useState<"small" | "medium" | "large">("medium");
+    const [logoTransparent, setLogoTransparent] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState("all");
     
     // Background image upload
@@ -321,6 +322,7 @@ export default function CarouselGenerationPage() {
                     logo_base64: logoBase64 || undefined,
                     logo_position: logoPosition,
                     logo_size: logoSize,
+                    logo_transparent: logoTransparent,
                     font_family: fontFamily,
                     headline_font_size: headlineFontSize,
                     body_font_size: bodyFontSize,
@@ -528,6 +530,23 @@ export default function CarouselGenerationPage() {
                                                 גדול
                                             </button>
                                         </div>
+                                    </div>
+                                    <div className="mt-4">
+                                        <button
+                                            onClick={() => setLogoTransparent(!logoTransparent)}
+                                            className={`w-full p-3 rounded-lg border text-sm text-center transition-colors ${
+                                                logoTransparent
+                                                    ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                    : "border-gray-200 hover:border-gray-300 bg-white"
+                                            }`}
+                                        >
+                                            {logoTransparent ? "✓ לוגו שקוף" : "לוגו שקוף"}
+                                        </button>
+                                        <p className="text-xs text-gray-500 mt-1 text-center">
+                                            {logoTransparent 
+                                                ? "הלוגו יוצג ללא רקע (שקוף)" 
+                                                : "הלוגו יוצג עם רקע לבן למניעת טשטוש"}
+                                        </p>
                                     </div>
                                 </>
                             )}

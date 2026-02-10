@@ -18,6 +18,7 @@ interface GenerateCarouselOptions {
     brandColor?: string;
     logoPosition?: LogoPosition;
     logoSize?: "small" | "medium" | "large";
+    logoTransparent?: boolean;
     fontPath?: string;
     fontFamily?: string;
     headlineFontSize?: number;
@@ -40,6 +41,7 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         brandColor,
         logoPosition = "top-right",
         logoSize = "medium",
+        logoTransparent = false,
         fontPath,
         fontFamily,
         headlineFontSize,
@@ -127,6 +129,7 @@ export async function generateCarousel(options: GenerateCarouselOptions): Promis
         logoBuffer,
         logoPosition,
         logoSize,
+        logoTransparent,
         accentColor,
         textColor: fontColor || template.text_color,
         fontFamily,

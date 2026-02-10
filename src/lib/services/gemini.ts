@@ -166,7 +166,7 @@ export async function imageToVideo(
                 }],
                 parameters: {
                     aspectRatio: options.aspectRatio || "16:9",
-                    durationSeconds: options.duration || 5,
+                    durationSeconds: options.duration === 8 ? 8 : 4
                 },
             }),
         }

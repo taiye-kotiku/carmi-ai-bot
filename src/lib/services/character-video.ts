@@ -149,7 +149,7 @@ export async function generateCharacterVideo(
             // Generate video via Veo 3 image-to-video (from gemini.ts)
             const videoUri = await imageToVideo(imageUrl, videoPrompt, {
                 aspectRatio,
-                duration,
+                duration: duration >= 8 ? 8 : 4,
             });
 
             if (!videoUri) {

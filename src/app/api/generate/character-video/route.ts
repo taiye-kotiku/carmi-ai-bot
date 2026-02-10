@@ -27,7 +27,7 @@ export async function POST(req: Request) {
             style = "storytelling",
             aspect_ratio = "9:16",
             transition_style = "fade",
-            scene_duration = 5,
+            scene_duration = 4
         } = body;
 
         if (!character_id) {

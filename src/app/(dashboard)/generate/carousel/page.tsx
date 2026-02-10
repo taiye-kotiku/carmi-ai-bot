@@ -467,7 +467,7 @@ export default function CarouselGenerationPage() {
                                     <p className="text-sm text-gray-500">PNG או JPG, עד 5MB</p>
                                     {hasLogo && (
                                         <button
-                                            onClick={() => { setLogoUrl(null); setLogoBase64(null); }}
+                                            onClick={() => { setLogoUrl(null); setLogoBase64(null); setLogoTransparent(false); }}
                                             className="text-sm text-red-500 hover:underline mt-1"
                                         >
                                             הסר לוגו

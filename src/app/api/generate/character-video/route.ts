@@ -65,8 +65,13 @@ export async function POST(req: Request) {
 
         // Check credits
         const numScenes = custom_scenes?.length || scene_count;
+<<<<<<< HEAD
         const requiredImageCredits = numScenes; // 1 credit per Modal image
         const requiredVideoCredits = numScenes * 3; // 3 reel credits per Veo video
+=======
+        const requiredImageCredits = numScenes * 3; // 3 credits per character image
+        const requiredVideoCredits = 25; // Fixed cost: 25 credits per video
+>>>>>>> f184e5ca25ff8cee9ea32ae03590d5c88a351b7a
 
         const { data: credits } = await supabaseAdmin
             .from("credits")

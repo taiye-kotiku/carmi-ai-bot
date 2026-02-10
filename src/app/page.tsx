@@ -11,13 +11,23 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-slate-950" dir="rtl">
-      {/* Enhanced Futuristic Background */}
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950" />
+      {/* Background Image */}
+      <div className="fixed inset-0 -z-10">
+        <Image
+          src="/hero-background.png"
+          alt="Background"
+          fill
+          className="object-cover"
+          priority
+          quality={90}
+          unoptimized
+        />
+        <div className="absolute inset-0 bg-slate-950/40" />
+      </div>
+      {/* Enhanced Futuristic Background Overlay */}
+      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950/50 to-slate-950/80" />
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(99,102,241,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.05)_1px,transparent_1px)] bg-[size:48px_48px]" />
       <div className="fixed inset-0 -z-10 bg-gradient-to-tr from-cyan-500/5 via-transparent to-purple-500/5" />
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[800px] -z-10 bg-indigo-500/30 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '8s' }} />
-      <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] -z-10 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }} />
-      <div className="fixed top-1/3 left-1/4 w-[400px] h-[400px] -z-10 bg-cyan-500/15 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
 
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -31,9 +41,6 @@ export default async function HomePage() {
               <>
                 <Link href="/generate/carousel" className="text-slate-400 hover:text-white text-sm transition-colors">
                   קרוסלה
-                </Link>
-                <Link href="/brand" className="text-slate-400 hover:text-white text-sm transition-colors">
-                  מיתוג
                 </Link>
                 <Link href="/credits" className="text-slate-400 hover:text-white text-sm transition-colors">
                   מנוי וקרדיטים
@@ -176,38 +183,38 @@ export default async function HomePage() {
             </div>
 
             {/* Example 3: Character Creation */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
                 <Sparkles className="h-7 w-7 text-white" />
               </div>
               <h3 className="text-xl font-bold mb-3 text-white">דמות AI אישית</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-pink-500/20 to-purple-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-pink-400/50 transition-all">
+              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-pink-500/20 to-purple-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-purple-400/50 transition-all">
                 🎭
               </div>
               <p className="text-slate-300 text-sm mb-4 leading-relaxed">
                 העלה תמונות שלך ואמן דמות AI – תוכל להשתמש בה בכל תמונה וסרטון שתיצור
               </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-pink-500/30 shadow-inner">
-                <span className="text-pink-400 font-semibold">דוגמה:</span><br />
+              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-purple-500/30 shadow-inner">
+                <span className="text-purple-400 font-semibold">דוגמה:</span><br />
                 &quot;צור תמונה שלי כסופרמן מעל העיר&quot;
               </div>
             </div>
 
             {/* Example 4: Reel to Carousel */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
                 <Film className="h-7 w-7 text-white" />
               </div>
-              <h3 className="text-xl font-bold mb-3 text-white">המרת רילז לקרוסלה</h3>
+              <h3 className="text-xl font-bold mb-3 text-white">המרת רילז לתמונות מנצחות</h3>
               <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-indigo-400/50 transition-all">
                 🎬
               </div>
               <p className="text-slate-300 text-sm mb-4 leading-relaxed">
                 הדבק קישור לרילז מאינסטגרם – AI יבחר את הפריימים הטובים ביותר וייצור 10 תמונות
               </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-indigo-500/30 shadow-inner">
-                <span className="text-indigo-400 font-semibold">דוגמה:</span><br />
-                &quot;המר את הרילז הזה לקרוסלה בת 10 תמונות&quot;
+              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-purple-500/30 shadow-inner">
+                <span className="text-purple-400 font-semibold">דוגמה:</span><br />
+                &quot;המר את הרילז הזה לתמונות מנצחות&quot;
               </div>
             </div>
 
@@ -235,8 +242,13 @@ export default async function HomePage() {
                 <Wand2 className="h-7 w-7 text-white" />
               </div>
               <h3 className="text-xl font-bold mb-3 text-white">המרה לקריקטורה</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-amber-400/50 transition-all">
-                🎨
+              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 ring-2 ring-white/10 group-hover:ring-amber-400/50 transition-all relative">
+                <Image
+                  src="/caricature-example.png"
+                  alt="דוגמה לקריקטורה"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <p className="text-slate-300 text-sm mb-4 leading-relaxed">
                 העלה תמונה והפוך אותה לקריקטורה צבעונית בסגנון איור דיגיטלי מקצועי
@@ -287,7 +299,7 @@ export default async function HomePage() {
               </div>
               <h3 className="text-2xl font-bold mb-3 text-white">המרת רילז לקרוסלה</h3>
               <p className="text-slate-300 leading-relaxed">
-                הדבק קישור לרילז מאינסטגרם וקבל 10 תמונות מושלמות לקרוסלה.
+                הדבק קישור לרילז מאינסטגרם וקבל 10 תמונות מושלמות מנצחות.
                 AI חכם בוחר את הפריימים הכי מוצלחים אוטומטית.
               </p>
             </div>
@@ -329,8 +341,8 @@ export default async function HomePage() {
             </div>
 
             {/* Feature 5 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
                 <Zap className="h-8 w-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold mb-3 text-white">דמות AI אישית</h3>
@@ -374,15 +386,15 @@ export default async function HomePage() {
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>10 יצירות תמונה</span>
+                  <span>24 קרדיטים בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>2 המרות רילז</span>
+                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>5 קרוסלות</span>
+                  <span>המרת רילז</span>
                 </li>
               </ul>
               <Button variant="outline" className="w-full border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20" asChild>
@@ -397,7 +409,7 @@ export default async function HomePage() {
               <div className="absolute -top-3 right-4 bg-amber-400 text-amber-950 text-xs font-medium px-3 py-1 rounded-full">
                 הכי פופולרי
               </div>
-              <h3 className="text-lg font-semibold mb-2 text-white">סטארטר</h3>
+              <h3 className="text-lg font-semibold mb-2 text-white">בסיסי</h3>
               <div className="mb-4">
                 <span className="text-4xl font-bold text-white">₪139</span>
                 <span className="text-indigo-200/80">/חודש</span>
@@ -405,11 +417,15 @@ export default async function HomePage() {
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>250 מודעות / תמונות בחודש</span>
+                  <span>300 קרדיטים בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>20 קרוסלות מותאמות</span>
+                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
+                </li>
+                <li className="flex items-center gap-2 text-indigo-100">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>יצירת סרטונים</span>
                 </li>
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
@@ -437,7 +453,7 @@ export default async function HomePage() {
                 </li>
               </ul>
               <Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
-                <Link href="/signup?plan=starter">
+                <Link href="/signup?plan=basic">
                   בחר בתוכנית
                 </Link>
               </Button>
@@ -453,11 +469,15 @@ export default async function HomePage() {
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>500 מודעות / תמונות בחודש</span>
+                  <span>600 קרדיטים בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>50 קרוסלות מותאמות</span>
+                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-300">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>יצירת סרטונים</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />

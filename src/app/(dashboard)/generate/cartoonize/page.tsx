@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Download, Upload, Palette } from "lucide-react";
 import { toast } from "sonner";
+import { requestNotificationPermission, notifyGenerationComplete } from "@/lib/services/notifications";
+import { ExportFormats } from "@/components/export-formats";
 
 export default function CartoonizePage() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -74,6 +76,10 @@ export default function CartoonizePage() {
 
             setResultUrl(data.imageUrl);
             toast.success("הקריקטורה נוצרה בהצלחה!");
+            // Request permission and show notification
+            requestNotificationPermission().then(() => {
+                notifyGenerationComplete("caricature");
+            });
         } catch (err: any) {
             setError(err.message);
             toast.error(err.message);
@@ -157,11 +163,17 @@ export default function CartoonizePage() {
                                             <Loader2 className="h-12 w-12 animate-spin text-purple-500" />
                                         </div>
                                     ) : resultUrl ? (
-                                        <img
-                                            src={resultUrl}
-                                            alt="קריקטורה"
-                                            className="w-full rounded-lg border border-gray-200 object-contain max-h-80"
-                                        />
+                                        <div className="space-y-3">
+                                            <img
+                                                src={resultUrl}
+                                                alt="קריקטורה"
+                                                className="w-full rounded-lg border border-gray-200 object-contain max-h-80"
+                                            />
+                                            <ExportFormats 
+                                                imageUrl={resultUrl} 
+                                                baseFilename={`caricature-${selectedFile?.name?.replace(/\.[^/.]+$/, "") || "image"}`}
+                                            />
+                                        </div>
                                     ) : (
                                         <div className="w-full aspect-square max-h-80 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 border border-dashed">
                                             התוצאה תופיע כאן

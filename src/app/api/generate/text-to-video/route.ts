@@ -38,6 +38,21 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Check credits
+        const { data: credits } = await supabase
+            .from("credits")
+            .select("video_credits")
+            .eq("user_id", user.id)
+            .single();
+
+        const requiredCredits = 25; // Fixed cost: 25 credits per video
+        if (!credits || credits.video_credits < requiredCredits) {
+            return NextResponse.json(
+                { error: `אין מספיק קרדיטים ליצירת וידאו (נדרשים ${requiredCredits})` },
+                { status: 402 }
+            );
+        }
+
         console.log("Veo request:", { prompt, aspectRatio, duration });
 
         // Start video generation
@@ -121,6 +136,29 @@ export async function POST(request: NextRequest) {
             .getPublicUrl(fileName);
 
         console.log("Public URL:", publicUrl);
+
+        // Deduct credits (requiredCredits already declared at line 48)
+        const { data: currentCredits } = await supabaseAdmin
+            .from("credits")
+            .select("video_credits")
+            .eq("user_id", user.id)
+            .single();
+
+        const newBalance = (currentCredits?.video_credits || requiredCredits) - requiredCredits;
+
+        await supabaseAdmin
+            .from("credits")
+            .update({ video_credits: newBalance })
+            .eq("user_id", user.id);
+
+        await supabaseAdmin.from("credit_transactions").insert({
+            user_id: user.id,
+            credit_type: "video",
+            amount: -requiredCredits,
+            balance_after: newBalance,
+            reason: "text_to_video",
+            related_id: fileName,
+        });
 
         return NextResponse.json({
             success: true,

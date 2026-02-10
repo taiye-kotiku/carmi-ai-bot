@@ -26,6 +26,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 import type { CarouselTemplate } from "@/lib/carousel/templates";
+import { requestNotificationPermission, notifyGenerationComplete } from "@/lib/services/notifications";
+import { ExportFormats } from "@/components/export-formats";
 
 const LOGO_POSITIONS = [
     { value: "top-left", label: "פינה עליונה שמאל", grid: "col-start-1 row-start-1" },
@@ -79,6 +81,7 @@ export default function CarouselGenerationPage() {
     const [logoBase64, setLogoBase64] = useState<string | null>(null);
     const [logoPosition, setLogoPosition] = useState<string>("top-right");
     const [logoSize, setLogoSize] = useState<"small" | "medium" | "large">("medium");
+    const [logoTransparent, setLogoTransparent] = useState(false);
     const [categoryFilter, setCategoryFilter] = useState("all");
     
     // Background image upload
@@ -321,6 +324,7 @@ export default function CarouselGenerationPage() {
                     logo_base64: logoBase64 || undefined,
                     logo_position: logoPosition,
                     logo_size: logoSize,
+                    logo_transparent: logoTransparent,
                     font_family: fontFamily,
                     headline_font_size: headlineFontSize,
                     body_font_size: bodyFontSize,
@@ -346,6 +350,10 @@ export default function CarouselGenerationPage() {
                 if (status.status === "completed") {
                     setResults(status.result.images);
                     toast.success("הקרוסלה נוצרה בהצלחה! 🎨");
+                    // Request permission and show notification
+                    requestNotificationPermission().then(() => {
+                        notifyGenerationComplete("carousel", status.result.images?.length);
+                    });
                     break;
                 }
                 if (status.status === "failed") {
@@ -465,7 +473,7 @@ export default function CarouselGenerationPage() {
                                     <p className="text-sm text-gray-500">PNG או JPG, עד 5MB</p>
                                     {hasLogo && (
                                         <button
-                                            onClick={() => { setLogoUrl(null); setLogoBase64(null); }}
+                                            onClick={() => { setLogoUrl(null); setLogoBase64(null); setLogoTransparent(false); }}
                                             className="text-sm text-red-500 hover:underline mt-1"
                                         >
                                             הסר לוגו
@@ -528,6 +536,23 @@ export default function CarouselGenerationPage() {
                                                 גדול
                                             </button>
                                         </div>
+                                    </div>
+                                    <div className="mt-4">
+                                        <button
+                                            onClick={() => setLogoTransparent(!logoTransparent)}
+                                            className={`w-full p-3 rounded-lg border text-sm text-center transition-colors ${
+                                                logoTransparent
+                                                    ? "border-pink-500 bg-pink-50 text-pink-700"
+                                                    : "border-gray-200 hover:border-gray-300 bg-white"
+                                            }`}
+                                        >
+                                            {logoTransparent ? "✓ לוגו שקוף" : "לוגו שקוף"}
+                                        </button>
+                                        <p className="text-xs text-gray-500 mt-1 text-center">
+                                            {logoTransparent 
+                                                ? "הלוגו יוצג ללא רקע (שקוף)" 
+                                                : "הלוגו יוצג עם רקע לבן למניעת טשטוש"}
+                                        </p>
                                     </div>
                                 </>
                             )}
@@ -1127,6 +1152,12 @@ export default function CarouselGenerationPage() {
                                             <img src={url} alt="" className="w-full h-full object-cover" />
                                         </button>
                                     ))}
+                                </div>
+                                <div className="mt-4">
+                                    <ExportFormats 
+                                        imageUrl={results[currentSlide]} 
+                                        baseFilename={`carousel-slide-${currentSlide + 1}`}
+                                    />
                                 </div>
                             </div>
                         )}

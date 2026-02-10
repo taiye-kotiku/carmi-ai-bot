@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Download, Sparkles, Image as ImageIcon } from "lucide-react";
+import { ExportFormats } from "@/components/export-formats";
+import { requestNotificationPermission, notifyGenerationComplete } from "@/lib/services/notifications";
 
 export default function TextToImagePage() {
     const [prompt, setPrompt] = useState("");
@@ -48,6 +50,10 @@ export default function TextToImagePage() {
                     clearInterval(pollInterval);
                     setResult(job.result.images);
                     setIsGenerating(false);
+                    // Request permission and show notification
+                    requestNotificationPermission().then(() => {
+                        notifyGenerationComplete("image", job.result.images?.length);
+                    });
                 } else if (job.status === "failed") {
                     clearInterval(pollInterval);
                     setError(job.error || "שגיאה ביצירת התמונה");
@@ -158,21 +164,27 @@ export default function TextToImagePage() {
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {result.map((imageUrl, index) => (
-                                    <div key={index} className="relative group">
-                                        <img
-                                            src={imageUrl}
-                                            alt={`Generated image ${index + 1}`}
-                                            className="w-full rounded-lg shadow-lg"
+                                    <div key={index} className="space-y-3">
+                                        <div className="relative group">
+                                            <img
+                                                src={imageUrl}
+                                                alt={`Generated image ${index + 1}`}
+                                                className="w-full rounded-lg shadow-lg"
+                                            />
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={() => handleDownload(imageUrl, index)}
+                                            >
+                                                <Download className="h-4 w-4 ml-1" />
+                                                הורד מקורי
+                                            </Button>
+                                        </div>
+                                        <ExportFormats 
+                                            imageUrl={imageUrl} 
+                                            baseFilename={`generated-image-${index + 1}`}
                                         />
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={() => handleDownload(imageUrl, index)}
-                                        >
-                                            <Download className="h-4 w-4 ml-1" />
-                                            הורד
-                                        </Button>
                                     </div>
                                 ))}
                             </div>

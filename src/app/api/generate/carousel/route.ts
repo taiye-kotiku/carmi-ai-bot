@@ -33,6 +33,7 @@ export async function POST(req: Request) {
             logo_base64: logoBase64,
             logo_position = "top-right",
             logo_size,
+            logo_transparent = false,
             font_family,
             headline_font_size,
             body_font_size,
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
             .eq("user_id", user.id)
             .single();
 
-        const requiredCredits = customSlides?.length || slide_count;
+        const requiredCredits = 3; // Fixed cost: 3 credits per carousel
         if (!credits || credits.carousel_credits < requiredCredits) {
             return NextResponse.json(
                 { error: `אין מספיק קרדיטים (נדרשים ${requiredCredits})` },
@@ -138,6 +139,7 @@ export async function POST(req: Request) {
             brandColor,
             logoPosition,
             logoSize: logo_size || "medium",
+            logoTransparent: logo_transparent || false,
             requiredCredits,
             fontFamily: font_family,
             headlineFontSize: headline_font_size,
@@ -164,6 +166,7 @@ interface ProcessOptions {
     brandColor?: string;
     logoPosition?: string;
     logoSize?: "small" | "medium" | "large";
+    logoTransparent?: boolean;
     requiredCredits: number;
     fontFamily?: string;
     headlineFontSize?: number;
@@ -226,6 +229,7 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
                 brandColor: options.brandColor,
                 logoPosition: options.logoPosition as any,
                 logoSize: options.logoSize,
+                logoTransparent: options.logoTransparent,
                 fontFamily: options.fontFamily,
                 headlineFontSize: options.headlineFontSize,
                 bodyFontSize: options.bodyFontSize,

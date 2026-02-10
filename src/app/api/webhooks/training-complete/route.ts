@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
                 .eq("id", character_id);
 
             // Refund credits
-            const TRAINING_COST = 10;
+            const TRAINING_COST = 50;
             const { data: credits } = await admin
                 .from("credits")
                 .select("image_credits")

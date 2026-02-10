@@ -52,7 +52,6 @@ const navigation: NavItem[] = [
 
     // Settings
     { type: "divider", label: "הגדרות" },
-    { type: "link", name: "מיתוג", href: "/brand", icon: Settings },
     { type: "link", name: "מנוי וקרדיטים", href: "/credits", icon: CreditCard },
 ];
 

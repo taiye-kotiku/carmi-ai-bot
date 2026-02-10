@@ -31,6 +31,7 @@ export interface CarouselEngineOptions {
     logoBuffer?: Buffer;
     logoPosition?: LogoPosition;
     logoSize?: "small" | "medium" | "large";
+    logoTransparent?: boolean;
     accentColor?: string;
     textColor?: string;
     fontFamily?: string;
@@ -208,18 +209,39 @@ function drawCleanText(
             totalLineW += ctx.measureText(seg.text).width;
         }
         
-        // Calculate startX for RTL text, ensuring it stays within canvas bounds
-        let startX = x + totalLineW / 2; // RTL: anchor at right edge
-        
-        // Clamp to ensure text doesn't overflow canvas bounds
+        // For RTL text: startX is the rightmost point, text extends leftward
         const rightBound = WIDTH - MARGIN;
         const leftBound = MARGIN;
-        if (startX > rightBound) {
-            startX = rightBound;
+        
+        // Calculate available width for text
+        const availableWidth = rightBound - leftBound;
+        
+        // If text is too wide, we need to reduce font size (already handled above)
+        // But ensure it fits within available width
+        if (totalLineW > availableWidth) {
+            // Text is too wide - center it but clamp to bounds
+            totalLineW = Math.min(totalLineW, availableWidth);
         }
-        // Ensure text doesn't go past left edge
-        if (startX - totalLineW < leftBound) {
-            startX = leftBound + totalLineW;
+        
+        // Start from center (x is WIDTH/2)
+        let startX = x;
+        
+        // For RTL: ensure rightmost point (startX) doesn't exceed rightBound
+        // and leftmost point (startX - totalLineW) doesn't go below leftBound
+        const minStartX = leftBound + totalLineW; // Minimum startX to keep text within left bound
+        const maxStartX = rightBound; // Maximum startX (rightmost point)
+        
+        // Clamp startX to valid range
+        startX = Math.max(minStartX, Math.min(startX, maxStartX));
+        
+        // Final verification: ensure text fits completely
+        const actualLeftmost = startX - totalLineW;
+        const actualRightmost = startX;
+        
+        if (actualLeftmost < leftBound || actualRightmost > rightBound) {
+            // If still out of bounds, center it within available space
+            startX = leftBound + (availableWidth + totalLineW) / 2;
+            startX = Math.max(minStartX, Math.min(startX, maxStartX));
         }
 
         // Draw each segment (logical order = right-to-left for Hebrew)
@@ -302,6 +324,7 @@ export async function createCarouselWithEngine(
         logoBuffer,
         logoPosition = "top-right",
         logoSize = "medium",
+        logoTransparent = false,
         accentColor = template.accent,
         textColor = template.text_color,
         fontFamily,
@@ -576,7 +599,67 @@ export async function createCarouselWithEngine(
                 const validDimensions = logoW > 0 && logoH > 0 && logoW <= WIDTH && logoH <= HEIGHT;
                 
                 if (fitsHorizontally && fitsVertically && validDimensions) {
+                    // Add background/border for logo visibility (unless transparent option is selected)
+                    if (!logoTransparent) {
+                        const padding = 8; // Padding around logo
+                        const borderRadius = 8;
+                        
+                        // Draw semi-transparent white background with border
+                        ctx.save();
+                        
+                        // Draw shadow/glow effect
+                        ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                        ctx.shadowBlur = 12;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 4;
+                        
+                        // Draw white background with rounded corners
+                        ctx.fillStyle = "rgba(255, 255, 255, 0.95)"; // 95% opaque white
+                        roundRect(
+                            ctx,
+                            safeX - padding,
+                            safeY - padding,
+                            logoW + padding * 2,
+                            logoH + padding * 2,
+                            borderRadius
+                        );
+                        ctx.fill();
+                        
+                        // Draw border
+                        ctx.strokeStyle = "rgba(0, 0, 0, 0.3)";
+                        ctx.lineWidth = 2;
+                        roundRect(
+                            ctx,
+                            safeX - padding,
+                            safeY - padding,
+                            logoW + padding * 2,
+                            logoH + padding * 2,
+                            borderRadius
+                        );
+                        ctx.stroke();
+                        
+                        // Reset shadow
+                        ctx.shadowColor = "transparent";
+                        ctx.shadowBlur = 0;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 0;
+                        
+                        ctx.restore();
+                    } else {
+                        // For transparent logo, add subtle shadow for visibility
+                        ctx.save();
+                        ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
+                        ctx.shadowBlur = 8;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 2;
+                    }
+                    
+                    // Draw logo
                     ctx.drawImage(logoImage, safeX, safeY, logoW, logoH);
+                    
+                    if (logoTransparent) {
+                        ctx.restore();
+                    }
                 } else {
                     console.warn(`[Slide ${i + 1}] Logo skipped - out of bounds: x=${safeX}, y=${safeY}, w=${logoW}, h=${logoH}, canvas=${WIDTH}x${HEIGHT}`);
                 }

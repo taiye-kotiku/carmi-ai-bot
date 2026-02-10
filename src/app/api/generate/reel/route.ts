@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { isValidInstagramUrl } from "@/lib/utils";
+import { extractReelFrames } from "@/lib/services/reel-extractor";
+import sharp from "sharp";
 
 // Define types for better type safety
 interface ExtractedFrame {
@@ -44,9 +46,10 @@ export async function POST(req: Request) {
             .eq("user_id", user.id)
             .single();
 
-        if (!credits || credits.reel_credits < 1) {
+        const requiredCredits = 4; // Fixed cost: 4 credits per reel conversion
+        if (!credits || credits.reel_credits < requiredCredits) {
             return NextResponse.json(
-                { error: "אין מספיק קרדיטים להמרת רילז" },
+                { error: `אין מספיק קרדיטים להמרת רילז (נדרשים ${requiredCredits})` },
                 { status: 402 }
             );
         }
@@ -87,40 +90,61 @@ async function processReelConversion(
             .update({ status: "processing", progress: 10 })
             .eq("id", jobId);
 
-        // Call Frame Extractor service
-        const extractorUrl = process.env.FRAME_EXTRACTOR_URL;
-        const response = await fetch(`${extractorUrl}/extract-reel`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                url,
-                frame_count: 10,
-                use_face_detection: true,
-                quality_threshold: 0.7,
-            }),
-        });
+        // Download video and extract best quality frames
+        console.log(`[Reel ${jobId}] Starting frame extraction for: ${url}`);
+        await supabaseAdmin
+            .from("jobs")
+            .update({ progress: 20 })
+            .eq("id", jobId);
 
-        if (!response.ok) {
-            throw new Error("Frame extraction failed");
-        }
+        const extractedFrames = await extractReelFrames(url, 10);
+        console.log(`[Reel ${jobId}] Extracted ${extractedFrames.length} frames`);
 
         await supabaseAdmin
             .from("jobs")
             .update({ progress: 50 })
             .eq("id", jobId);
 
-        const data = await response.json();
-        const frames: ExtractedFrame[] = data.frames;
+        const frames: ExtractedFrame[] = extractedFrames;
 
         // ✅ FIX: Add type annotation here
         const uploadedFrames: UploadedFrame[] = [];
 
         for (let i = 0; i < frames.length; i++) {
             const frame = frames[i];
-            const frameResponse = await fetch(frame.url);
-            const blob = await frameResponse.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
+            
+            // Handle base64 data URLs or regular URLs
+            let buffer: Buffer;
+            if (frame.url.startsWith("data:image")) {
+                // Extract base64 from data URL
+                const base64Data = frame.url.split(",")[1];
+                buffer = Buffer.from(base64Data, "base64");
+            } else {
+                // Fetch from URL
+                const frameResponse = await fetch(frame.url);
+                const blob = await frameResponse.blob();
+                const arrayBuffer = await blob.arrayBuffer();
+                buffer = Buffer.from(arrayBuffer);
+            }
+            
+            // Ensure image is high quality (1080x1080 if possible)
+            try {
+                const metadata = await sharp(buffer).metadata();
+                if (metadata.width && metadata.height && (metadata.width < 1080 || metadata.height < 1080)) {
+                    buffer = await sharp(buffer)
+                        .resize(1080, 1080, { fit: "cover", position: "center" })
+                        .jpeg({ quality: 95 })
+                        .toBuffer();
+                } else {
+                    // Just optimize quality
+                    buffer = await sharp(buffer)
+                        .jpeg({ quality: 95 })
+                        .toBuffer();
+                }
+            } catch (sharpError) {
+                console.warn(`Failed to process frame ${i + 1}:`, sharpError);
+                // Continue with original buffer
+            }
 
             const fileName = `${userId}/${jobId}/frame_${i + 1}.jpg`;
             const { error: uploadError } = await supabaseAdmin.storage
@@ -174,7 +198,8 @@ async function processReelConversion(
             .eq("user_id", userId)
             .single();
 
-        const newBalance = (currentCredits?.reel_credits || 1) - 1;
+        const requiredCredits = 4;
+        const newBalance = (currentCredits?.reel_credits || requiredCredits) - requiredCredits;
 
         await supabaseAdmin
             .from("credits")
@@ -185,7 +210,7 @@ async function processReelConversion(
         await supabaseAdmin.from("credit_transactions").insert({
             user_id: userId,
             credit_type: "reel",
-            amount: -1,
+            amount: -requiredCredits,
             balance_after: newBalance,
             reason: "generation",
             related_id: generationId,

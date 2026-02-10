@@ -70,8 +70,8 @@ export async function POST(req: Request) {
             }
         }
 
-        // Check credits (video clipping costs 5 credits)
-        const clipCost = 5;
+        // Check credits (video slicing costs 25 credits)
+        const clipCost = 25;
         const { data: credits } = await supabase
             .from("credits")
             .select("reel_credits")

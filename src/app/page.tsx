@@ -371,15 +371,15 @@ export default async function HomePage() {
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>10 יצירות תמונה</span>
+                  <span>24 קרדיטים בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>2 המרות רילז</span>
+                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>5 קרוסלות</span>
+                  <span>המרת רילז</span>
                 </li>
               </ul>
               <Button variant="outline" className="w-full border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20" asChild>
@@ -394,7 +394,7 @@ export default async function HomePage() {
               <div className="absolute -top-3 right-4 bg-amber-400 text-amber-950 text-xs font-medium px-3 py-1 rounded-full">
                 הכי פופולרי
               </div>
-              <h3 className="text-lg font-semibold mb-2 text-white">סטארטר</h3>
+              <h3 className="text-lg font-semibold mb-2 text-white">בסיסי</h3>
               <div className="mb-4">
                 <span className="text-4xl font-bold text-white">₪139</span>
                 <span className="text-indigo-200/80">/חודש</span>
@@ -402,11 +402,15 @@ export default async function HomePage() {
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>250 מודעות / תמונות בחודש</span>
+                  <span>300 קרדיטים בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>20 קרוסלות מותאמות</span>
+                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
+                </li>
+                <li className="flex items-center gap-2 text-indigo-100">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>יצירת סרטונים</span>
                 </li>
                 <li className="flex items-center gap-2 text-indigo-100">
                   <Check className="h-5 w-5 text-emerald-400" />
@@ -434,7 +438,7 @@ export default async function HomePage() {
                 </li>
               </ul>
               <Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
-                <Link href="/signup?plan=starter">
+                <Link href="/signup?plan=basic">
                   בחר בתוכנית
                 </Link>
               </Button>
@@ -450,11 +454,15 @@ export default async function HomePage() {
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>500 מודעות / תמונות בחודש</span>
+                  <span>600 קרדיטים בחודש</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />
-                  <span>50 קרוסלות מותאמות</span>
+                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
+                </li>
+                <li className="flex items-center gap-2 text-slate-300">
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span>יצירת סרטונים</span>
                 </li>
                 <li className="flex items-center gap-2 text-slate-300">
                   <Check className="h-5 w-5 text-emerald-400" />

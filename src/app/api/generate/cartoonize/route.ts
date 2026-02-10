@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import sharp from "sharp";
@@ -65,6 +66,21 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 { error: "נא להעלות קובץ תמונה (PNG, JPG, WebP)" },
                 { status: 400 }
+            );
+        }
+
+        // Check credits
+        const { data: credits } = await supabase
+            .from("credits")
+            .select("image_credits")
+            .eq("user_id", user.id)
+            .single();
+
+        const requiredCredits = 3; // Fixed cost: 3 credits per caricature
+        if (!credits || credits.image_credits < requiredCredits) {
+            return NextResponse.json(
+                { error: `אין מספיק קרדיטים ליצירת קריקטורה (נדרשים ${requiredCredits})` },
+                { status: 402 }
             );
         }
 
@@ -201,6 +217,29 @@ export async function POST(req: Request) {
 
         const resizedBase64 = resizedImageBuffer.toString("base64");
         const resultDataUrl = `data:image/png;base64,${resizedBase64}`;
+
+        // Deduct credits
+        const { data: currentCredits } = await supabaseAdmin
+            .from("credits")
+            .select("image_credits")
+            .eq("user_id", user.id)
+            .single();
+
+        const newBalance = (currentCredits?.image_credits || requiredCredits) - requiredCredits;
+
+        await supabaseAdmin
+            .from("credits")
+            .update({ image_credits: newBalance })
+            .eq("user_id", user.id);
+
+        await supabaseAdmin.from("credit_transactions").insert({
+            user_id: user.id,
+            credit_type: "image",
+            amount: -requiredCredits,
+            balance_after: newBalance,
+            reason: "cartoonize",
+            related_id: null,
+        });
 
         return NextResponse.json({
             success: true,

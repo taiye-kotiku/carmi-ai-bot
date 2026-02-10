@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
             .eq("user_id", user.id)
             .single();
 
-        const requiredCredits = 20; // Fixed cost: 20 credits per video
+        const requiredCredits = 25; // Fixed cost: 25 credits per video
         if (!credits || credits.video_credits < requiredCredits) {
             return NextResponse.json(
                 { error: `אין מספיק קרדיטים ליצירת וידאו (נדרשים ${requiredCredits})` },

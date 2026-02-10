@@ -30,7 +30,7 @@ export async function POST(req: Request) {
             .eq("user_id", user.id)
             .single();
 
-        const requiredCredits = 2; // Fixed cost: 2 credits per image
+        const requiredCredits = 3; // Fixed cost: 3 credits per image
         if (!credits || credits.image_credits < requiredCredits) {
             return NextResponse.json(
                 { error: `אין מספיק קרדיטים ליצירת תמונה (נדרשים ${requiredCredits})` },
@@ -179,7 +179,7 @@ async function processTextToImage(
             .eq("user_id", userId)
             .single();
 
-        const requiredCredits = 2;
+        const requiredCredits = 3;
         const newBalance = (currentCredits?.image_credits || requiredCredits) - requiredCredits;
 
         await supabaseAdmin

@@ -53,7 +53,7 @@ export async function POST(
         }
 
         // Check credits
-        const TRAINING_COST = 10;
+        const TRAINING_COST = 50;
         const { data: credits } = await supabaseAdmin
             .from("credits")
             .select("image_credits")

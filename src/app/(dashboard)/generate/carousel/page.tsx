@@ -26,6 +26,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 import type { CarouselTemplate } from "@/lib/carousel/templates";
+import { requestNotificationPermission, notifyGenerationComplete } from "@/lib/services/notifications";
+import { ExportFormats } from "@/components/export-formats";
 
 const LOGO_POSITIONS = [
     { value: "top-left", label: "פינה עליונה שמאל", grid: "col-start-1 row-start-1" },
@@ -348,6 +350,10 @@ export default function CarouselGenerationPage() {
                 if (status.status === "completed") {
                     setResults(status.result.images);
                     toast.success("הקרוסלה נוצרה בהצלחה! 🎨");
+                    // Request permission and show notification
+                    requestNotificationPermission().then(() => {
+                        notifyGenerationComplete("carousel", status.result.images?.length);
+                    });
                     break;
                 }
                 if (status.status === "failed") {

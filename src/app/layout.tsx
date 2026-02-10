@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import { Toaster } from "sonner";
 import { TranslationProvider } from "@/lib/i18n/provider";
+import { NotificationInit } from "@/components/notification-init";
 import "./globals.css";
 
 const heebo = Heebo({
@@ -25,6 +26,7 @@ export default function RootLayout({
       <head />
       <body className={heebo.className} suppressHydrationWarning>
         <TranslationProvider>
+          <NotificationInit />
           <main>{children}</main>
           <Toaster position="top-center" richColors />
         </TranslationProvider>

@@ -11,13 +11,22 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-slate-950" dir="rtl">
-      {/* Enhanced Futuristic Background */}
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950" />
+      {/* Background Image */}
+      <div className="fixed inset-0 -z-10">
+        <Image
+          src="/hero-background.png"
+          alt="Background"
+          fill
+          className="object-cover opacity-30"
+          priority
+          quality={90}
+        />
+        <div className="absolute inset-0 bg-slate-950/70" />
+      </div>
+      {/* Enhanced Futuristic Background Overlay */}
+      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950/50 to-slate-950/80" />
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(99,102,241,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.05)_1px,transparent_1px)] bg-[size:48px_48px]" />
       <div className="fixed inset-0 -z-10 bg-gradient-to-tr from-cyan-500/5 via-transparent to-purple-500/5" />
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[800px] -z-10 bg-indigo-500/30 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '8s' }} />
-      <div className="fixed bottom-0 right-1/4 w-[600px] h-[600px] -z-10 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }} />
-      <div className="fixed top-1/3 left-1/4 w-[400px] h-[400px] -z-10 bg-cyan-500/15 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
 
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -195,7 +204,7 @@ export default async function HomePage() {
               <div className="h-14 w-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
                 <Film className="h-7 w-7 text-white" />
               </div>
-              <h3 className="text-xl font-bold mb-3 text-white">המרת רילז לקרוסלה</h3>
+              <h3 className="text-xl font-bold mb-3 text-white">המרת רילז לתמונות מנצחות</h3>
               <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-indigo-400/50 transition-all">
                 🎬
               </div>
@@ -204,7 +213,7 @@ export default async function HomePage() {
               </p>
               <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-indigo-500/30 shadow-inner">
                 <span className="text-indigo-400 font-semibold">דוגמה:</span><br />
-                &quot;המר את הרילז הזה לקרוסלה בת 10 תמונות&quot;
+                &quot;המר את הרילז הזה לתמונות מנצחות&quot;
               </div>
             </div>
 
@@ -232,8 +241,13 @@ export default async function HomePage() {
                 <Wand2 className="h-7 w-7 text-white" />
               </div>
               <h3 className="text-xl font-bold mb-3 text-white">המרה לקריקטורה</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-amber-400/50 transition-all">
-                🎨
+              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 ring-2 ring-white/10 group-hover:ring-amber-400/50 transition-all relative">
+                <Image
+                  src="/caricature-example.png"
+                  alt="דוגמה לקריקטורה"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <p className="text-slate-300 text-sm mb-4 leading-relaxed">
                 העלה תמונה והפוך אותה לקריקטורה צבעונית בסגנון איור דיגיטלי מקצועי
@@ -284,7 +298,7 @@ export default async function HomePage() {
               </div>
               <h3 className="text-2xl font-bold mb-3 text-white">המרת רילז לקרוסלה</h3>
               <p className="text-slate-300 leading-relaxed">
-                הדבק קישור לרילז מאינסטגרם וקבל 10 תמונות מושלמות לקרוסלה.
+                הדבק קישור לרילז מאינסטגרם וקבל 10 תמונות מושלמות מנצחות.
                 AI חכם בוחר את הפריימים הכי מוצלחים אוטומטית.
               </p>
             </div>

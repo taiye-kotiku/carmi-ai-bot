@@ -8,130 +8,178 @@ interface ExtractedFrame {
 }
 
 /**
- * Download Instagram reel video using multiple methods
+ * Download Instagram reel video using multiple reliable services
+ * These services bypass Instagram's download protections
  */
 async function downloadInstagramVideo(url: string): Promise<Buffer> {
-    try {
-        // Method 1: Use Instagram API service (RapidAPI)
-        const apiKey = process.env.INSTAGRAM_API_KEY;
-        if (apiKey) {
-            try {
-                // Try RapidAPI Instagram Downloader
-                const apiResponse = await fetch(`https://instagram-downloader-api.p.rapidapi.com/api/ig`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-RapidAPI-Key": apiKey,
-                    },
-                    body: JSON.stringify({ url }),
-                });
+    const downloadMethods = [
+        // Method 1: Use Instagram API service (RapidAPI) if API key is available
+        async () => {
+            const apiKey = process.env.INSTAGRAM_API_KEY;
+            if (!apiKey) throw new Error("No API key");
+            
+            const apiResponse = await fetch(`https://instagram-downloader-api.p.rapidapi.com/api/ig`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-RapidAPI-Key": apiKey,
+                },
+                body: JSON.stringify({ url }),
+            });
 
-                if (apiResponse.ok) {
-                    const data = await apiResponse.json();
-                    const videoUrl = data.video_url || data.url || data.data?.video_url || data.result?.video_url;
+            if (!apiResponse.ok) throw new Error(`API returned ${apiResponse.status}`);
+            
+            const data = await apiResponse.json();
+            const videoUrl = data.video_url || data.url || data.data?.video_url || data.result?.video_url || data.video;
+            
+            if (!videoUrl) throw new Error("No video URL in response");
+            
+            console.log("Downloading video from RapidAPI:", videoUrl.substring(0, 80));
+            const videoResponse = await fetch(videoUrl);
+            if (!videoResponse.ok) throw new Error(`Video fetch failed: ${videoResponse.status}`);
+            
+            return Buffer.from(await videoResponse.arrayBuffer());
+        },
+
+        // Method 2: Use saveig.app API (free Instagram downloader)
+        async () => {
+            const apiResponse = await fetch(`https://saveig.app/api/ajaxSearch`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                },
+                body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
+            });
+
+            if (!apiResponse.ok) throw new Error(`API returned ${apiResponse.status}`);
+            
+            const data = await apiResponse.json();
+            const videoUrl = data.medias?.[0]?.url || data.video || data.url;
+            
+            if (!videoUrl) throw new Error("No video URL in response");
+            
+            console.log("Downloading video from saveig.app:", videoUrl.substring(0, 80));
+            const videoResponse = await fetch(videoUrl);
+            if (!videoResponse.ok) throw new Error(`Video fetch failed: ${videoResponse.status}`);
+            
+            return Buffer.from(await videoResponse.arrayBuffer());
+        },
+
+        // Method 3: Use instagram-downloader APIs
+        async () => {
+            const apiResponse = await fetch(`https://api.saveig.app/api/ajaxSearch`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: `q=${encodeURIComponent(url)}&t=media&lang=en`,
+            });
+
+            if (!apiResponse.ok) throw new Error(`API returned ${apiResponse.status}`);
+            
+            const data = await apiResponse.json();
+            const videoUrl = data.medias?.[0]?.url || data.video;
+            
+            if (!videoUrl) throw new Error("No video URL in response");
+            
+            console.log("Downloading video from saveig API:", videoUrl.substring(0, 80));
+            const videoResponse = await fetch(videoUrl);
+            if (!videoResponse.ok) throw new Error(`Video fetch failed: ${videoResponse.status}`);
+            
+            return Buffer.from(await videoResponse.arrayBuffer());
+        },
+
+        // Method 4: Try direct Instagram page parsing (last resort - often blocked)
+        async () => {
+            console.log("Attempting direct Instagram page parsing...");
+            const pageResponse = await fetch(url, {
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            });
+            
+            if (!pageResponse.ok) throw new Error(`Failed to fetch page: ${pageResponse.status}`);
+            
+            const pageHtml = await pageResponse.text();
+            
+            // Try multiple patterns to find video URL
+            const patterns = [
+                /"video_url":"([^"]+)"/,
+                /"playback_url":"([^"]+)"/,
+                /property="og:video" content="([^"]+)"/,
+                /"video_versions":\[{"url":"([^"]+)"/,
+            ];
+            
+            for (const pattern of patterns) {
+                const match = pageHtml.match(pattern);
+                if (match && match[1]) {
+                    let videoUrl = match[1]
+                        .replace(/\\u0026/g, "&")
+                        .replace(/\\\//g, "/")
+                        .replace(/\\"/g, '"');
                     
-                    if (videoUrl) {
-                        console.log("Downloading video from API:", videoUrl);
-                        const videoResponse = await fetch(videoUrl);
+                    if (videoUrl.includes("\\")) {
+                        try {
+                            videoUrl = JSON.parse(`"${videoUrl}"`);
+                        } catch {}
+                    }
+                    
+                    if (!videoUrl.startsWith("http")) {
+                        if (videoUrl.startsWith("//")) {
+                            videoUrl = `https:${videoUrl}`;
+                        } else if (videoUrl.startsWith("/")) {
+                            videoUrl = `https://instagram.com${videoUrl}`;
+                        }
+                    }
+                    
+                    try {
+                        new URL(videoUrl);
+                        console.log("Found video URL:", videoUrl.substring(0, 80));
+                        
+                        const videoResponse = await fetch(videoUrl, {
+                            headers: {
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                                "Referer": "https://www.instagram.com/",
+                            },
+                        });
+                        
                         if (videoResponse.ok) {
                             return Buffer.from(await videoResponse.arrayBuffer());
                         }
+                    } catch (fetchError) {
+                        continue;
                     }
                 }
-            } catch (apiError) {
-                console.warn("API service failed:", apiError);
             }
-        }
+            
+            throw new Error("Could not extract video URL from page");
+        },
+    ];
 
-        // Method 2: Use alternative Instagram downloader API
+    // Try each method in sequence
+    for (let i = 0; i < downloadMethods.length; i++) {
         try {
-            const altApiResponse = await fetch(`https://api.instagram.com/oembed/?url=${encodeURIComponent(url)}`);
-            if (altApiResponse.ok) {
-                const embedData = await altApiResponse.json();
-                // Try to get video from embed data
-                if (embedData.thumbnail_url) {
-                    // For reels, we need the actual video URL
-                    // This is a fallback - might not work for all cases
-                }
+            console.log(`Trying download method ${i + 1}...`);
+            const videoBuffer = await downloadMethods[i]();
+            console.log(`Successfully downloaded video using method ${i + 1}: ${videoBuffer.length} bytes`);
+            return videoBuffer;
+        } catch (error: any) {
+            console.warn(`Download method ${i + 1} failed:`, error?.message || String(error));
+            if (i === downloadMethods.length - 1) {
+                // Last method failed, throw error
+                throw new Error(
+                    `All download methods failed. Instagram may be blocking downloads. ` +
+                    `Last error: ${error?.message || String(error)}`
+                );
             }
-        } catch {}
-
-        // Method 3: Extract video URL from Instagram page HTML
-        console.log("Attempting to extract video URL from page HTML...");
-        const pageResponse = await fetch(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-        });
-        
-        if (!pageResponse.ok) {
-            throw new Error(`Failed to fetch Instagram page: ${pageResponse.status}`);
+            // Continue to next method
         }
-        
-        const pageHtml = await pageResponse.text();
-        
-        // Try multiple patterns to find video URL
-        const patterns = [
-            /"video_url":"([^"]+)"/,
-            /"playback_url":"([^"]+)"/,
-            /property="og:video" content="([^"]+)"/,
-            /src="([^"]*\.mp4[^"]*)"/,
-            /video_url":"([^"]+\.mp4[^"]*)"/,
-            /"video_versions":\[{"url":"([^"]+)"/,
-        ];
-        
-        for (const pattern of patterns) {
-            const match = pageHtml.match(pattern);
-            if (match && match[1]) {
-                let videoUrl = match[1]
-                    .replace(/\\u0026/g, "&")
-                    .replace(/\\\//g, "/")
-                    .replace(/\\"/g, '"');
-                
-                // Clean up URL
-                if (videoUrl.includes("\\")) {
-                    try {
-                        videoUrl = JSON.parse(`"${videoUrl}"`);
-                    } catch {}
-                }
-                
-                if (!videoUrl.startsWith("http")) {
-                    if (videoUrl.startsWith("//")) {
-                        videoUrl = `https:${videoUrl}`;
-                    } else if (videoUrl.startsWith("/")) {
-                        videoUrl = `https://instagram.com${videoUrl}`;
-                    }
-                }
-                
-                // Validate URL
-                try {
-                    new URL(videoUrl);
-                    console.log("Found video URL:", videoUrl.substring(0, 100) + "...");
-                    
-                    const videoResponse = await fetch(videoUrl, {
-                        headers: {
-                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                            "Referer": "https://www.instagram.com/",
-                        },
-                    });
-                    
-                    if (videoResponse.ok) {
-                        return Buffer.from(await videoResponse.arrayBuffer());
-                    }
-                } catch (fetchError) {
-                    console.warn("Failed to fetch video URL:", videoUrl.substring(0, 50));
-                    continue;
-                }
-            }
-        }
-
-        throw new Error("Could not extract video URL from Instagram page. Please ensure the reel is public.");
-    } catch (error) {
-        console.error("Error downloading Instagram video:", error);
-        throw new Error(`Failed to download video: ${error instanceof Error ? error.message : String(error)}`);
     }
+
+    throw new Error("Failed to download Instagram video");
 }
 
 /**
@@ -141,7 +189,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
 async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 20): Promise<Buffer[]> {
     try {
         // Option 1: Use RENDER_API_URL service (frame-extractor service)
-        let renderApiUrl = process.env.RENDER_API_URL;
+        let renderApiUrl: string = process.env.RENDER_API_URL || "";
         
         // Ensure we have a valid URL - check for undefined, null, empty string, or string "undefined"
         if (!renderApiUrl || 
@@ -156,13 +204,17 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
             renderApiUrl = renderApiUrl.trim().replace(/\/$/, "");
         }
         
-        // Validate URL format
+        // Validate URL format BEFORE using it
+        let validatedUrl: string;
         try {
             const urlObj = new URL(renderApiUrl);
-            console.log(`Using render API URL: ${urlObj.origin}`);
+            validatedUrl = urlObj.origin + urlObj.pathname.replace(/\/$/, "");
+            console.log(`Using render API URL: ${validatedUrl}`);
         } catch (urlError) {
             console.error(`Invalid RENDER_API_URL: ${renderApiUrl}`, urlError);
-            throw new Error(`Invalid RENDER_API_URL: ${renderApiUrl}. Please set a valid URL or use the default service.`);
+            // Use default if invalid
+            validatedUrl = "https://frame-extractor-oou7.onrender.com";
+            console.log("Falling back to default URL:", validatedUrl);
         }
         
         // Try multiple possible endpoints
@@ -170,8 +222,17 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
         
         for (const endpoint of endpoints) {
             try {
-                const fullUrl = `${renderApiUrl}${endpoint}`;
+                // Construct full URL safely
+                const fullUrl = `${validatedUrl}${endpoint}`;
                 console.log(`Trying endpoint: ${fullUrl}`);
+                
+                // Validate the full URL before fetching
+                try {
+                    new URL(fullUrl);
+                } catch {
+                    console.warn(`Invalid full URL: ${fullUrl}`);
+                    continue;
+                }
                 
                 // Convert video buffer to base64
                 const videoBase64 = videoBuffer.toString("base64");
@@ -206,7 +267,10 @@ async function extractFramesFromVideo(videoBuffer: Buffer, frameCount: number = 
                 }
             } catch (apiError: any) {
                 const errorMsg = apiError?.message || String(apiError);
-                console.warn(`Frame extraction API ${endpoint} failed:`, errorMsg);
+                // Don't log "Failed to parse URL" errors for 404s, just continue
+                if (!errorMsg.includes("Failed to parse URL")) {
+                    console.warn(`Frame extraction API ${endpoint} failed:`, errorMsg);
+                }
                 // Continue to next endpoint
             }
         }

@@ -223,30 +223,6 @@ function CreditSlider({ credits }: { credits: any }) {
                     />
                 </div>
             </div>
-
-            {/* Credit Breakdown */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-2">
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">{carouselCredits}</div>
-                    <div className="text-xs text-gray-500 mt-1">קרוסלה ({creditCosts.carousel} לקרוסלה)</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">{imageCredits}</div>
-                    <div className="text-xs text-gray-500 mt-1">תמונה ({creditCosts.image} לתמונה)</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">{videoCredits}</div>
-                    <div className="text-xs text-gray-500 mt-1">וידאו ({creditCosts.video} לסרטון)</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">{reelCredits}</div>
-                    <div className="text-xs text-gray-500 mt-1">רילז ({creditCosts.reel} לרילז)</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-red-600">{videoSlicingCredits}</div>
-                    <div className="text-xs text-gray-500 mt-1">חיתוך ({creditCosts.videoSlicing} לחיתוך)</div>
-                </div>
-            </div>
         </div>
     );
 }

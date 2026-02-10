@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Image, Film, Video, LayoutGrid, Check, Zap } from "lucide-react";
+import { Loader2, Check, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -116,44 +116,7 @@ export default function CreditsPage() {
                                 טוען...
                             </div>
                         ) : credits ? (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="bg-purple-50 rounded-xl p-4 flex items-center gap-3">
-                                    <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                        <Image className="h-5 w-5 text-purple-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-2xl font-bold text-gray-900">{credits.image_credits}</p>
-                                        <p className="text-sm text-gray-500">תמונות</p>
-                                    </div>
-                                </div>
-                                <div className="bg-cyan-50 rounded-xl p-4 flex items-center gap-3">
-                                    <div className="h-10 w-10 bg-cyan-100 rounded-lg flex items-center justify-center">
-                                        <Film className="h-5 w-5 text-cyan-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-2xl font-bold text-gray-900">{credits.reel_credits}</p>
-                                        <p className="text-sm text-gray-500">רילז</p>
-                                    </div>
-                                </div>
-                                <div className="bg-amber-50 rounded-xl p-4 flex items-center gap-3">
-                                    <div className="h-10 w-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                                        <Video className="h-5 w-5 text-amber-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-2xl font-bold text-gray-900">{credits.video_credits}</p>
-                                        <p className="text-sm text-gray-500">סרטונים</p>
-                                    </div>
-                                </div>
-                                <div className="bg-emerald-50 rounded-xl p-4 flex items-center gap-3">
-                                    <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                                        <LayoutGrid className="h-5 w-5 text-emerald-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-2xl font-bold text-gray-900">{credits.carousel_credits}</p>
-                                        <p className="text-sm text-gray-500">קרוסלות</p>
-                                    </div>
-                                </div>
-                            </div>
+                            <CreditSlider credits={credits} />
                         ) : (
                             <p className="text-gray-500">לא הצלחנו לטעון את היתרה</p>
                         )}
@@ -204,6 +167,55 @@ export default function CreditsPage() {
                     <Button variant="ghost" onClick={() => router.back()} className="text-gray-500">
                         ← חזרה
                     </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function CreditSlider({ credits }: { credits: any }) {
+    // Credit costs
+    const creditCosts = {
+        carousel: 3,
+        image: 2,
+        video: 20,
+        reel: 4,
+        videoSlicing: 20,
+    };
+
+    // Current credit values
+    const carouselCredits = credits?.carousel_credits || 0;
+    const imageCredits = credits?.image_credits || 0;
+    const videoCredits = credits?.video_credits || 0;
+    const reelCredits = credits?.reel_credits || 0;
+    const videoSlicingCredits = credits?.reel_credits || 0; // Using reel_credits for video slicing
+
+    // Calculate total available credits (weighted by cost)
+    const totalWeightedCredits = 
+        Math.floor(carouselCredits / creditCosts.carousel) +
+        Math.floor(imageCredits / creditCosts.image) +
+        Math.floor(videoCredits / creditCosts.video) +
+        Math.floor(reelCredits / creditCosts.reel) +
+        Math.floor(videoSlicingCredits / creditCosts.videoSlicing);
+
+    // Maximum possible credits (for display purposes)
+    const maxDisplayCredits = 100; // Adjust based on your needs
+
+    const percentage = Math.min((totalWeightedCredits / maxDisplayCredits) * 100, 100);
+
+    return (
+        <div className="space-y-4">
+            {/* Single Progress Bar */}
+            <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 font-medium">סה"כ קרדיטים זמינים</span>
+                    <span className="font-bold text-lg text-gray-900">{totalWeightedCredits}</span>
+                </div>
+                <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-gradient-to-r from-purple-500 via-blue-500 to-green-500 transition-all"
+                        style={{ width: `${percentage}%` }}
+                    />
                 </div>
             </div>
         </div>

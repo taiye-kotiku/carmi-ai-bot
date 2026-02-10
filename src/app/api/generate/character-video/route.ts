@@ -5,6 +5,9 @@ import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { generateCharacterVideo } from "@/lib/services/character-video";
 import { generateCharacterScenes } from "@/lib/services/scene-generator";
+import { after } from "next/server";
+
+export const maxDuration = 300; // 5 minutes max
 
 export async function POST(req: Request) {
     try {
@@ -41,7 +44,7 @@ export async function POST(req: Request) {
             );
         }
 
-        // Get character — must be trained and ready
+        // Get character
         const { data: character, error: charError } = await supabaseAdmin
             .from("characters")
             .select("*")
@@ -65,8 +68,8 @@ export async function POST(req: Request) {
 
         // Check credits
         const numScenes = custom_scenes?.length || scene_count;
-        const requiredImageCredits = numScenes * 3; // 3 credits per character image
-        const requiredVideoCredits = 25; // Fixed cost: 25 credits per video
+        const requiredImageCredits = numScenes;
+        const requiredVideoCredits = numScenes * 3;
 
         const { data: credits } = await supabaseAdmin
             .from("credits")
@@ -95,19 +98,21 @@ export async function POST(req: Request) {
             progress: 0,
         });
 
-        // Process in background
-        processCharacterVideo(jobId, user.id, {
-            character,
-            topic,
-            customScenes: custom_scenes,
-            sceneCount: scene_count,
-            style,
-            aspectRatio: aspect_ratio,
-            transitionStyle: transition_style,
-            sceneDuration: scene_duration,
-            requiredImageCredits,
-            requiredVideoCredits,
-        });
+        // Use after() to keep the function alive after response
+        after(
+            processCharacterVideo(jobId, user.id, {
+                character,
+                topic,
+                customScenes: custom_scenes,
+                sceneCount: scene_count,
+                style,
+                aspectRatio: aspect_ratio,
+                transitionStyle: transition_style,
+                sceneDuration: scene_duration,
+                requiredImageCredits,
+                requiredVideoCredits,
+            })
+        );
 
         return NextResponse.json({ jobId });
     } catch (error) {
@@ -134,24 +139,23 @@ async function processCharacterVideo(
     userId: string,
     options: ProcessOptions
 ) {
-    const updateProgress = async (progress: number) => {
+    const updateProgress = async (progress: number, status?: string) => {
+        const update: any = { progress };
+        if (status) update.status = status;
         await supabaseAdmin
             .from("jobs")
-            .update({ progress })
+            .update(update)
             .eq("id", jobId);
     };
 
     try {
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "processing", progress: 5 })
-            .eq("id", jobId);
+        await updateProgress(5, "processing");
 
         // Generate scenes if not provided
         let scenes = options.customScenes;
 
         if (!scenes?.length && options.topic) {
-            await updateProgress(10);
+            await updateProgress(8);
 
             scenes = await generateCharacterScenes({
                 topic: options.topic,
@@ -161,6 +165,8 @@ async function processCharacterVideo(
                 style: options.style as any,
                 language: "he",
             });
+
+            console.log(`[CharacterVideo] Generated ${scenes?.length} scenes`);
         }
 
         if (!scenes?.length) {
@@ -226,7 +232,6 @@ async function processCharacterVideo(
             })
             .eq("user_id", userId);
 
-        // Record transactions
         await supabaseAdmin.from("credit_transactions").insert([
             {
                 user_id: userId,
@@ -263,9 +268,11 @@ async function processCharacterVideo(
             })
             .eq("id", jobId);
 
+        console.log(`[CharacterVideo] Job ${jobId} completed successfully`);
+
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error("Character video processing error:", error);
+        console.error(`[CharacterVideo] Job ${jobId} failed:`, error);
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })

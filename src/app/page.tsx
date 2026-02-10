@@ -183,26 +183,26 @@ export default async function HomePage() {
             </div>
 
             {/* Example 3: Character Creation */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
                 <Sparkles className="h-7 w-7 text-white" />
               </div>
               <h3 className="text-xl font-bold mb-3 text-white">דמות AI אישית</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-pink-500/20 to-purple-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-pink-400/50 transition-all">
+              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-pink-500/20 to-purple-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-purple-400/50 transition-all">
                 🎭
               </div>
               <p className="text-slate-300 text-sm mb-4 leading-relaxed">
                 העלה תמונות שלך ואמן דמות AI – תוכל להשתמש בה בכל תמונה וסרטון שתיצור
               </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-pink-500/30 shadow-inner">
-                <span className="text-pink-400 font-semibold">דוגמה:</span><br />
+              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-purple-500/30 shadow-inner">
+                <span className="text-purple-400 font-semibold">דוגמה:</span><br />
                 &quot;צור תמונה שלי כסופרמן מעל העיר&quot;
               </div>
             </div>
 
             {/* Example 4: Reel to Carousel */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
                 <Film className="h-7 w-7 text-white" />
               </div>
               <h3 className="text-xl font-bold mb-3 text-white">המרת רילז לתמונות מנצחות</h3>
@@ -212,8 +212,8 @@ export default async function HomePage() {
               <p className="text-slate-300 text-sm mb-4 leading-relaxed">
                 הדבק קישור לרילז מאינסטגרם – AI יבחר את הפריימים הטובים ביותר וייצור 10 תמונות
               </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-pink-500/30 shadow-inner">
-                <span className="text-pink-400 font-semibold">דוגמה:</span><br />
+              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-purple-500/30 shadow-inner">
+                <span className="text-purple-400 font-semibold">דוגמה:</span><br />
                 &quot;המר את הרילז הזה לתמונות מנצחות&quot;
               </div>
             </div>
@@ -293,8 +293,8 @@ export default async function HomePage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Feature 1 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
                 <Film className="h-8 w-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold mb-3 text-white">המרת רילז לקרוסלה</h3>
@@ -341,8 +341,8 @@ export default async function HomePage() {
             </div>
 
             {/* Feature 5 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
                 <Zap className="h-8 w-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold mb-3 text-white">דמות AI אישית</h3>

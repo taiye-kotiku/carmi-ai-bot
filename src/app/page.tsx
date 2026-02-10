@@ -25,9 +25,9 @@ export default async function HomePage() {
         <div className="absolute inset-0 bg-slate-950/40" />
       </div>
       {/* Enhanced Futuristic Background Overlay */}
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950/50 to-slate-950/80" />
-      <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(99,102,241,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.05)_1px,transparent_1px)] bg-[size:48px_48px]" />
-      <div className="fixed inset-0 -z-10 bg-gradient-to-tr from-cyan-500/5 via-transparent to-purple-500/5" />
+      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-pink-900/10 via-slate-950/50 to-slate-950/80" />
+      <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(236,72,153,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(236,72,153,0.03)_1px,transparent_1px)] bg-[size:48px_48px]" />
+      <div className="fixed inset-0 -z-10 bg-gradient-to-tr from-pink-500/5 via-transparent to-purple-500/5" />
 
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -59,7 +59,7 @@ export default async function HomePage() {
             <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-white/10" asChild>
               <Link href="/login">התחברות</Link>
             </Button>
-            <Button className="bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
+            <Button className="bg-pink-500 hover:bg-pink-600 text-white border-0" asChild>
               <Link href="/signup">התחל בחינם</Link>
             </Button>
           </div>
@@ -74,7 +74,7 @@ export default async function HomePage() {
             <br />
             קוסם AI
             <br />
-            <span className="bg-gradient-to-l from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent animate-pulse" style={{ animationDuration: '3s' }}>
+            <span className="bg-gradient-to-l from-pink-400 via-purple-400 to-rose-400 bg-clip-text text-transparent animate-pulse" style={{ animationDuration: '3s' }}>
               הפוך רעיונות לתוכן ויזואלי מדהים
             </span>
           </h1>
@@ -84,13 +84,13 @@ export default async function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button size="lg" className="text-lg px-8 h-14 bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
+            <Button size="lg" className="text-lg px-8 h-14 bg-pink-500 hover:bg-pink-600 text-white border-0" asChild>
               <Link href="/signup">
                 <Zap className="h-5 w-5 ml-2" />
                 התחל בחינם
               </Link>
             </Button>
-            <Button size="lg" variant="outline" className="text-lg px-8 h-14 border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20 hover:text-white" asChild>
+            <Button size="lg" variant="outline" className="text-lg px-8 h-14 border-pink-500/50 text-pink-300 hover:bg-pink-500/20 hover:text-white" asChild>
               <Link href="#examples">
                 דוגמאות
               </Link>
@@ -118,8 +118,8 @@ export default async function HomePage() {
       <section id="examples" className="py-24 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <div className="inline-block mb-4 px-4 py-2 bg-indigo-500/10 rounded-full border border-indigo-500/30">
-              <span className="text-indigo-300 text-sm font-semibold">✨ יכולות AI מתקדמות</span>
+            <div className="inline-block mb-4 px-4 py-2 bg-pink-500/10 rounded-full border border-pink-500/30">
+              <span className="text-pink-300 text-sm font-semibold">✨ יכולות AI מתקדמות</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold mb-4 text-white">
               מה אפשר ליצור עם קוסם?
@@ -127,7 +127,7 @@ export default async function HomePage() {
             <p className="text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed">
               פלטפורמה מקיפה ליצירת תוכן ויזואלי באמצעות בינה מלאכותית מתקדמת
               <br />
-              <span className="text-indigo-400 font-semibold">כל הפקודות בעברית!</span>
+              <span className="text-pink-400 font-semibold">כל הפקודות בעברית!</span>
             </p>
           </div>
 
@@ -201,19 +201,19 @@ export default async function HomePage() {
             </div>
 
             {/* Example 4: Reel to Carousel */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-14 w-14 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
                 <Film className="h-7 w-7 text-white" />
               </div>
               <h3 className="text-xl font-bold mb-3 text-white">המרת רילז לתמונות מנצחות</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-indigo-400/50 transition-all">
+              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-pink-500/20 to-rose-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-pink-400/50 transition-all">
                 🎬
               </div>
               <p className="text-slate-300 text-sm mb-4 leading-relaxed">
                 הדבק קישור לרילז מאינסטגרם – AI יבחר את הפריימים הטובים ביותר וייצור 10 תמונות
               </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-indigo-500/30 shadow-inner">
-                <span className="text-indigo-400 font-semibold">דוגמה:</span><br />
+              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-pink-500/30 shadow-inner">
+                <span className="text-pink-400 font-semibold">דוגמה:</span><br />
                 &quot;המר את הרילז הזה לתמונות מנצחות&quot;
               </div>
             </div>
@@ -262,13 +262,13 @@ export default async function HomePage() {
 
           <div className="text-center mt-16">
             <div className="inline-flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="text-lg px-10 h-16 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 shadow-2xl shadow-indigo-500/50" asChild>
+              <Button size="lg" className="text-lg px-10 h-16 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-0 shadow-2xl shadow-pink-500/50" asChild>
                 <Link href="/signup">
                   <Wand2 className="h-6 w-6 ml-2" />
                   התחל ליצור בחינם
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" className="text-lg px-10 h-16 border-2 border-indigo-400/50 text-indigo-300 hover:bg-indigo-500/20 hover:border-indigo-400" asChild>
+              <Button size="lg" variant="outline" className="text-lg px-10 h-16 border-2 border-pink-400/50 text-pink-300 hover:bg-pink-500/20 hover:border-pink-400" asChild>
                 <Link href="#features">
                   <Sparkles className="h-6 w-6 ml-2" />
                   גלה את היכולות
@@ -293,8 +293,8 @@ export default async function HomePage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Feature 1 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
+            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-pink-400/60 hover:shadow-2xl hover:shadow-pink-500/20 transition-all duration-300 hover:-translate-y-1">
+              <div className="h-16 w-16 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
                 <Film className="h-8 w-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold mb-3 text-white">המרת רילז לקרוסלה</h3>
@@ -397,7 +397,7 @@ export default async function HomePage() {
                   <span>המרת רילז</span>
                 </li>
               </ul>
-              <Button variant="outline" className="w-full border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20" asChild>
+              <Button variant="outline" className="w-full border-pink-500/50 text-pink-300 hover:bg-pink-500/20" asChild>
                 <Link href="/signup">
                   התחל בחינם
                 </Link>
@@ -405,54 +405,54 @@ export default async function HomePage() {
             </div>
 
             {/* Starter Plan */}
-            <div className="bg-indigo-500/20 backdrop-blur-sm p-8 rounded-2xl relative border-2 border-indigo-500/50">
+            <div className="bg-pink-500/20 backdrop-blur-sm p-8 rounded-2xl relative border-2 border-pink-500/50">
               <div className="absolute -top-3 right-4 bg-amber-400 text-amber-950 text-xs font-medium px-3 py-1 rounded-full">
                 הכי פופולרי
               </div>
               <h3 className="text-lg font-semibold mb-2 text-white">בסיסי</h3>
               <div className="mb-4">
                 <span className="text-4xl font-bold text-white">₪139</span>
-                <span className="text-indigo-200/80">/חודש</span>
+                <span className="text-pink-200/80">/חודש</span>
               </div>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>300 קרדיטים בחודש</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>יצירת תמונות, קרוסלות, קריקטורות</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>יצירת סרטונים</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>סוכן קופירייטר מקצועי</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>מחולל תמונות יצירתי ומתקדם</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>יצירת תוכן מותאם אישית</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>עריכת תמונות עם AI</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>יצירת סרטונים עם הדמות שלך</span>
                 </li>
-                <li className="flex items-center gap-2 text-indigo-100">
+                <li className="flex items-center gap-2 text-pink-100">
                   <Check className="h-5 w-5 text-emerald-400" />
                   <span>דמות ראשונה בחינם</span>
                 </li>
               </ul>
-              <Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
+              <Button className="w-full bg-pink-500 hover:bg-pink-600 text-white border-0" asChild>
                 <Link href="/signup?plan=basic">
                   בחר בתוכנית
                 </Link>
@@ -504,7 +504,7 @@ export default async function HomePage() {
                   <span>2 דמויות ראשונות בחינם</span>
                 </li>
               </ul>
-              <Button variant="outline" className="w-full border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20" asChild>
+              <Button variant="outline" className="w-full border-pink-500/50 text-pink-300 hover:bg-pink-500/20" asChild>
                 <Link href="/signup?plan=pro">
                   בחר בתוכנית
                 </Link>

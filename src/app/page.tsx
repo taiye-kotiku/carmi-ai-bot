@@ -17,11 +17,12 @@ export default async function HomePage() {
           src="/hero-background.png"
           alt="Background"
           fill
-          className="object-cover opacity-30"
+          className="object-cover"
           priority
           quality={90}
+          unoptimized
         />
-        <div className="absolute inset-0 bg-slate-950/70" />
+        <div className="absolute inset-0 bg-slate-950/40" />
       </div>
       {/* Enhanced Futuristic Background Overlay */}
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950/50 to-slate-950/80" />

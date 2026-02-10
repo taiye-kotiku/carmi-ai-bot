@@ -24,10 +24,9 @@ export async function POST(req: Request) {
             style = "storytelling",
             aspect_ratio = "9:16",
             transition_style = "fade",
-            scene_duration = 3,
+            scene_duration = 5,
         } = body;
 
-        // Validate
         if (!character_id) {
             return NextResponse.json(
                 { error: "נא לבחור דמות" },
@@ -42,7 +41,7 @@ export async function POST(req: Request) {
             );
         }
 
-        // Get character
+        // Get character — must be trained and ready
         const { data: character, error: charError } = await supabaseAdmin
             .from("characters")
             .select("*")
@@ -57,22 +56,31 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits (video credits + image credits for each scene)
+        if (character.status !== "ready" || !character.lora_url) {
+            return NextResponse.json(
+                { error: "הדמות עדיין לא מוכנה. נא לאמן אותה קודם." },
+                { status: 400 }
+            );
+        }
+
+        // Check credits
         const numScenes = custom_scenes?.length || scene_count;
-        const requiredImageCredits = numScenes * 2; // 2 credits per character image
-        const requiredVideoCredits = 1;
+        const requiredImageCredits = numScenes; // 1 credit per Modal image
+        const requiredVideoCredits = numScenes * 3; // 3 reel credits per Veo video
 
         const { data: credits } = await supabaseAdmin
             .from("credits")
-            .select("image_credits, video_credits")
+            .select("image_credits, reel_credits")
             .eq("user_id", user.id)
             .single();
 
         if (!credits ||
             credits.image_credits < requiredImageCredits ||
-            credits.video_credits < requiredVideoCredits) {
+            credits.reel_credits < requiredVideoCredits) {
             return NextResponse.json(
-                { error: `אין מספיק קרדיטים (נדרשים ${requiredImageCredits} תמונה + ${requiredVideoCredits} וידאו)` },
+                {
+                    error: `אין מספיק קרדיטים (נדרשים ${requiredImageCredits} תמונה + ${requiredVideoCredits} וידאו)`
+                },
                 { status: 402 }
             );
         }
@@ -121,7 +129,11 @@ interface ProcessOptions {
     requiredVideoCredits: number;
 }
 
-async function processCharacterVideo(jobId: string, userId: string, options: ProcessOptions) {
+async function processCharacterVideo(
+    jobId: string,
+    userId: string,
+    options: ProcessOptions
+) {
     const updateProgress = async (progress: number) => {
         await supabaseAdmin
             .from("jobs")
@@ -157,18 +169,23 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
 
         await updateProgress(15);
 
-        // Generate video
+        // Generate video — images via Modal, videos via Veo 3
         const result = await generateCharacterVideo(
             {
                 characterId: options.character.id,
                 characterReferenceImages: options.character.reference_images || [],
-                characterSettings: { trigger_word: options.character.trigger_word },
+                characterSettings: {
+                    trigger_word: options.character.trigger_word,
+                    lora_url: options.character.lora_url,
+                    lora_scale: options.character.lora_scale,
+                },
                 scenes: scenes.map(desc => ({
                     description: desc,
                     duration: options.sceneDuration,
                 })),
                 aspectRatio: options.aspectRatio,
                 transitionStyle: options.transitionStyle as any,
+                sceneDuration: options.sceneDuration,
             },
             userId,
             jobId,
@@ -183,7 +200,8 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
             type: "video",
             feature: "character_video",
             prompt: options.topic || scenes.join(" | "),
-            result_urls: [result.videoUrl, ...result.imageUrls],
+            result_urls: [result.videoUrl, ...result.sceneVideoUrls, ...result.imageUrls],
+            thumbnail_url: result.thumbnailUrl,
             duration: result.duration,
             status: "completed",
             job_id: jobId,
@@ -193,18 +211,18 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
         // Deduct credits
         const { data: currentCredits } = await supabaseAdmin
             .from("credits")
-            .select("image_credits, video_credits")
+            .select("image_credits, reel_credits")
             .eq("user_id", userId)
             .single();
 
         const newImageBalance = (currentCredits?.image_credits || 0) - options.requiredImageCredits;
-        const newVideoBalance = (currentCredits?.video_credits || 0) - options.requiredVideoCredits;
+        const newReelBalance = (currentCredits?.reel_credits || 0) - options.requiredVideoCredits;
 
         await supabaseAdmin
             .from("credits")
             .update({
                 image_credits: newImageBalance,
-                video_credits: newVideoBalance,
+                reel_credits: newReelBalance,
             })
             .eq("user_id", userId);
 
@@ -220,9 +238,9 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
             },
             {
                 user_id: userId,
-                credit_type: "video",
+                credit_type: "reel",
                 amount: -options.requiredVideoCredits,
-                balance_after: newVideoBalance,
+                balance_after: newReelBalance,
                 reason: "character_video",
                 related_id: generationId,
             },
@@ -236,7 +254,9 @@ async function processCharacterVideo(jobId: string, userId: string, options: Pro
                 progress: 100,
                 result: {
                     videoUrl: result.videoUrl,
+                    thumbnailUrl: result.thumbnailUrl,
                     imageUrls: result.imageUrls,
+                    sceneVideoUrls: result.sceneVideoUrls,
                     scenes,
                     duration: result.duration,
                 } as any,

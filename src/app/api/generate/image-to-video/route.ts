@@ -27,12 +27,12 @@ export async function POST(req: Request) {
         // Check credits
         const { data: credits } = await supabase
             .from("credits")
-            .select("reel_credits")
+            .select("video_credits")
             .eq("user_id", user.id)
             .single();
 
-        const videoCost = 3;
-        if (!credits || credits.reel_credits < videoCost) {
+        const videoCost = 20; // Fixed cost: 20 credits per video
+        if (!credits || credits.video_credits < videoCost) {
             return NextResponse.json(
                 { error: `נדרשים ${videoCost} קרדיטים ליצירת סרטון` },
                 { status: 402 }
@@ -147,20 +147,20 @@ async function processImageToVideo(
         // Deduct credits
         const { data: currentCredits } = await supabaseAdmin
             .from("credits")
-            .select("reel_credits")
+            .select("video_credits")
             .eq("user_id", userId)
             .single();
 
-        const newBalance = (currentCredits?.reel_credits || videoCost) - videoCost;
+        const newBalance = (currentCredits?.video_credits || videoCost) - videoCost;
 
         await supabaseAdmin
             .from("credits")
-            .update({ reel_credits: newBalance })
+            .update({ video_credits: newBalance })
             .eq("user_id", userId);
 
         await supabaseAdmin.from("credit_transactions").insert({
             user_id: userId,
-            credit_type: "reel",
+            credit_type: "video",
             amount: -videoCost,
             balance_after: newBalance,
             reason: "image_to_video",

@@ -60,7 +60,7 @@ export async function POST(req: Request) {
         // Check credits (video credits + image credits for each scene)
         const numScenes = custom_scenes?.length || scene_count;
         const requiredImageCredits = numScenes * 2; // 2 credits per character image
-        const requiredVideoCredits = 1;
+        const requiredVideoCredits = 20; // Fixed cost: 20 credits per video
 
         const { data: credits } = await supabaseAdmin
             .from("credits")

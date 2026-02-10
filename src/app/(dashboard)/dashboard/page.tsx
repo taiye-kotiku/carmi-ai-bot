@@ -66,13 +66,6 @@ export default async function DashboardPage() {
             icon: Images,
             color: "bg-green-50 text-green-600 hover:bg-green-100",
         },
-        {
-            name: "הגדרת מותג",
-            description: "הוסף לוגו ומיתוג",
-            href: "/brand",
-            icon: Palette,
-            color: "bg-orange-50 text-orange-600 hover:bg-orange-100",
-        },
     ];
 
     return (
@@ -98,32 +91,11 @@ export default async function DashboardPage() {
                             <ArrowLeft className="h-4 w-4 mr-2" />
                         </Button>
                     </Link>
-                </CardHeader>
+                </CardContent>
                 <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <CreditItem
-                            label="תמונות"
-                            value={credits?.image_credits || 0}
-                            max={10}
-                            color="bg-purple-500"
-                        />
-                        <CreditItem
-                            label="רילז"
-                            value={credits?.reel_credits || 0}
-                            max={2}
-                            color="bg-blue-500"
-                        />
-                        <CreditItem
-                            label="קרוסלות"
-                            value={credits?.carousel_credits || 0}
-                            max={5}
-                            color="bg-green-500"
-                        />
-                        <CreditItem
-                            label="וידאו"
-                            value={credits?.video_credits || 0}
-                            max={0}
-                            color="bg-orange-500"
+                    <div className="space-y-4">
+                        <CreditSlider
+                            credits={credits}
                         />
                     </div>
                 </CardContent>
@@ -206,33 +178,74 @@ export default async function DashboardPage() {
     );
 }
 
-function CreditItem({
-    label,
-    value,
-    max,
-    color,
-}: {
-    label: string;
-    value: number;
-    max: number;
-    color: string;
-}) {
-    const percentage = max > 0 ? (value / max) * 100 : 0;
+function CreditSlider({ credits }: { credits: any }) {
+    // Credit costs
+    const creditCosts = {
+        carousel: 3,
+        image: 2,
+        video: 20,
+        reel: 4,
+        videoSlicing: 20,
+    };
+
+    // Current credit values
+    const carouselCredits = credits?.carousel_credits || 0;
+    const imageCredits = credits?.image_credits || 0;
+    const videoCredits = credits?.video_credits || 0;
+    const reelCredits = credits?.reel_credits || 0;
+    const videoSlicingCredits = credits?.reel_credits || 0; // Using reel_credits for video slicing
+
+    // Calculate total available credits (weighted by cost)
+    const totalWeightedCredits = 
+        Math.floor(carouselCredits / creditCosts.carousel) +
+        Math.floor(imageCredits / creditCosts.image) +
+        Math.floor(videoCredits / creditCosts.video) +
+        Math.floor(reelCredits / creditCosts.reel) +
+        Math.floor(videoSlicingCredits / creditCosts.videoSlicing);
+
+    // Maximum possible credits (for display purposes)
+    const maxDisplayCredits = 100; // Adjust based on your needs
+
+    const percentage = Math.min((totalWeightedCredits / maxDisplayCredits) * 100, 100);
 
     return (
-        <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-                <span className="text-gray-600">{label}</span>
-                <span className="font-medium">
-                    {value}
-                    {max > 0 && `/${max}`}
-                </span>
+        <div className="space-y-4">
+            {/* Single Progress Bar */}
+            <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 font-medium">סה"כ קרדיטים זמינים</span>
+                    <span className="font-bold text-lg text-gray-900">{totalWeightedCredits}</span>
+                </div>
+                <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-gradient-to-r from-purple-500 via-blue-500 to-green-500 transition-all"
+                        style={{ width: `${percentage}%` }}
+                    />
+                </div>
             </div>
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                    className={`h-full ${color} transition-all`}
-                    style={{ width: `${Math.min(percentage, 100)}%` }}
-                />
+
+            {/* Credit Breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-2">
+                <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">{carouselCredits}</div>
+                    <div className="text-xs text-gray-500 mt-1">קרוסלה ({creditCosts.carousel} לקרוסלה)</div>
+                </div>
+                <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{imageCredits}</div>
+                    <div className="text-xs text-gray-500 mt-1">תמונה ({creditCosts.image} לתמונה)</div>
+                </div>
+                <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{videoCredits}</div>
+                    <div className="text-xs text-gray-500 mt-1">וידאו ({creditCosts.video} לסרטון)</div>
+                </div>
+                <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">{reelCredits}</div>
+                    <div className="text-xs text-gray-500 mt-1">רילז ({creditCosts.reel} לרילז)</div>
+                </div>
+                <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">{videoSlicingCredits}</div>
+                    <div className="text-xs text-gray-500 mt-1">חיתוך ({creditCosts.videoSlicing} לחיתוך)</div>
+                </div>
             </div>
         </div>
     );

@@ -88,7 +88,7 @@ export async function POST(req: Request) {
             .eq("user_id", user.id)
             .single();
 
-        const requiredCredits = customSlides?.length || slide_count;
+        const requiredCredits = 3; // Fixed cost: 3 credits per carousel
         if (!credits || credits.carousel_credits < requiredCredits) {
             return NextResponse.json(
                 { error: `אין מספיק קרדיטים (נדרשים ${requiredCredits})` },

@@ -46,9 +46,10 @@ export async function POST(req: Request) {
             .eq("user_id", user.id)
             .single();
 
-        if (!credits || credits.reel_credits < 1) {
+        const requiredCredits = 4; // Fixed cost: 4 credits per reel conversion
+        if (!credits || credits.reel_credits < requiredCredits) {
             return NextResponse.json(
-                { error: "אין מספיק קרדיטים להמרת רילז" },
+                { error: `אין מספיק קרדיטים להמרת רילז (נדרשים ${requiredCredits})` },
                 { status: 402 }
             );
         }
@@ -197,7 +198,8 @@ async function processReelConversion(
             .eq("user_id", userId)
             .single();
 
-        const newBalance = (currentCredits?.reel_credits || 1) - 1;
+        const requiredCredits = 4;
+        const newBalance = (currentCredits?.reel_credits || requiredCredits) - requiredCredits;
 
         await supabaseAdmin
             .from("credits")
@@ -208,7 +210,7 @@ async function processReelConversion(
         await supabaseAdmin.from("credit_transactions").insert({
             user_id: userId,
             credit_type: "reel",
-            amount: -1,
+            amount: -requiredCredits,
             balance_after: newBalance,
             reason: "generation",
             related_id: generationId,

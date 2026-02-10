@@ -30,9 +30,10 @@ export async function POST(req: Request) {
             .eq("user_id", user.id)
             .single();
 
-        if (!credits || credits.image_credits < 1) {
+        const requiredCredits = 2; // Fixed cost: 2 credits per image
+        if (!credits || credits.image_credits < requiredCredits) {
             return NextResponse.json(
-                { error: "אין מספיק קרדיטים ליצירת תמונה" },
+                { error: `אין מספיק קרדיטים ליצירת תמונה (נדרשים ${requiredCredits})` },
                 { status: 402 }
             );
         }
@@ -177,17 +178,19 @@ async function processTextToImage(
             .eq("user_id", userId)
             .single();
 
-        const newBalance = (currentCredits?.image_credits || 1) - 1;
+        const requiredCredits = 2;
+        const newBalance = (currentCredits?.image_credits || requiredCredits) - requiredCredits;
 
         await supabaseAdmin
             .from("credits")
             .update({ image_credits: newBalance })
             .eq("user_id", userId);
 
+        const requiredCredits = 2;
         await supabaseAdmin.from("credit_transactions").insert({
             user_id: userId,
             credit_type: "image",
-            amount: -1,
+            amount: -requiredCredits,
             balance_after: newBalance,
             reason: "text_to_image",
             related_id: generationId,

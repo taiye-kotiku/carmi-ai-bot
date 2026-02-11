@@ -259,7 +259,7 @@ export default async function HomePage() {
 
           <div className="flex items-center gap-3">
             {user ? (
-              <Button asChild variant="outline" className="border-indigo-500/30 hover:bg-indigo-500/10 hover:text-indigo-300">
+              <Button asChild variant="outline" className="border-indigo-500/50 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200">
                 <Link href="/dashboard">
                   הכנס למערכת
                   <ArrowLeft className="mr-2 h-4 w-4" />
@@ -310,7 +310,7 @@ export default async function HomePage() {
                 נסה בחינם עכשיו
               </Link>
             </Button>
-            <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-white/10 hover:bg-white/5 hover:text-white backdrop-blur-sm" asChild>
+            <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-white/30 bg-white/5 text-white hover:bg-white/10 hover:text-white backdrop-blur-sm" asChild>
               <Link href="#gallery">
                 <Play className="ml-2 h-5 w-5" />
                 ראה דוגמאות
@@ -456,8 +456,8 @@ export default async function HomePage() {
             </p>
           </div>
 
-          {/* Gallery Grid - TryTadam Style */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {/* Gallery Grid - TryTadam Style - 25% larger items */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {finalDisplayItems.map((item, index) => {
               const colors = colorMap[item.color];
               const isVideo = item.type === "video" || isVideoUrl(item.src);
@@ -468,7 +468,7 @@ export default async function HomePage() {
                 return (
                   <div
                     key={item.id}
-                    className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-emerald-500/50 bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-emerald-500/5 p-4 md:p-6"
+                    className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-emerald-500/50 bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-emerald-500/5 p-5 md:p-7"
                   >
                     {/* Header */}
                     <div className="flex items-center gap-2 mb-4">
@@ -527,11 +527,11 @@ export default async function HomePage() {
                 );
               }
 
-              // Image or Video display
+              // Image or Video display - 25% larger
               return (
                 <div
                   key={item.id}
-                  className={`group relative rounded-2xl overflow-hidden border border-white/10 ${colors.border} bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/5`}
+                  className={`group relative rounded-2xl overflow-hidden border-2 border-white/20 ${colors.border} bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/5`}
                 >
                   <div className="relative aspect-square bg-slate-800/50 overflow-hidden">
                     {isVideo ? (
@@ -637,7 +637,7 @@ export default async function HomePage() {
                   <span className="text-slate-400">/ חודש</span>
                 </div>
                 <ul className="space-y-4 mb-8 text-sm text-slate-300">
-                  <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> 250 תמונות בחודש</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> 150 תמונות בחודש</li>
                   <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> 20 קרוסלות מותאמות</li>
                   <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> סוכן קופירייטר אישי</li>
                   <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> אימון דמות אישית חינם</li>
@@ -657,7 +657,7 @@ export default async function HomePage() {
                   <span className="text-slate-400">/ חודש</span>
                 </div>
                 <ul className="space-y-4 mb-8 text-sm text-slate-300">
-                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 500 תמונות בחודש</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 300 תמונות בחודש</li>
                   <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 50 קרוסלות</li>
                   <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> יצירת סרטוני וידאו</li>
                   <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 2 דמויות אישיות</li>

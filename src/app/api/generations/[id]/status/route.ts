@@ -29,7 +29,7 @@ export async function GET(
     }
 
     // Already completed?
-    if (generation.status === "completed" && generation.result_urls?.length > 0) {
+    if (generation.status === "completed" && (generation.result_urls?.length ?? 0) > 0) {
         return NextResponse.json({
             status: "completed",
             images: generation.result_urls,

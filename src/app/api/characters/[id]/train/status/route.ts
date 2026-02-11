@@ -1,4 +1,3 @@
-// src/app/api/characters/[id]/train/status/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -20,7 +19,7 @@ export async function GET(
         const { id } = await params;
         const { data: character, error } = await supabaseAdmin
             .from("characters")
-            .select("id, status, training_started_at, trained_at, error_message, lora_url, trigger_word")
+            .select("id, status, created_at, updated_at, trained_at, error_message, lora_url, trigger_word")
             .eq("id", id)
             .eq("user_id", user.id)
             .single();
@@ -33,20 +32,18 @@ export async function GET(
             );
         }
 
-        // Calculate elapsed time
+        // Calculate elapsed time since training started
+        // Use updated_at as proxy for when training began
         let elapsed_minutes: number | null = null;
-        if (
-            character.status === "training" &&
-            character.training_started_at
-        ) {
-            const started = new Date(character.training_started_at).getTime();
+        if (character.status === "training" && character.updated_at) {
+            const started = new Date(character.updated_at).getTime();
             elapsed_minutes = Math.round((Date.now() - started) / 60000);
         }
 
         return NextResponse.json({
             id: character.id,
             status: character.status,
-            training_started_at: character.training_started_at,
+            training_started_at: character.updated_at,
             trained_at: character.trained_at,
             error_message: character.error_message,
             lora_url: character.lora_url,

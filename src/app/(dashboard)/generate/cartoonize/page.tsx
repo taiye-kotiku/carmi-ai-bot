@@ -9,6 +9,7 @@ import { Loader2, Download, Upload, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { requestNotificationPermission, notifyGenerationComplete } from "@/lib/services/notifications";
 import { ExportFormats } from "@/components/export-formats";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export default function CartoonizePage() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -285,6 +286,10 @@ export default function CartoonizePage() {
                                 </Button>
                             )}
                         </div>
+
+                        <p className="text-sm text-pink-600 text-center mt-3">
+                            עלות: {CREDIT_COSTS.caricature_generation} קרדיטים
+                        </p>
                     </CardContent>
                 </Card>
 

@@ -32,10 +32,10 @@ export default function HelpPage() {
             content: "הפכו תמונה לסרטון, או יצרו סרטון מטקסט. תומך גם ביצירת סרטוני רילז לאינסטגרם ולטיקטוק."
         },
         {
-            title: "צ'אט בוט",
-            description: "שיחה עם דמויות",
+            title: "יצירת קרוסלה",
+            description: "יצירת תוכן מותאם אישית לעסק שלכם",
             icon: <MessageCircle className="h-6 w-6 text-green-500" />,
-            content: "שוחחו עם הדמויות שיצרתם או עם דמויות מובנות. הדמויות זוכרות את ההקשר ומגיבות בהתאם לאופי שלהן."
+            content: "על ידי פרופמט אחד בלבד, תקבל פוסט קרוסלה מושקע עם הלוגו שלך והתמונה שתרצה"
         }
     ];
 
@@ -67,7 +67,7 @@ export default function HelpPage() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">מרכז עזרה</h1>
                     <p className="text-muted-foreground mt-1">
-                        כל המידע שצריך כדי להתחיל ליצור ב-Hebrew AI Bot
+                        כל המידע שצריך כדי להתחיל ליצור תוכן ויראלי
                     </p>
                 </div>
             </div>
@@ -138,12 +138,6 @@ export default function HelpPage() {
                                     <span>📧</span>
                                     <a href="mailto:support@hebrewai.bot" className="hover:underline text-primary">
                                         support@hebrewai.bot
-                                    </a>
-                                </li>
-                                <li className="flex items-center gap-2">
-                                    <span>💬</span>
-                                    <a href="#" className="hover:underline text-primary">
-                                        קבוצת הטלגרם שלנו
                                     </a>
                                 </li>
                             </ul>

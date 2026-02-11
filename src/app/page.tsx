@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import {
   Sparkles,
@@ -17,6 +18,41 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+
+const galleryImages = [
+  {
+    src: "/examples/astronaut.png",
+    label: "תמונה מפרומפט",
+    prompt: "אסטרונאוט צועד על מאדים בשקיעה כתומה, סגנון קולנועי",
+    color: "indigo" as const,
+  },
+  {
+    src: "/examples/caricature-example.png",
+    label: "קריקטורה / דמות",
+    prompt: "קריקטורה מעוצבת בסגנון קומיקס מתמונת פנים אמיתית",
+    color: "pink" as const,
+  },
+];
+
+const carouselSlides = [
+  "/examples/carousel/1.png",
+  "/examples/carousel/2.png",
+  "/examples/carousel/3.png",
+  "/examples/carousel/4.png",
+  "/examples/carousel/5.png",
+  "/examples/carousel/6.png",
+];
+
+const colorMap: Record<string, { badge: string; border: string }> = {
+  indigo: {
+    badge: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
+    border: "group-hover:border-indigo-500/50",
+  },
+  pink: {
+    badge: "bg-pink-500/10 text-pink-400 border-pink-500/30",
+    border: "group-hover:border-pink-500/50",
+  },
+};
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -143,7 +179,6 @@ export default async function HomePage() {
             {/* Large Card: Text to Image */}
             <div className="md:col-span-2 row-span-1 md:row-span-2 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-indigo-500/50 transition-all duration-500">
               <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-950/90 z-10" />
-              {/* Animated Abstract Background */}
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950 opacity-100 group-hover:scale-105 transition-transform duration-700" />
 
               <div className="relative z-20 p-8 h-full flex flex-col justify-end">
@@ -219,6 +254,153 @@ export default async function HomePage() {
               </div>
               <div className="hidden sm:block h-32 w-48 bg-emerald-500/10 rounded-lg border border-emerald-500/20 rotate-[-5deg] transform group-hover:rotate-0 transition-all" />
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Gallery / Examples Section */}
+      <section id="gallery" className="py-20 relative overflow-hidden">
+        {/* Section Background Glow */}
+        <div className="absolute top-0 left-[50%] translate-x-[-50%] w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="text-center mb-16">
+            <Badge variant="outline" className="mb-4 border-purple-500/30 bg-purple-500/10 text-purple-300 px-4 py-1 text-sm backdrop-blur-md">
+              <Wand2 className="h-3.5 w-3.5 ml-1.5 inline" />
+              נוצר ב-קוסם AI
+            </Badge>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">ראה מה אפשר ליצור</h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              כל התוכן נוצר עם המערכת שלנו, מפרומפטים בעברית בלבד. בדיוק מה שתקבלו גם אתם.
+            </p>
+          </div>
+
+          {/* Row 1: Image Generation Examples */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+            {galleryImages.map((item, index) => {
+              const colors = colorMap[item.color];
+              return (
+                <div
+                  key={index}
+                  className={`group relative rounded-2xl overflow-hidden border border-white/10 ${colors.border} bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/5`}
+                >
+                  <div className="relative aspect-square bg-slate-800/50 overflow-hidden">
+                    <Image
+                      src={item.src}
+                      alt={item.prompt}
+                      fill
+                      className="object-cover transition-transform duration-700 group-hover:scale-105"
+                      sizes="(max-width: 640px) 100vw, 50vw"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
+
+                    {/* Category Badge */}
+                    <div className="absolute top-4 right-4 z-10">
+                      <span className={`text-xs font-medium px-3 py-1 rounded-full border backdrop-blur-md ${colors.badge}`}>
+                        {item.label}
+                      </span>
+                    </div>
+
+                    {/* Prompt on hover */}
+                    <div className="absolute bottom-0 left-0 right-0 p-5 z-10 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500">
+                      <div className="flex items-start gap-2">
+                        <Sparkles className="h-4 w-4 text-indigo-400 mt-0.5 shrink-0" />
+                        <p className="text-sm text-slate-200 leading-relaxed">
+                          &quot;{item.prompt}&quot;
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Row 2: Video Example */}
+          <div className="mb-5">
+            <div className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-amber-500/50 bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-amber-500/5">
+              <div className="relative aspect-video bg-slate-800/50 overflow-hidden">
+                <video
+                  src="/examples/astronaut-video.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
+
+                {/* Badge */}
+                <div className="absolute top-4 right-4 z-10">
+                  <span className="text-xs font-medium px-3 py-1 rounded-full border backdrop-blur-md bg-amber-500/10 text-amber-400 border-amber-500/30">
+                    <Video className="h-3 w-3 inline ml-1" />
+                    טקסט לוידאו
+                  </span>
+                </div>
+
+                {/* Caption */}
+                <div className="absolute bottom-0 left-0 right-0 p-6 z-10">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-sm text-slate-200 leading-relaxed">
+                      &quot;אסטרונאוט צועד על פני מאדים, צילום קולנועי, תנועה איטית&quot;
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Carousel Example */}
+          <div className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-emerald-500/50 bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-emerald-500/5 p-6 md:p-8">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center backdrop-blur-md">
+                <Images className="h-5 w-5 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">קרוסלה לאינסטגרם</h3>
+                <p className="text-xs text-slate-500">6 שקופיות • נוצרו אוטומטית מפרומפט אחד</p>
+              </div>
+              <span className="mr-auto text-xs font-medium px-3 py-1 rounded-full border backdrop-blur-md bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                קרוסלה
+              </span>
+            </div>
+
+            {/* Carousel Horizontal Scroll */}
+            <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent snap-x snap-mandatory">
+              {carouselSlides.map((slide, index) => (
+                <div
+                  key={index}
+                  className="relative shrink-0 w-48 md:w-56 aspect-[4/5] rounded-xl overflow-hidden border border-white/10 hover:border-emerald-500/30 transition-all snap-center"
+                >
+                  <Image
+                    src={slide}
+                    alt={`שקופית ${index + 1}`}
+                    fill
+                    className="object-cover"
+                    sizes="224px"
+                  />
+                  {/* Slide Number */}
+                  <div className="absolute top-2 left-2 h-6 w-6 rounded-full bg-slate-950/70 backdrop-blur-md flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-slate-300">{index + 1}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA under gallery */}
+          <div className="text-center mt-14">
+            <p className="text-slate-500 mb-6 text-sm">
+              זו רק ההתחלה. המערכת מסוגלת ליצור כל מה שתדמיינו.
+            </p>
+            <Button size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 border-0 shadow-lg shadow-indigo-500/20 h-12 px-8" asChild>
+              <Link href="/signup">
+                <Sparkles className="ml-2 h-4 w-4 fill-white/20" />
+                צור את התמונה הראשונה שלך
+              </Link>
+            </Button>
           </div>
         </div>
       </section>

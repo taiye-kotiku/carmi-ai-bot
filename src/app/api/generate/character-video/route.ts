@@ -1,4 +1,3 @@
-// src/app/api/generate/character-video/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
@@ -6,8 +5,10 @@ import { nanoid } from "nanoid";
 import { generateCharacterVideo } from "@/lib/services/character-video";
 import { generateCharacterScenes } from "@/lib/services/scene-generator";
 import { after } from "next/server";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
-export const maxDuration = 300; // 5 minutes max
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
     try {
@@ -66,23 +67,14 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const numScenes = custom_scenes?.length || scene_count;
-        const requiredImageCredits = numScenes;
-        const requiredVideoCredits = numScenes * 3;
-
-        const { data: credits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits, reel_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!credits ||
-            credits.image_credits < requiredImageCredits ||
-            credits.reel_credits < requiredVideoCredits) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "video_generation");
+        } catch (err) {
             return NextResponse.json(
                 {
-                    error: `אין מספיק קרדיטים (נדרשים ${requiredImageCredits} תמונה + ${requiredVideoCredits} וידאו)`
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
                 },
                 { status: 402 }
             );
@@ -109,8 +101,6 @@ export async function POST(req: Request) {
                 aspectRatio: aspect_ratio,
                 transitionStyle: transition_style,
                 sceneDuration: scene_duration,
-                requiredImageCredits,
-                requiredVideoCredits,
             })
         );
 
@@ -130,8 +120,6 @@ interface ProcessOptions {
     aspectRatio: string;
     transitionStyle: string;
     sceneDuration: number;
-    requiredImageCredits: number;
-    requiredVideoCredits: number;
 }
 
 async function processCharacterVideo(
@@ -175,7 +163,7 @@ async function processCharacterVideo(
 
         await updateProgress(15);
 
-        // Generate video — images via Modal, videos via Veo 3
+        // Generate video
         const result = await generateCharacterVideo(
             {
                 characterId: options.character.id,
@@ -214,43 +202,6 @@ async function processCharacterVideo(
             completed_at: new Date().toISOString(),
         });
 
-        // Deduct credits
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits, reel_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const newImageBalance = (currentCredits?.image_credits || 0) - options.requiredImageCredits;
-        const newReelBalance = (currentCredits?.reel_credits || 0) - options.requiredVideoCredits;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({
-                image_credits: newImageBalance,
-                reel_credits: newReelBalance,
-            })
-            .eq("user_id", userId);
-
-        await supabaseAdmin.from("credit_transactions").insert([
-            {
-                user_id: userId,
-                credit_type: "image",
-                amount: -options.requiredImageCredits,
-                balance_after: newImageBalance,
-                reason: "character_video_images",
-                related_id: generationId,
-            },
-            {
-                user_id: userId,
-                credit_type: "reel",
-                amount: -options.requiredVideoCredits,
-                balance_after: newReelBalance,
-                reason: "character_video",
-                related_id: generationId,
-            },
-        ]);
-
         // Complete job
         await supabaseAdmin
             .from("jobs")
@@ -273,6 +224,15 @@ async function processCharacterVideo(
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error(`[CharacterVideo] Job ${jobId} failed:`, error);
+
+        // Refund credits on failure
+        await addCredits(
+            userId,
+            CREDIT_COSTS.video_generation,
+            "החזר - יצירת וידאו דמות נכשלה",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })

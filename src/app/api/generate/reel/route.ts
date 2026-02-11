@@ -5,6 +5,8 @@ import { nanoid } from "nanoid";
 import { isValidInstagramUrl } from "@/lib/utils";
 import { extractReelFrames } from "@/lib/services/reel-extractor";
 import sharp from "sharp";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 // Define types for better type safety
 interface ExtractedFrame {
@@ -15,7 +17,7 @@ interface ExtractedFrame {
 interface UploadedFrame {
     url: string;
     timestamp: number;
-    [key: string]: string | number; // Add index signature for Json compatibility
+    [key: string]: string | number;
 }
 
 export async function POST(req: Request) {
@@ -39,17 +41,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("reel_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const requiredCredits = 4; // Fixed cost: 4 credits per reel conversion
-        if (!credits || credits.reel_credits < requiredCredits) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "video_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: `אין מספיק קרדיטים להמרת רילז (נדרשים ${requiredCredits})` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -107,27 +107,24 @@ async function processReelConversion(
 
         const frames: ExtractedFrame[] = extractedFrames;
 
-        // ✅ FIX: Add type annotation here
         const uploadedFrames: UploadedFrame[] = [];
 
         for (let i = 0; i < frames.length; i++) {
             const frame = frames[i];
-            
+
             // Handle base64 data URLs or regular URLs
             let buffer: Buffer;
             if (frame.url.startsWith("data:image")) {
-                // Extract base64 from data URL
                 const base64Data = frame.url.split(",")[1];
                 buffer = Buffer.from(base64Data, "base64");
             } else {
-                // Fetch from URL
                 const frameResponse = await fetch(frame.url);
                 const blob = await frameResponse.blob();
                 const arrayBuffer = await blob.arrayBuffer();
                 buffer = Buffer.from(arrayBuffer);
             }
-            
-            // Ensure image is high quality (1080x1080 if possible)
+
+            // Ensure image is high quality
             try {
                 const metadata = await sharp(buffer).metadata();
                 if (metadata.width && metadata.height && (metadata.width < 1080 || metadata.height < 1080)) {
@@ -136,14 +133,12 @@ async function processReelConversion(
                         .jpeg({ quality: 95 })
                         .toBuffer();
                 } else {
-                    // Just optimize quality
                     buffer = await sharp(buffer)
                         .jpeg({ quality: 95 })
                         .toBuffer();
                 }
             } catch (sharpError) {
                 console.warn(`Failed to process frame ${i + 1}:`, sharpError);
-                // Continue with original buffer
             }
 
             const fileName = `${userId}/${jobId}/frame_${i + 1}.jpg`;
@@ -191,31 +186,6 @@ async function processReelConversion(
             completed_at: new Date().toISOString(),
         });
 
-        // Deduct credit
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("reel_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const requiredCredits = 4;
-        const newBalance = (currentCredits?.reel_credits || requiredCredits) - requiredCredits;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ reel_credits: newBalance })
-            .eq("user_id", userId);
-
-        // Record transaction
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: userId,
-            credit_type: "reel",
-            amount: -requiredCredits,
-            balance_after: newBalance,
-            reason: "generation",
-            related_id: generationId,
-        });
-
         // Complete job
         await supabaseAdmin
             .from("jobs")
@@ -228,6 +198,15 @@ async function processReelConversion(
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("Processing error:", error);
+
+        // Refund credits on failure
+        await addCredits(
+            userId,
+            CREDIT_COSTS.video_generation,
+            "החזר - המרת רילז נכשלה",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({

@@ -4,6 +4,8 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 const apiKey = process.env.GOOGLE_AI_API_KEY!;
 
@@ -38,17 +40,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("video_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const requiredCredits = 25; // Fixed cost: 25 credits per video
-        if (!credits || credits.video_credits < requiredCredits) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "video_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: `אין מספיק קרדיטים ליצירת וידאו (נדרשים ${requiredCredits})` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -75,6 +75,14 @@ export async function POST(request: NextRequest) {
         if (!startResponse.ok) {
             const errorText = await startResponse.text();
             console.error("Veo start error:", errorText);
+
+            // Refund credits — API call failed
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.video_generation,
+                "החזר - יצירת וידאו נכשלה"
+            );
+
             return NextResponse.json(
                 { error: "יצירת הוידאו נכשלה" },
                 { status: 400 }
@@ -85,7 +93,19 @@ export async function POST(request: NextRequest) {
         console.log("Operation:", operation.name);
 
         // Poll for completion
-        const googleVideoUrl = await pollForVideo(operation.name);
+        let googleVideoUrl: string;
+        try {
+            googleVideoUrl = await pollForVideo(operation.name);
+        } catch (pollError) {
+            // Refund credits — polling/generation failed
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.video_generation,
+                "החזר - יצירת וידאו נכשלה"
+            );
+            throw pollError;
+        }
+
         console.log("Google URL:", googleVideoUrl);
 
         // Download video with API key authentication
@@ -97,6 +117,13 @@ export async function POST(request: NextRequest) {
 
         if (!videoResponse.ok) {
             console.error("Download failed:", videoResponse.status);
+
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.video_generation,
+                "החזר - הורדת וידאו נכשלה"
+            );
+
             return NextResponse.json(
                 { error: "הורדת הוידאו נכשלה" },
                 { status: 500 }
@@ -107,6 +134,12 @@ export async function POST(request: NextRequest) {
         console.log("Video size:", videoBuffer.byteLength);
 
         if (videoBuffer.byteLength < 50000) {
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.video_generation,
+                "החזר - וידאו לא תקין"
+            );
+
             return NextResponse.json(
                 { error: "הוידאו שנוצר לא תקין" },
                 { status: 500 }
@@ -125,6 +158,13 @@ export async function POST(request: NextRequest) {
 
         if (uploadError) {
             console.error("Upload error:", uploadError);
+
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.video_generation,
+                "החזר - העלאת וידאו נכשלה"
+            );
+
             return NextResponse.json(
                 { error: "העלאת הוידאו נכשלה" },
                 { status: 500 }
@@ -137,35 +177,28 @@ export async function POST(request: NextRequest) {
 
         console.log("Public URL:", publicUrl);
 
-        // Deduct credits (requiredCredits already declared at line 48)
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("video_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const newBalance = (currentCredits?.video_credits || requiredCredits) - requiredCredits;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ video_credits: newBalance })
-            .eq("user_id", user.id);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: user.id,
-            credit_type: "video",
-            amount: -requiredCredits,
-            balance_after: newBalance,
-            reason: "text_to_video",
-            related_id: fileName,
-        });
-
         return NextResponse.json({
             success: true,
             videoUrl: publicUrl,
         });
     } catch (error: any) {
         console.error("Video error:", error);
+
+        // Last-resort refund attempt
+        try {
+            const supabase = await createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                await addCredits(
+                    user.id,
+                    CREDIT_COSTS.video_generation,
+                    "החזר - יצירת וידאו נכשלה"
+                );
+            }
+        } catch (refundError) {
+            console.error("Refund failed:", refundError);
+        }
+
         return NextResponse.json(
             { error: error.message || "יצירת הוידאו נכשלה" },
             { status: 500 }

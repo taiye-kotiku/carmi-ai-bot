@@ -1,4 +1,3 @@
-// src/app/api/characters/[id]/image/route.ts
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
@@ -6,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { generateWithLora } from "@/lib/services/modal";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(
     request: NextRequest,
@@ -62,36 +63,18 @@ export async function POST(
             return NextResponse.json({ error: "prompt is required" }, { status: 400 });
         }
 
-        // Check credits
-        const GENERATION_COST = 1;
-        const { data: credits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!credits || credits.image_credits < GENERATION_COST) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "image_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: `Insufficient credits. Need ${GENERATION_COST}, have ${credits?.image_credits ?? 0}` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
-
-        // Deduct credits
-        const newBalance = credits.image_credits - GENERATION_COST;
-        await supabaseAdmin
-            .from("credits")
-            .update({ image_credits: newBalance })
-            .eq("user_id", user.id);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: user.id,
-            credit_type: "image_credits",
-            amount: -GENERATION_COST,
-            balance_after: newBalance,
-            reason: "character_image_generation",
-            related_id: characterId,
-        });
 
         const triggerWord = character.trigger_word || "TOK";
 
@@ -144,20 +127,13 @@ export async function POST(
         } catch (genError: any) {
             console.error("[CharacterImage] Generation error:", genError);
 
-            // Refund credits
-            await supabaseAdmin
-                .from("credits")
-                .update({ image_credits: credits.image_credits })
-                .eq("user_id", user.id);
-
-            await supabaseAdmin.from("credit_transactions").insert({
-                user_id: user.id,
-                credit_type: "image_credits",
-                amount: GENERATION_COST,
-                balance_after: credits.image_credits,
-                reason: "generation_refund_error",
-                related_id: characterId,
-            });
+            // Refund credits on failure
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.image_generation,
+                "החזר - יצירת תמונת דמות נכשלה",
+                characterId
+            );
 
             return NextResponse.json(
                 { error: genError.message || "Modal generation failed" },

@@ -6,6 +6,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import sharp from "sharp";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 const VISION_PROMPT = `Analyze this photograph in EXTREME detail. Extract the following information with precise accuracy:
 1. Subject description: Describe the person's appearance in detail - face shape, hair color/style/texture, eye color, skin tone, clothing colors and style, body type, pose, age range
@@ -69,17 +71,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const requiredCredits = 3; // Fixed cost: 3 credits per caricature
-        if (!credits || credits.image_credits < requiredCredits) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "caricature_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: `אין מספיק קרדיטים ליצירת קריקטורה (נדרשים ${requiredCredits})` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
 
         const genAI = new GoogleGenerativeAI(apiKey);
 
-        // Step 1: Use Gemini Vision to analyze the image (gemini-2.5-flash supports vision)
+        // Step 1: Use Gemini Vision to analyze the image
         const visionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const visionResult = await visionModel.generateContent([
             {
@@ -107,41 +107,33 @@ export async function POST(req: Request) {
 
         // Step 2: Extract key information from description and build caricature prompt
         const extractInfo = (description: string) => {
-            const lines = description.split('\n').map(l => l.trim()).filter(l => l);
-            
-            // Extract subject description (usually first section)
-            const subjectMatch = description.match(/subject description[:\-]?\s*(.+?)(?=\n|$)/i) 
+            const subjectMatch = description.match(/subject description[:\-]?\s*(.+?)(?=\n|$)/i)
                 || description.match(/1[.\-]\s*subject[:\-]?\s*(.+?)(?=\n|$)/i);
             const subjectDescription = subjectMatch?.[1]?.trim() || description.split('\n')[0] || "the person in the image";
-            
-            // Extract facial features
+
             const facialMatch = description.match(/facial features[:\-]?\s*(.+?)(?=\n|$)/i)
                 || description.match(/2[.\-]\s*facial[:\-]?\s*(.+?)(?=\n|$)/i);
             const facialFeature = facialMatch?.[1]?.trim() || "distinctive eyes and facial structure";
-            
-            // Extract expression
+
             const expressionMatch = description.match(/expression[:\-]?\s*(.+?)(?=\n|$)/i)
                 || description.match(/3[.\-]\s*expression[:\-]?\s*(.+?)(?=\n|$)/i);
             const expression = expressionMatch?.[1]?.trim() || "their natural expression";
-            
-            // Extract setting
+
             const settingMatch = description.match(/setting[:\-]?\s*(.+?)(?=\n|$)/i)
                 || description.match(/4[.\-]\s*setting[:\-]?\s*(.+?)(?=\n|$)/i);
             const setting = settingMatch?.[1]?.trim() || "a clean, modern environment";
-            
-            // Extract hobby/profession
+
             const hobbyMatch = description.match(/hobby[:\-]?\s*(.+?)(?=\n|$)/i)
                 || description.match(/5[.\-]\s*hobby[:\-]?\s*(.+?)(?=\n|$)/i);
             const hobby = hobbyMatch?.[1]?.trim() || "their interests";
-            
-            // Extract props
+
             const propsMatch = description.match(/props[:\-]?\s*(.+?)(?=\n|$)/i)
                 || description.match(/6[.\-]\s*key props[:\-]?\s*(.+?)(?=\n|$)/i);
             const props = propsMatch?.[1]?.trim() || "";
             const propList = props.split(',').map(p => p.trim()).filter(p => p);
             const prop1 = propList[0] || "their accessories";
             const prop2 = propList[1] || "their personal items";
-            
+
             return {
                 subjectDescription,
                 facialFeature,
@@ -154,13 +146,11 @@ export async function POST(req: Request) {
         };
 
         const info = extractInfo(imageDescription);
-        
-        // Use user inputs if provided, otherwise use extracted values
+
         const finalSubjectDescription = userSubjectDescription?.trim() || info.subjectDescription;
         const finalSettingEnvironment = userSettingEnvironment?.trim() || info.setting;
         const finalHobbyProfession = userHobbyProfession?.trim() || info.hobby;
-        
-        // Build the caricature prompt using the template
+
         const caricaturePrompt = CARTOONIZE_PROMPT_TEMPLATE
             .replace('[SUBJECT DESCRIPTION]', finalSubjectDescription)
             .replace('[SPECIFIC FACIAL FEATURE]', info.facialFeature)
@@ -173,7 +163,7 @@ export async function POST(req: Request) {
 
         console.log("Caricature prompt:", caricaturePrompt);
 
-        // Step 3: Generate cartoon image from refined prompt (include original image for better likeness)
+        // Step 3: Generate cartoon image
         const imageModel = genAI.getGenerativeModel({
             model: "gemini-3-pro-image-preview",
             generationConfig: {
@@ -181,7 +171,6 @@ export async function POST(req: Request) {
             } as any,
         });
 
-        // Include the original image in the generation request for better likeness
         const imageResult = await imageModel.generateContent([
             {
                 inlineData: {
@@ -199,6 +188,14 @@ export async function POST(req: Request) {
 
         if (!imagePart?.inlineData) {
             console.error("No image in response:", JSON.stringify(response, null, 2));
+
+            // Refund credits — generation failed
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.caricature_generation,
+                "החזר - יצירת קריקטורה נכשלה"
+            );
+
             return NextResponse.json(
                 { error: "לא נוצרה תמונת קריקטורה. נסה תמונה אחרת." },
                 { status: 500 }
@@ -209,7 +206,7 @@ export async function POST(req: Request) {
         const generatedImageBuffer = Buffer.from(imagePart.inlineData.data, "base64");
         const resizedImageBuffer = await sharp(generatedImageBuffer)
             .resize(1080, 1080, {
-                fit: "cover", // Cover the entire area, may crop if needed
+                fit: "cover",
                 position: "center",
             })
             .png({ quality: 100 })
@@ -218,44 +215,37 @@ export async function POST(req: Request) {
         const resizedBase64 = resizedImageBuffer.toString("base64");
         const resultDataUrl = `data:image/png;base64,${resizedBase64}`;
 
-        // Deduct credits
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const newBalance = (currentCredits?.image_credits || requiredCredits) - requiredCredits;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ image_credits: newBalance })
-            .eq("user_id", user.id);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: user.id,
-            credit_type: "image",
-            amount: -requiredCredits,
-            balance_after: newBalance,
-            reason: "cartoonize",
-            related_id: null,
-        });
-
         return NextResponse.json({
             success: true,
             imageUrl: resultDataUrl,
         });
     } catch (error: any) {
         console.error("Cartoonize error:", error);
+
+        // Refund credits on any unexpected failure
+        try {
+            const supabase = await createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                await addCredits(
+                    user.id,
+                    CREDIT_COSTS.caricature_generation,
+                    "החזר - יצירת קריקטורה נכשלה"
+                );
+            }
+        } catch (refundError) {
+            console.error("Refund failed:", refundError);
+        }
+
         const errorMessage = error.message || "שגיאה בהמרה לקריקטורה";
-        
+
         if (errorMessage.includes("API key")) {
             return NextResponse.json(
                 { error: "שגיאת הגדרה: GOOGLE_AI_API_KEY לא מוגדר" },
                 { status: 500 }
             );
         }
-        
+
         if (errorMessage.includes("quota") || errorMessage.includes("rate limit")) {
             return NextResponse.json(
                 { error: "מגבלת שימוש - נסה שוב בעוד כמה דקות" },

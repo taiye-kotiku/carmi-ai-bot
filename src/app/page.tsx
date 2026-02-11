@@ -1,536 +1,319 @@
 import Link from "next/link";
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { ExampleCarousel } from "@/components/ExampleCarousel";
-import { Film, Image as ImageIcon, Sparkles, Zap, Check, LayoutGrid, Wand2, Video } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import {
+  Sparkles,
+  Film,
+  Images,
+  Zap,
+  Wand2,
+  Video,
+  Check,
+  ArrowLeft,
+  Play,
+  User,
+  Menu,
+  X
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export default async function HomePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-slate-950" dir="rtl">
-      {/* Background Image */}
-      <div className="fixed inset-0 -z-10">
-        <Image
-          src="/hero-background.png"
-          alt="Background"
-          fill
-          className="object-cover"
-          priority
-          quality={90}
-          unoptimized
-        />
-        <div className="absolute inset-0 bg-slate-950/40" />
+    <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30" dir="rtl">
+      {/* Background Effects */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[100px] animate-pulse" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] animate-pulse delay-1000" />
+        <div className="absolute top-[40%] left-[50%] translate-x-[-50%] w-[800px] h-[800px] bg-slate-900/50 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
       </div>
-      {/* Enhanced Futuristic Background Overlay */}
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950/50 to-slate-950/80" />
-      <div className="fixed inset-0 -z-10 bg-[linear-gradient(rgba(99,102,241,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(99,102,241,0.05)_1px,transparent_1px)] bg-[size:48px_48px]" />
-      <div className="fixed inset-0 -z-10 bg-gradient-to-tr from-cyan-500/5 via-transparent to-purple-500/5" />
 
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🧙</span>
-            <span className="text-xl font-bold text-white">קוסם</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            {user && (
+      <header className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/60 backdrop-blur-xl">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+              🧙
+            </div>
+            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+              קוסם AI
+            </span>
+          </div>
+
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-400">
+            <Link href="#features" className="hover:text-white transition-colors">יכולות</Link>
+            <Link href="#pricing" className="hover:text-white transition-colors">מחירים</Link>
+            <Link href="#gallery" className="hover:text-white transition-colors">דוגמאות</Link>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            {user ? (
+              <Button asChild variant="outline" className="border-indigo-500/30 hover:bg-indigo-500/10 hover:text-indigo-300">
+                <Link href="/dashboard">
+                  הכנס למערכת
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
               <>
-                <Link href="/generate/carousel" className="text-slate-400 hover:text-white text-sm transition-colors">
-                  קרוסלה
+                <Link href="/login" className="text-sm font-medium text-slate-400 hover:text-white hidden sm:block">
+                  התחברות
                 </Link>
-                <Link href="/credits" className="text-slate-400 hover:text-white text-sm transition-colors">
-                  מנוי וקרדיטים
-                </Link>
+                <Button asChild className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 border-0 shadow-lg shadow-indigo-500/20">
+                  <Link href="/signup">
+                    התחל בחינם
+                    <Sparkles className="mr-2 h-4 w-4 fill-white/20" />
+                  </Link>
+                </Button>
               </>
             )}
-            <Link href="#examples" className="text-slate-400 hover:text-white text-sm transition-colors">
-              דוגמאות
-            </Link>
-            <Link href="/terms" className="text-slate-400 hover:text-white text-sm transition-colors">
-              תנאי שימוש
-            </Link>
-            <Link href="/contact" className="text-slate-400 hover:text-white text-sm transition-colors">
-              צור קשר
-            </Link>
-            <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-white/10" asChild>
-              <Link href="/login">התחברות</Link>
-            </Button>
-            <Button className="bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
-              <Link href="/signup">התחל בחינם</Link>
-            </Button>
           </div>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-6xl md:text-7xl font-bold mb-6 leading-tight text-white">
-            <span className="text-5xl md:text-6xl">🧙</span>
+      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
+        <div className="container mx-auto px-4 relative z-10 text-center">
+          <Badge variant="outline" className="mb-6 border-indigo-500/30 bg-indigo-500/10 text-indigo-300 px-4 py-1 text-sm backdrop-blur-md">
+            ✨ הדור החדש של יצירת תוכן
+          </Badge>
+
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8">
+            הפוך רעיונות למציאות
             <br />
-            קוסם AI
-            <br />
-            <span className="bg-gradient-to-l from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent animate-pulse" style={{ animationDuration: '3s' }}>
-              הפוך רעיונות לתוכן ויזואלי מדהים
+            <span className="bg-clip-text text-transparent bg-gradient-to-l from-indigo-400 via-purple-400 to-cyan-400 animate-gradient-x">
+              עם כוח הבינה המלאכותית
             </span>
           </h1>
 
-          <p className="text-xl md:text-2xl text-slate-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-            צור תמונות מרהיבות, סרטונים מקצועיים, וקרוסלות מושלמות עם בינה מלאכותית מתקדמת
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            צור תמונות מרהיבות, סרטונים ויראליים, וקרוסלות מקצועיות לאינסטגרם תוך שניות.
+            <br className="hidden md:block" />
+            הכל בעברית, הכל במקום אחד.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button size="lg" className="text-lg px-8 h-14 bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
+            <Button size="lg" className="h-14 px-8 text-lg bg-white text-slate-900 hover:bg-slate-200 border-0 shadow-xl shadow-white/10" asChild>
               <Link href="/signup">
-                <Zap className="h-5 w-5 ml-2" />
-                התחל בחינם
+                <Zap className="ml-2 h-5 w-5" />
+                נסה בחינם עכשיו
               </Link>
             </Button>
-            <Button size="lg" variant="outline" className="text-lg px-8 h-14 border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20 hover:text-white" asChild>
-              <Link href="#examples">
-                דוגמאות
+            <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-white/10 hover:bg-white/5 hover:text-white backdrop-blur-sm" asChild>
+              <Link href="#gallery">
+                <Play className="ml-2 h-5 w-5" />
+                ראה דוגמאות
               </Link>
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 mt-6 text-sm text-slate-300">
-            <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full border border-white/10">
-              <Check className="h-4 w-4 text-emerald-400" />
+          {/* Stats / Social Proof */}
+          <div className="mt-16 pt-8 border-t border-white/5 flex flex-wrap justify-center gap-8 md:gap-16 text-slate-400">
+            <div className="flex items-center gap-2">
+              <Check className="text-emerald-500 h-5 w-5" />
               <span>ללא כרטיס אשראי</span>
             </div>
-            <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full border border-white/10">
-              <Check className="h-4 w-4 text-emerald-400" />
-              <span>10 תמונות חינם</span>
+            <div className="flex items-center gap-2">
+              <Check className="text-emerald-500 h-5 w-5" />
+              <span>10 תמונות מתנה</span>
             </div>
-            <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full border border-white/10">
-              <Check className="h-4 w-4 text-emerald-400" />
-              <span>2 המרות רילז</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Examples Section */}
-      <section id="examples" className="py-24 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="inline-block mb-4 px-4 py-2 bg-indigo-500/10 rounded-full border border-indigo-500/30">
-              <span className="text-indigo-300 text-sm font-semibold">✨ יכולות AI מתקדמות</span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-white">
-              מה אפשר ליצור עם קוסם?
-            </h2>
-            <p className="text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed">
-              פלטפורמה מקיפה ליצירת תוכן ויזואלי באמצעות בינה מלאכותית מתקדמת
-              <br />
-              <span className="text-indigo-400 font-semibold">כל הפקודות בעברית!</span>
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-            {/* Example 1: Text to Image - Astronaut example */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
-                <ImageIcon className="h-7 w-7 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-3 text-white">יצירת תמונה מטקסט</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-slate-800/50 relative ring-2 ring-white/10 group-hover:ring-purple-400/50 transition-all">
-                <Image
-                  src="/examples/astronaut.png"
-                  alt="דוגמא: אסטרונאוט בחלל"
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, 400px"
-                />
-              </div>
-              <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-                תאר את התמונה שאתה רוצה בעברית – והבינה המלאכותית תיצור אותה בשבילך תוך שניות
-              </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-purple-500/30 shadow-inner">
-                <span className="text-purple-400 font-semibold">דוגמה:</span><br />
-                &quot;צור תמונה שלי כאסטרונאוט בחלל עם בניינים מאחוריי&quot;
-              </div>
-            </div>
-
-            {/* Example 2: Image to Video */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-cyan-400/60 hover:shadow-2xl hover:shadow-cyan-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
-                <Video className="h-7 w-7 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-3 text-white">יצירת סרטון מתמונה</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-slate-800/50 ring-2 ring-white/10 group-hover:ring-cyan-400/50 transition-all">
-                <video
-                  src="/examples/astronaut-video.mp4"
-                  poster="/examples/astronaut.png"
-                  className="w-full h-full object-cover"
-                  playsInline
-                  muted
-                  loop
-                  autoPlay
-                />
-              </div>
-              <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-                העלה תמונה ותאר את התנועה בעברית – קבל סרטון מקצועי עם אנימציה חיה
-              </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-cyan-500/30 shadow-inner">
-                <span className="text-cyan-400 font-semibold">דוגמה:</span><br />
-                &quot;תגרום לאסטרונאוט לרחף בחלל באיטיות&quot;
-              </div>
-            </div>
-
-            {/* Example 3: Character Creation */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
-                <Sparkles className="h-7 w-7 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-3 text-white">דמות AI אישית</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-pink-500/20 to-purple-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-purple-400/50 transition-all">
-                🎭
-              </div>
-              <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-                העלה תמונות שלך ואמן דמות AI – תוכל להשתמש בה בכל תמונה וסרטון שתיצור
-              </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-purple-500/30 shadow-inner">
-                <span className="text-purple-400 font-semibold">דוגמה:</span><br />
-                &quot;צור תמונה שלי כסופרמן מעל העיר&quot;
-              </div>
-            </div>
-
-            {/* Example 4: Reel to Carousel */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
-                <Film className="h-7 w-7 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-3 text-white">המרת רילז לתמונות מנצחות</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center text-6xl ring-2 ring-white/10 group-hover:ring-indigo-400/50 transition-all">
-                🎬
-              </div>
-              <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-                הדבק קישור לרילז מאינסטגרם – AI יבחר את הפריימים הטובים ביותר וייצור 10 תמונות
-              </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-purple-500/30 shadow-inner">
-                <span className="text-purple-400 font-semibold">דוגמה:</span><br />
-                &quot;המר את הרילז הזה לתמונות מנצחות&quot;
-              </div>
-            </div>
-
-            {/* Example 5: Carousel with branding */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-emerald-400/60 hover:shadow-2xl hover:shadow-emerald-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
-                <LayoutGrid className="h-7 w-7 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-3 text-white">קרוסלה עם מיתוג</h3>
-              <div className="mb-4 rounded-2xl overflow-hidden ring-2 ring-white/10 group-hover:ring-emerald-400/50 transition-all">
-                <ExampleCarousel />
-              </div>
-              <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-                צור קרוסלה עם הלוגו והצבעים של המותג שלך – אוטומטית ובעיצוב אחיד
-              </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-emerald-500/30 shadow-inner">
-                <span className="text-emerald-400 font-semibold">דוגמה:</span><br />
-                &quot;צור קרוסלה על ליווי משפטי עם הלוגו שלי&quot;
-              </div>
-            </div>
-
-            {/* Example 6: Cartoonize */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/20 hover:border-amber-400/60 hover:shadow-2xl hover:shadow-amber-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-14 w-14 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
-                <Wand2 className="h-7 w-7 text-white" />
-              </div>
-              <h3 className="text-xl font-bold mb-3 text-white">המרה לקריקטורה</h3>
-              <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-amber-500/20 to-orange-500/20 ring-2 ring-white/10 group-hover:ring-amber-400/50 transition-all relative">
-                <Image
-                  src="/caricature-example.png"
-                  alt="דוגמה לקריקטורה"
-                  fill
-                  className="object-cover"
-                />
-              </div>
-              <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-                העלה תמונה והפוך אותה לקריקטורה צבעונית בסגנון איור דיגיטלי מקצועי
-              </p>
-              <div className="bg-slate-800/70 rounded-xl p-4 text-sm text-slate-200 border border-amber-500/30 shadow-inner">
-                <span className="text-amber-400 font-semibold">טיפ:</span><br />
-                מומלץ תמונה עם פנים ברורים ותאורה טובה
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center mt-16">
-            <div className="inline-flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="text-lg px-10 h-16 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 shadow-2xl shadow-indigo-500/50" asChild>
-                <Link href="/signup">
-                  <Wand2 className="h-6 w-6 ml-2" />
-                  התחל ליצור בחינם
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" className="text-lg px-10 h-16 border-2 border-indigo-400/50 text-indigo-300 hover:bg-indigo-500/20 hover:border-indigo-400" asChild>
-                <Link href="#features">
-                  <Sparkles className="h-6 w-6 ml-2" />
-                  גלה את היכולות
-                </Link>
-              </Button>
+            <div className="flex items-center gap-2">
+              <Check className="text-emerald-500 h-5 w-5" />
+              <span>תמיכה מלאה בעברית</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-24 px-4 relative">
-        <div className="max-w-7xl mx-auto">
+      {/* Features Grid (Bento Box Style) */}
+      <section id="features" className="py-20 bg-slate-950/50">
+        <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-white">
-              למה לבחור בקוסם AI?
-            </h2>
-            <p className="text-xl text-slate-300 max-w-3xl mx-auto">
-              פלטפורמה מקיפה עם כלים מתקדמים ליצירת תוכן ויזואלי
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">ארגז הכלים שלך</h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              כל מה שיוצר תוכן צריך, בממשק אחד פשוט וחכם.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
-                <Film className="h-8 w-8 text-white" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-[300px]">
+            {/* Large Card: Text to Image */}
+            <div className="md:col-span-2 row-span-1 md:row-span-2 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-indigo-500/50 transition-all duration-500">
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-950/90 z-10" />
+              {/* Animated Abstract Background */}
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950 opacity-100 group-hover:scale-105 transition-transform duration-700" />
+
+              <div className="relative z-20 p-8 h-full flex flex-col justify-end">
+                <div className="h-12 w-12 rounded-xl bg-indigo-500/20 flex items-center justify-center mb-4 backdrop-blur-md">
+                  <Sparkles className="h-6 w-6 text-indigo-400" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2">מחולל תמונות מתקדם</h3>
+                <p className="text-slate-400 mb-6 max-w-lg">
+                  כתוב מה אתה מדמיין – וקבל תמונה פוטוריאליסטית תוך שניות.
+                  המנוע שלנו מבין ניואנסים בעברית ויודע ליצור הכל: מתמונות מוצר ועד אומנות פנטזיה.
+                </p>
+                <Button variant="secondary" className="w-fit" asChild>
+                  <Link href="/generate/image">נסה עכשיו</Link>
+                </Button>
               </div>
-              <h3 className="text-2xl font-bold mb-3 text-white">המרת רילז לקרוסלה</h3>
-              <p className="text-slate-300 leading-relaxed">
-                הדבק קישור לרילז מאינסטגרם וקבל 10 תמונות מושלמות מנצחות.
-                AI חכם בוחר את הפריימים הכי מוצלחים אוטומטית.
-              </p>
             </div>
 
-            {/* Feature 2 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-purple-400/60 hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
-                <ImageIcon className="h-8 w-8 text-white" />
+            {/* Card: Reel Converter */}
+            <div className="group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-pink-500/50 transition-all duration-300">
+              <div className="absolute top-0 right-0 p-8">
+                <div className="h-12 w-12 rounded-xl bg-pink-500/20 flex items-center justify-center backdrop-blur-md">
+                  <Film className="h-6 w-6 text-pink-400" />
+                </div>
               </div>
-              <h3 className="text-2xl font-bold mb-3 text-white">יצירת תמונות מתקדמת</h3>
-              <p className="text-slate-300 leading-relaxed">
-                תאר את התמונה שאתה רוצה בעברית והבינה המלאכותית תיצור אותה בשבילך.
-                תמיכה מלאה בהוראות בשפה העברית.
-              </p>
+              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
+                <h3 className="text-xl font-bold mb-2">רילז לקרוסלה</h3>
+                <p className="text-slate-400 text-sm">
+                  הדבק קישור לרילז, קבל אוטומטית 10 פריימים מנצחים לקרוסלה.
+                </p>
+              </div>
             </div>
 
-            {/* Feature 3 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-emerald-400/60 hover:shadow-2xl hover:shadow-emerald-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
-                <Sparkles className="h-8 w-8 text-white" />
+            {/* Card: Character Training */}
+            <div className="group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="absolute top-0 right-0 p-8">
+                <div className="h-12 w-12 rounded-xl bg-cyan-500/20 flex items-center justify-center backdrop-blur-md">
+                  <User className="h-6 w-6 text-cyan-400" />
+                </div>
               </div>
-              <h3 className="text-2xl font-bold mb-3 text-white">מיתוג אוטומטי</h3>
-              <p className="text-slate-300 leading-relaxed">
-                הוסף את הלוגו שלך לכל תמונה באופן אוטומטי.
-                בחר מיקום, גודל ושקיפות – הכל בקליק.
-              </p>
+              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
+                <h3 className="text-xl font-bold mb-2">אימון דמות (LoRA)</h3>
+                <p className="text-slate-400 text-sm">
+                  אמן את ה-AI להכיר את הפנים שלך. צור תוכן בכיכובך בכל סגנון.
+                </p>
+              </div>
             </div>
 
-            {/* Feature 4 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-cyan-400/60 hover:shadow-2xl hover:shadow-cyan-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
-                <Video className="h-8 w-8 text-white" />
+            {/* Card: Video Generation */}
+            <div className="md:col-span-1 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-amber-500/50 transition-all duration-300">
+              <div className="absolute top-0 right-0 p-8">
+                <div className="h-12 w-12 rounded-xl bg-amber-500/20 flex items-center justify-center backdrop-blur-md">
+                  <Video className="h-6 w-6 text-amber-400" />
+                </div>
               </div>
-              <h3 className="text-2xl font-bold mb-3 text-white">סרטונים מקצועיים</h3>
-              <p className="text-slate-300 leading-relaxed">
-                צור סרטונים מתמונות או מטקסט בלבד.
-                AI מתקדם מייצר סרטונים איכוסיים בשניות.
-              </p>
+              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
+                <h3 className="text-xl font-bold mb-2">טקסט לוידאו</h3>
+                <p className="text-slate-400 text-sm">
+                  הנפש תמונות או צור סרטונים מאפס. הקסם קורה בתנועה.
+                </p>
+              </div>
             </div>
 
-            {/* Feature 5 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-indigo-400/60 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
-                <Zap className="h-8 w-8 text-white" />
+            {/* Card: Carousels */}
+            <div className="md:col-span-2 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-emerald-500/50 transition-all duration-300 flex items-center justify-between p-8">
+              <div className="max-w-xs">
+                <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center mb-4 backdrop-blur-md">
+                  <Images className="h-6 w-6 text-emerald-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">קרוסלות ממותגות</h3>
+                <p className="text-slate-400 text-sm">
+                  יצירת קרוסלות מידע (Educational) או סיפוריות, כולל המיתוג והלוגו שלך באופן אוטומטי.
+                </p>
               </div>
-              <h3 className="text-2xl font-bold mb-3 text-white">דמות AI אישית</h3>
-              <p className="text-slate-300 leading-relaxed">
-                העלה תמונות שלך ואמן דמות AI.
-                השתמש בדמות בכל תמונה וסרטון עתידי.
-              </p>
-            </div>
-
-            {/* Feature 6 */}
-            <div className="group bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/20 hover:border-amber-400/60 hover:shadow-2xl hover:shadow-amber-500/20 transition-all duration-300 hover:-translate-y-1">
-              <div className="h-16 w-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform">
-                <Wand2 className="h-8 w-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold mb-3 text-white">אפקטים יצירתיים</h3>
-              <p className="text-slate-300 leading-relaxed">
-                המר תמונות לקריקטורות, שנה סגנונות, וערוך בקלות.
-                כלים מקצועיים בממשק פשוט.
-              </p>
+              <div className="hidden sm:block h-32 w-48 bg-emerald-500/10 rounded-lg border border-emerald-500/20 rotate-[-5deg] transform group-hover:rotate-0 transition-all" />
             </div>
           </div>
         </div>
       </section>
 
       {/* Pricing Section */}
-      <section className="py-20 px-4">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-4 text-white">תמחור פשוט</h2>
-          <p className="text-slate-400 text-center mb-12">
-            התחל בחינם, שדרג כשצריך
-          </p>
+      <section id="pricing" className="py-20 relative">
+        <div className="container mx-auto px-4 max-w-6xl">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">תמחור גמיש</h2>
+            <p className="text-slate-400">שלם רק על מה שאתה צריך, או בחר מנוי משתלם.</p>
+          </div>
 
           <div className="grid md:grid-cols-3 gap-8">
             {/* Free Plan */}
-            <div className="bg-white/5 backdrop-blur-sm p-8 rounded-2xl border border-white/10">
-              <h3 className="text-lg font-semibold mb-2 text-white">חינם</h3>
-              <div className="mb-4">
-                <span className="text-4xl font-bold text-white">₪0</span>
-                <span className="text-slate-400">/חודש</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>24 קרדיטים בחודש</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>המרת רילז</span>
-                </li>
-              </ul>
-              <Button variant="outline" className="w-full border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20" asChild>
-                <Link href="/signup">
-                  התחל בחינם
-                </Link>
-              </Button>
-            </div>
-
-            {/* Starter Plan */}
-            <div className="bg-indigo-500/20 backdrop-blur-sm p-8 rounded-2xl relative border-2 border-indigo-500/50">
-              <div className="absolute -top-3 right-4 bg-amber-400 text-amber-950 text-xs font-medium px-3 py-1 rounded-full">
-                הכי פופולרי
-              </div>
-              <h3 className="text-lg font-semibold mb-2 text-white">בסיסי</h3>
-              <div className="mb-4">
-                <span className="text-4xl font-bold text-white">₪139</span>
-                <span className="text-indigo-200/80">/חודש</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>300 קרדיטים בחודש</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת סרטונים</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>סוכן קופירייטר מקצועי</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>מחולל תמונות יצירתי ומתקדם</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת תוכן מותאם אישית</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>עריכת תמונות עם AI</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת סרטונים עם הדמות שלך</span>
-                </li>
-                <li className="flex items-center gap-2 text-indigo-100">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>דמות ראשונה בחינם</span>
-                </li>
-              </ul>
-              <Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white border-0" asChild>
-                <Link href="/signup?plan=basic">
-                  בחר בתוכנית
-                </Link>
-              </Button>
-            </div>
+            <Card className="bg-white/5 border-white/10 text-slate-100 backdrop-blur-sm hover:bg-white/10 transition-colors">
+              <CardContent className="p-8">
+                <h3 className="text-xl font-bold mb-2">מתחילים</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-4xl font-bold">₪0</span>
+                  <span className="text-slate-400">/ חודש</span>
+                </div>
+                <ul className="space-y-4 mb-8 text-sm text-slate-300">
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 10 תמונות חינם</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 2 המרות רילז</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> גישה לכל הכלים</li>
+                </ul>
+                <Button className="w-full bg-slate-800 hover:bg-slate-700" asChild>
+                  <Link href="/signup">התחל חינם</Link>
+                </Button>
+              </CardContent>
+            </Card>
 
             {/* Pro Plan */}
-            <div className="bg-white/5 backdrop-blur-sm p-8 rounded-2xl border border-white/10">
-              <h3 className="text-lg font-semibold mb-2 text-white">יוצר תוכן מקצועי</h3>
-              <div className="mb-4">
-                <span className="text-4xl font-bold text-white">₪229</span>
-                <span className="text-slate-400">/חודש</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>600 קרדיטים בחודש</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת תמונות, קרוסלות, קריקטורות</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת סרטונים</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>סוכן קופירייטר מקצועי</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>מחולל תמונות יצירתי ומתקדם</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת תוכן מותאם אישית</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>עריכת תמונות עם AI</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>יצירת סרטונים מקצועיים עם הדמות שלך</span>
-                </li>
-                <li className="flex items-center gap-2 text-slate-300">
-                  <Check className="h-5 w-5 text-emerald-400" />
-                  <span>2 דמויות ראשונות בחינם</span>
-                </li>
-              </ul>
-              <Button variant="outline" className="w-full border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/20" asChild>
-                <Link href="/signup?plan=pro">
-                  בחר בתוכנית
-                </Link>
-              </Button>
-            </div>
+            <Card className="bg-indigo-600/10 border-indigo-500/50 text-slate-100 relative overflow-hidden backdrop-blur-sm">
+              <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+              <div className="absolute -right-12 -top-12 w-24 h-24 bg-indigo-500/30 blur-2xl rounded-full" />
+
+              <CardContent className="p-8">
+                <div className="absolute top-4 left-4 bg-indigo-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                  פופולרי
+                </div>
+                <h3 className="text-xl font-bold mb-2 text-indigo-300">יוצר תוכן</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-4xl font-bold">₪139</span>
+                  <span className="text-slate-400">/ חודש</span>
+                </div>
+                <ul className="space-y-4 mb-8 text-sm text-slate-300">
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> 250 תמונות בחודש</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> 20 קרוסלות מותאמות</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> סוכן קופירייטר אישי</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-indigo-400" /> אימון דמות אישית חינם</li>
+                </ul>
+                <Button className="w-full bg-indigo-600 hover:bg-indigo-500" asChild>
+                  <Link href="/signup?plan=starter">שדרג עכשיו</Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Agency Plan */}
+            <Card className="bg-white/5 border-white/10 text-slate-100 backdrop-blur-sm hover:bg-white/10 transition-colors">
+              <CardContent className="p-8">
+                <h3 className="text-xl font-bold mb-2">מקצוען</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-4xl font-bold">₪229</span>
+                  <span className="text-slate-400">/ חודש</span>
+                </div>
+                <ul className="space-y-4 mb-8 text-sm text-slate-300">
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 500 תמונות בחודש</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 50 קרוסלות</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> יצירת סרטוני וידאו</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 2 דמויות אישיות</li>
+                </ul>
+                <Button className="w-full bg-slate-800 hover:bg-slate-700" asChild>
+                  <Link href="/signup?plan=pro">צור קשר</Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 py-12 px-4">
-        <div className="max-w-6xl mx-auto text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
+      <footer className="border-t border-white/10 py-12 bg-slate-950">
+        <div className="container mx-auto px-4 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4 opacity-50">
             <span className="text-2xl">🧙</span>
-            <span className="text-xl font-bold text-white">קוסם</span>
+            <span className="font-bold">קוסם AI</span>
           </div>
-          <p className="text-slate-400 mb-8">
-            פלטפורמה מבוססת AI ליצירת תוכן ויזואלי
-          </p>
-          <div className="flex items-center justify-center gap-6 text-slate-400">
+          <div className="flex justify-center gap-8 text-sm text-slate-500 mb-8">
             <Link href="/terms" className="hover:text-white transition-colors">תנאי שימוש</Link>
-            <Link href="/privacy" className="hover:text-white transition-colors">פרטיות</Link>
+            <Link href="/privacy" className="hover:text-white transition-colors">מדיניות פרטיות</Link>
             <Link href="/contact" className="hover:text-white transition-colors">צור קשר</Link>
           </div>
-          <p className="text-slate-500 text-sm mt-8">
-            © 2025 קוסם. כל הזכויות שמורות.
+          <p className="text-slate-600 text-xs">
+            © {new Date().getFullYear()} קוסם AI. כל הזכויות שמורות.
           </p>
         </div>
       </footer>

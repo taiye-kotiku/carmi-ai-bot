@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Bell, Menu } from "lucide-react";
+import { Bell, Menu, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Profile, Credits } from "@/types/database";
+import Link from "next/link";
+import type { Tables } from "@/types/database";
+
+type Profile = Tables<"profiles">;
 
 export function Header() {
     const [profile, setProfile] = useState<Profile | null>(null);
-    const [credits, setCredits] = useState<Credits | null>(null);
+    const [totalCredits, setTotalCredits] = useState<number>(0);
     const supabase = createClient();
 
     useEffect(() => {
@@ -23,12 +26,12 @@ export function Header() {
 
                 const { data: creditsData } = await supabase
                     .from("credits")
-                    .select("*")
+                    .select("credits")
                     .eq("user_id", user.id)
                     .single();
 
                 setProfile(profileData);
-                setCredits(creditsData);
+                setTotalCredits(creditsData?.credits ?? 0);
             }
         }
         loadUser();
@@ -43,16 +46,15 @@ export function Header() {
 
             {/* Credits summary (desktop) */}
             <div className="hidden md:flex items-center gap-4 text-sm">
-                {credits && (
-                    <>
-                        <span className="text-gray-500">
-                            תמונות: <strong className="text-gray-900">{credits.image_credits}</strong>
-                        </span>
-                        <span className="text-gray-500">
-                            רילז: <strong className="text-gray-900">{credits.reel_credits}</strong>
-                        </span>
-                    </>
-                )}
+                <Link
+                    href="/credits"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 hover:bg-purple-100 transition-colors"
+                >
+                    <Coins className="h-4 w-4 text-purple-600" />
+                    <span className="text-gray-600">
+                        קרדיטים: <strong className="text-purple-700">{totalCredits}</strong>
+                    </span>
+                </Link>
             </div>
 
             {/* User section */}

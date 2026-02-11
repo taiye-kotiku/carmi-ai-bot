@@ -1,5 +1,3 @@
-// src/app/api/generate/video-clips/route.ts
-
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
@@ -8,6 +6,8 @@ import {
     createProjectFromUrl,
     waitForProject,
 } from "@/lib/services/vizard";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(req: Request) {
     try {
@@ -36,7 +36,6 @@ export async function POST(req: Request) {
         } = {};
 
         if (contentType.includes("multipart/form-data")) {
-            // File upload
             const formData = await req.formData();
             const file = formData.get("video") as File;
 
@@ -51,7 +50,6 @@ export async function POST(req: Request) {
             videoFile = Buffer.from(arrayBuffer);
             fileName = file.name;
 
-            // Parse preferLength from form data
             let preferLength: number[] = [0];
             const preferLengthRaw = formData.get("preferLength") as string;
             if (preferLengthRaw) {
@@ -75,7 +73,6 @@ export async function POST(req: Request) {
                     parseInt(formData.get("maxClips") as string) || 10,
             };
         } else {
-            // JSON with URL
             const body = await req.json();
             videoUrl = body.videoUrl;
             options = {
@@ -95,18 +92,14 @@ export async function POST(req: Request) {
             }
         }
 
-        // Check credits (video slicing costs 25 credits)
-        const clipCost = 25;
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("reel_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!credits || credits.reel_credits < clipCost) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "video_clips");
+        } catch (err) {
             return NextResponse.json(
                 {
-                    error: `נדרשים ${clipCost} קרדיטים לחיתוך סרטון`,
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
                 },
                 { status: 402 }
             );
@@ -124,22 +117,19 @@ export async function POST(req: Request) {
 
         // Process in background
         if (videoFile && fileName) {
-            // File upload: upload to storage first, then use URL
             processVideoClipsFromFile(
                 jobId,
                 user.id,
                 videoFile,
                 fileName,
-                options,
-                clipCost
+                options
             );
         } else if (videoUrl) {
             processVideoClipsFromUrl(
                 jobId,
                 user.id,
                 videoUrl,
-                options,
-                clipCost
+                options
             );
         }
 
@@ -157,8 +147,7 @@ async function processVideoClipsFromUrl(
     jobId: string,
     userId: string,
     videoUrl: string,
-    options: any,
-    clipCost: number
+    options: any
 ) {
     try {
         await supabaseAdmin
@@ -166,7 +155,6 @@ async function processVideoClipsFromUrl(
             .update({ status: "processing", progress: 5 })
             .eq("id", jobId);
 
-        // Create Vizard project — returns { projectId, shareLink }
         const result = await createProjectFromUrl(videoUrl, options);
 
         await supabaseAdmin
@@ -174,7 +162,6 @@ async function processVideoClipsFromUrl(
             .update({ progress: 10 })
             .eq("id", jobId);
 
-        // Wait for processing with progress updates
         const clips = await waitForProject(
             result.projectId,
             async (progress) => {
@@ -185,17 +172,24 @@ async function processVideoClipsFromUrl(
             }
         );
 
-        // Save clips to storage and database
         await saveClipsToStorage(
             jobId,
             userId,
             videoUrl,
-            clips,
-            clipCost
+            clips
         );
     } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
+
+        // Refund credits on failure
+        await addCredits(
+            userId,
+            CREDIT_COSTS.video_clips,
+            "החזר - חיתוך וידאו נכשל",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })
@@ -208,8 +202,7 @@ async function processVideoClipsFromFile(
     userId: string,
     videoBuffer: Buffer,
     fileName: string,
-    options: any,
-    clipCost: number
+    options: any
 ) {
     try {
         await supabaseAdmin
@@ -217,7 +210,6 @@ async function processVideoClipsFromFile(
             .update({ status: "processing", progress: 5 })
             .eq("id", jobId);
 
-        // Upload original video to our storage first
         const ext = fileName.split(".").pop() || "mp4";
         const originalPath = `${userId}/${jobId}/original_${fileName}`;
         await supabaseAdmin.storage
@@ -238,10 +230,8 @@ async function processVideoClipsFromFile(
             .update({ progress: 10 })
             .eq("id", jobId);
 
-        // Create Vizard project using the public URL of our uploaded file
         const result = await createProjectFromUrl(publicVideoUrl, {
             ...options,
-            // Force videoType detection to use direct URL (ext required)
         });
 
         await supabaseAdmin
@@ -249,7 +239,6 @@ async function processVideoClipsFromFile(
             .update({ progress: 15 })
             .eq("id", jobId);
 
-        // Wait for processing
         const clips = await waitForProject(
             result.projectId,
             async (progress) => {
@@ -265,17 +254,24 @@ async function processVideoClipsFromFile(
             }
         );
 
-        // Save clips
         await saveClipsToStorage(
             jobId,
             userId,
             publicVideoUrl,
-            clips,
-            clipCost
+            clips
         );
     } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
+
+        // Refund credits on failure
+        await addCredits(
+            userId,
+            CREDIT_COSTS.video_clips,
+            "החזר - חיתוך וידאו נכשל",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })
@@ -287,8 +283,7 @@ async function saveClipsToStorage(
     jobId: string,
     userId: string,
     sourceUrl: string,
-    clips: any[],
-    clipCost: number
+    clips: any[]
 ) {
     const uploadedClips: any[] = [];
 
@@ -296,7 +291,6 @@ async function saveClipsToStorage(
         const clip = clips[i];
 
         try {
-            // Vizard returns videoUrl directly on the clip object
             const clipVideoUrl = clip.videoUrl || clip.video_url;
 
             if (!clipVideoUrl) {
@@ -306,7 +300,6 @@ async function saveClipsToStorage(
                 continue;
             }
 
-            // Download clip from Vizard CDN
             const clipResponse = await fetch(clipVideoUrl);
             if (!clipResponse.ok) {
                 console.error(
@@ -318,7 +311,6 @@ async function saveClipsToStorage(
                 await clipResponse.arrayBuffer()
             );
 
-            // Upload to our storage
             const clipPath = `${userId}/${jobId}/clip_${i + 1}.mp4`;
             await supabaseAdmin.storage
                 .from("content")
@@ -331,7 +323,6 @@ async function saveClipsToStorage(
                 .from("content")
                 .getPublicUrl(clipPath);
 
-            // Use video URL as thumbnail fallback
             let thumbnailUrl = clipUrlData.publicUrl;
 
             uploadedClips.push({
@@ -347,7 +338,6 @@ async function saveClipsToStorage(
                 editorUrl: clip.clipEditorUrl,
             });
 
-            // Update progress
             const progress =
                 80 + Math.round(((i + 1) / clips.length) * 15);
             await supabaseAdmin
@@ -360,6 +350,14 @@ async function saveClipsToStorage(
     }
 
     if (uploadedClips.length === 0) {
+        // Refund credits — no clips saved
+        await addCredits(
+            userId,
+            CREDIT_COSTS.video_clips,
+            "החזר - לא נשמרו קליפים",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({
@@ -383,30 +381,6 @@ async function saveClipsToStorage(
         status: "completed",
         job_id: jobId,
         completed_at: new Date().toISOString(),
-    });
-
-    // Deduct credits
-    const { data: currentCredits } = await supabaseAdmin
-        .from("credits")
-        .select("reel_credits")
-        .eq("user_id", userId)
-        .single();
-
-    const newBalance =
-        (currentCredits?.reel_credits || clipCost) - clipCost;
-
-    await supabaseAdmin
-        .from("credits")
-        .update({ reel_credits: newBalance })
-        .eq("user_id", userId);
-
-    await supabaseAdmin.from("credit_transactions").insert({
-        user_id: userId,
-        credit_type: "reel",
-        amount: -clipCost,
-        balance_after: newBalance,
-        reason: "video_clips",
-        related_id: generationId,
     });
 
     // Complete job

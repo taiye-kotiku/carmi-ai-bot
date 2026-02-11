@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(req: Request) {
     try {
@@ -23,16 +25,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!credits || credits.image_credits < 1) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "image_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: "אין מספיק קרדיטים ליצירת תמונה" },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -152,30 +153,6 @@ async function processImageGeneration(
             completed_at: new Date().toISOString(),
         });
 
-        // Deduct credit
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const newBalance = (currentCredits?.image_credits || 1) - 1;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ image_credits: newBalance })
-            .eq("user_id", userId);
-
-        // Record transaction
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: userId,
-            credit_type: "image",
-            amount: -1,
-            balance_after: newBalance,
-            reason: "generation",
-            related_id: generationId,
-        });
-
         // Complete job
         await supabaseAdmin
             .from("jobs")
@@ -187,6 +164,15 @@ async function processImageGeneration(
             .eq("id", jobId);
     } catch (error: any) {
         console.error("Image processing error:", error);
+
+        // Refund credits on failure
+        await addCredits(
+            userId,
+            CREDIT_COSTS.image_generation,
+            "החזר - יצירת תמונה נכשלה",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({

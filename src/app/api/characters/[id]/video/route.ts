@@ -3,6 +3,8 @@ export const maxDuration = 120;
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(
     request: NextRequest,
@@ -39,6 +41,19 @@ export async function POST(
             return NextResponse.json({ error: "הדמות עוד לא מאומנת" }, { status: 400 });
         }
 
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "video_generation");
+        } catch (err) {
+            return NextResponse.json(
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
+                { status: 402 }
+            );
+        }
+
         const triggerWord = character.trigger_word;
         const fullPrompt = triggerWord
             ? `${triggerWord} ${prompt}`
@@ -52,77 +67,95 @@ export async function POST(
 
         console.log("=== Step 1: Generating Character Image ===");
 
-        // Step 1: Generate image with LoRA
-        const imageRes = await fetch("https://fal.run/fal-ai/flux-lora", {
-            method: "POST",
-            headers: {
-                "Authorization": `Key ${process.env.FAL_KEY}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                prompt: fullPrompt,
-                loras: [{ path: character.lora_url, scale: 1 }],
-                image_size: sizeMap[aspectRatio] || "landscape_16_9",
-                num_images: 1,
-                guidance_scale: 3.5,
-                num_inference_steps: 28,
-            }),
-        });
-
-        const imageData = await imageRes.json();
-
-        if (!imageData.images?.[0]?.url) {
-            throw new Error("Failed to generate character image");
-        }
-
-        const imageUrl = imageData.images[0].url;
-        console.log("Image generated:", imageUrl);
-
-        console.log("=== Step 2: Generating Video from Image ===");
-
-        // Step 2: Image to video with Kling
-        const videoRes = await fetch("https://queue.fal.run/fal-ai/kling-video/v1.5/pro/image-to-video", {
-            method: "POST",
-            headers: {
-                "Authorization": `Key ${process.env.FAL_KEY}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                prompt: prompt,
-                image_url: imageUrl,
-                duration: "5",
-                aspect_ratio: aspectRatio,
-            }),
-        });
-
-        const videoData = await videoRes.json();
-        console.log("Video job:", videoData);
-
-        if (!videoData.request_id) {
-            throw new Error("Failed to start video generation");
-        }
-
-        // Save to generations
-        const generationId = crypto.randomUUID();
-        await supabaseAdmin
-            .from("generations")
-            .insert({
-                id: generationId,
-                user_id: user.id,
-                type: "video",
-                feature: "character_video",
-                prompt: fullPrompt,
-                source_url: imageUrl,
-                status: "processing",
-                job_id: videoData.request_id,
+        try {
+            // Step 1: Generate image with LoRA
+            const imageRes = await fetch("https://fal.run/fal-ai/flux-lora", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Key ${process.env.FAL_KEY}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    prompt: fullPrompt,
+                    loras: [{ path: character.lora_url, scale: 1 }],
+                    image_size: sizeMap[aspectRatio] || "landscape_16_9",
+                    num_images: 1,
+                    guidance_scale: 3.5,
+                    num_inference_steps: 28,
+                }),
             });
 
-        return NextResponse.json({
-            success: true,
-            generationId,
-            imageUrl,
-            status: "processing",
-        });
+            const imageData = await imageRes.json();
+
+            if (!imageData.images?.[0]?.url) {
+                throw new Error("Failed to generate character image");
+            }
+
+            const imageUrl = imageData.images[0].url;
+            console.log("Image generated:", imageUrl);
+
+            console.log("=== Step 2: Generating Video from Image ===");
+
+            // Step 2: Image to video with Kling
+            const videoRes = await fetch("https://queue.fal.run/fal-ai/kling-video/v1.5/pro/image-to-video", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Key ${process.env.FAL_KEY}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    image_url: imageUrl,
+                    duration: "5",
+                    aspect_ratio: aspectRatio,
+                }),
+            });
+
+            const videoData = await videoRes.json();
+            console.log("Video job:", videoData);
+
+            if (!videoData.request_id) {
+                throw new Error("Failed to start video generation");
+            }
+
+            // Save to generations
+            const generationId = crypto.randomUUID();
+            await supabaseAdmin
+                .from("generations")
+                .insert({
+                    id: generationId,
+                    user_id: user.id,
+                    type: "video",
+                    feature: "character_video",
+                    prompt: fullPrompt,
+                    source_url: imageUrl,
+                    status: "processing",
+                    job_id: videoData.request_id,
+                });
+
+            return NextResponse.json({
+                success: true,
+                generationId,
+                imageUrl,
+                status: "processing",
+            });
+
+        } catch (genError: any) {
+            console.error("Video generation error:", genError);
+
+            // Refund credits on failure
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.video_generation,
+                "החזר - יצירת וידאו דמות נכשלה",
+                characterId
+            );
+
+            return NextResponse.json(
+                { error: genError.message || "Video generation failed" },
+                { status: 500 }
+            );
+        }
 
     } catch (error: any) {
         console.error("Video generation error:", error);

@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -93,11 +93,7 @@ export default async function DashboardPage() {
                     </Link>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        <CreditSlider
-                            credits={credits}
-                        />
-                    </div>
+                    <CreditDisplay credits={credits} />
                 </CardContent>
             </Card>
 
@@ -178,50 +174,45 @@ export default async function DashboardPage() {
     );
 }
 
-function CreditSlider({ credits }: { credits: any }) {
-    // Credit costs
-    const creditCosts = {
-        carousel: 3,
-        image: 2,
-        video: 20,
-        reel: 4,
-        videoSlicing: 20,
-    };
+function CreditDisplay({ credits }: { credits: any }) {
+    const totalCredits = credits?.credits || 0;
 
-    // Current credit values
-    const carouselCredits = credits?.carousel_credits || 0;
-    const imageCredits = credits?.image_credits || 0;
-    const videoCredits = credits?.video_credits || 0;
-    const reelCredits = credits?.reel_credits || 0;
-    const videoSlicingCredits = credits?.reel_credits || 0; // Using reel_credits for video slicing
-
-    // Calculate total available credits (weighted by cost)
-    const totalWeightedCredits = 
-        Math.floor(carouselCredits / creditCosts.carousel) +
-        Math.floor(imageCredits / creditCosts.image) +
-        Math.floor(videoCredits / creditCosts.video) +
-        Math.floor(reelCredits / creditCosts.reel) +
-        Math.floor(videoSlicingCredits / creditCosts.videoSlicing);
-
-    // Maximum possible credits (for display purposes)
-    const maxDisplayCredits = 100; // Adjust based on your needs
-
-    const percentage = Math.min((totalWeightedCredits / maxDisplayCredits) * 100, 100);
+    // Show what the user can do with their credits
+    const capabilities = [
+        { label: "תמונות", cost: CREDIT_COSTS.image_generation, icon: "🖼️" },
+        { label: "קרוסלות", cost: CREDIT_COSTS.carousel_generation, icon: "📸" },
+        { label: "סרטונים", cost: CREDIT_COSTS.video_generation, icon: "🎬" },
+        { label: "אימון דמות", cost: CREDIT_COSTS.character_training, icon: "🧑‍🎨" },
+    ];
 
     return (
         <div className="space-y-4">
-            {/* Single Progress Bar */}
+            {/* Main credit balance */}
             <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 font-medium">סה"כ קרדיטים זמינים</span>
-                    <span className="font-bold text-lg text-gray-900">{totalWeightedCredits}</span>
+                    <span className="text-gray-600 font-medium">קרדיטים זמינים</span>
+                    <span className="font-bold text-2xl text-gray-900">{totalCredits}</span>
                 </div>
                 <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
                     <div
                         className="h-full bg-gradient-to-r from-purple-500 via-blue-500 to-green-500 transition-all"
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${Math.min((totalCredits / 500) * 100, 100)}%` }}
                     />
                 </div>
+            </div>
+
+            {/* What you can create */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                {capabilities.map((cap) => {
+                    const possible = Math.floor(totalCredits / cap.cost);
+                    return (
+                        <div key={cap.label} className="text-center p-2 rounded-lg bg-gray-50">
+                            <span className="text-lg">{cap.icon}</span>
+                            <div className="text-sm font-semibold text-gray-900">{possible}</div>
+                            <div className="text-xs text-gray-500">{cap.label}</div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

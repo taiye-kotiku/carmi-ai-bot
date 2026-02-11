@@ -1,4 +1,3 @@
-// src/app/api/characters/generate-image/route.ts
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
@@ -6,7 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { generateWithLora } from "@/lib/services/modal";
-import { enhancePrompt } from "@/lib/services/prompt-enhancer"; // <--- IMPORT THIS
+import { enhancePrompt } from "@/lib/services/prompt-enhancer";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(request: NextRequest) {
     try {
@@ -34,8 +35,20 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // --- STEP 1: Translate/Enhance Prompt ---
-        // This runs in parallel with fetching character data to save time
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "image_generation");
+        } catch (err) {
+            return NextResponse.json(
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
+                { status: 402 }
+            );
+        }
+
+        // Enhance prompt and fetch character in parallel
         const [enhancedPrompt, charResult] = await Promise.all([
             enhancePrompt(prompt),
             supabaseAdmin
@@ -49,36 +62,21 @@ export async function POST(request: NextRequest) {
         const { data: character, error: charError } = charResult;
 
         if (charError || !character) {
+            // Refund — character not found
+            await addCredits(user.id, CREDIT_COSTS.image_generation, "החזר - דמות לא נמצאה");
             return NextResponse.json({ error: "Character not found" }, { status: 404 });
         }
 
         if (character.status !== "ready" || !character.lora_url) {
+            // Refund — character not ready
+            await addCredits(user.id, CREDIT_COSTS.image_generation, "החזר - דמות לא מוכנה");
             return NextResponse.json(
                 { error: `Character not ready. Status: ${character.status}` },
                 { status: 400 }
             );
         }
 
-        // --- Check Credits ---
-        const GENERATION_COST = 1;
-        const { data: credits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!credits || credits.image_credits < GENERATION_COST) {
-            return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
-        }
-
-        // Deduct credits
-        await supabaseAdmin
-            .from("credits")
-            .update({ image_credits: credits.image_credits - GENERATION_COST })
-            .eq("user_id", user.id);
-
-        // --- Prepare Generation ---
-        // Calculate dimensions
+        // Prepare Generation
         let width = 1024, height = 1024;
         if (aspectRatio === "9:16") { width = 768; height = 1344; }
         else if (aspectRatio === "16:9") { width = 1344; height = 768; }
@@ -86,8 +84,6 @@ export async function POST(request: NextRequest) {
 
         const triggerWord = character.trigger_word || "ohwx";
 
-        // Combine Trigger + Enhanced Prompt
-        // Note: prompt-enhancer is told NOT to add the trigger word
         let finalPrompt = enhancedPrompt;
         if (!finalPrompt.toLowerCase().includes(triggerWord.toLowerCase())) {
             finalPrompt = `${triggerWord} person, ${finalPrompt}`;
@@ -122,8 +118,7 @@ export async function POST(request: NextRequest) {
                 user_id: user.id,
                 type: "image",
                 feature: "character_image",
-                prompt: finalPrompt, // Save the English prompt for debugging
-                // original_prompt: prompt, // REMOVED: Column does not exist in database/types
+                prompt: finalPrompt,
                 result_urls: [imageUrl],
                 status: "completed",
             });
@@ -133,17 +128,18 @@ export async function POST(request: NextRequest) {
                 imageUrl,
                 seed: result.seed,
                 generationId,
-                translatedPrompt: enhancedPrompt // Return this so UI can show it if needed
+                translatedPrompt: enhancedPrompt
             });
 
         } catch (genError: any) {
             console.error("[Generate] Error:", genError);
 
             // Refund credits on failure
-            await supabaseAdmin
-                .from("credits")
-                .update({ image_credits: credits.image_credits })
-                .eq("user_id", user.id);
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.image_generation,
+                "החזר - יצירת תמונת דמות נכשלה"
+            );
 
             return NextResponse.json(
                 { error: genError.message || "Generation failed" },

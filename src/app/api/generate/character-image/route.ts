@@ -7,6 +7,8 @@ import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { fal } from "@fal-ai/client";
 import { enhancePrompt } from "@/lib/services/gemini";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -41,16 +43,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!credits || credits.image_credits < 2) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "image_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: "אין מספיק קרדיטים (נדרשים 2)" },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -64,6 +65,8 @@ export async function POST(req: Request) {
             .single();
 
         if (charError || !character) {
+            // Refund — character not found
+            await addCredits(user.id, CREDIT_COSTS.image_generation, "החזר - דמות לא נמצאה");
             return NextResponse.json(
                 { error: "דמות לא נמצאה" },
                 { status: 404 }
@@ -71,6 +74,8 @@ export async function POST(req: Request) {
         }
 
         if (!character.lora_url) {
+            // Refund — character not trained
+            await addCredits(user.id, CREDIT_COSTS.image_generation, "החזר - דמות לא מאומנת");
             return NextResponse.json(
                 { error: "הדמות עדיין לא מאומנת" },
                 { status: 400 }
@@ -108,77 +113,77 @@ export async function POST(req: Request) {
             "3:4": "portrait_4_3",
         };
 
-        // Generate with FLUX LoRA - SYNCHRONOUS (waits for result)
-        const result = await fal.subscribe("fal-ai/flux-lora", {
-            input: {
+        try {
+            // Generate with FLUX LoRA - SYNCHRONOUS
+            const result = await fal.subscribe("fal-ai/flux-lora", {
+                input: {
+                    prompt: fullPrompt,
+                    loras: [
+                        {
+                            path: character.lora_url,
+                            scale: 0.9,
+                        },
+                    ],
+                    image_size: imageSizeMap[aspect_ratio] || "square",
+                    num_images: Math.min(num_images, 4),
+                    output_format: "jpeg",
+                    guidance_scale: 3.5,
+                    num_inference_steps: 28,
+                    enable_safety_checker: false,
+                },
+                logs: true,
+                onQueueUpdate: (update) => {
+                    if (update.status === "IN_PROGRESS") {
+                        console.log("FAL:", update.logs?.map(l => l.message).join(", "));
+                    }
+                },
+            });
+
+            const images = result.data.images?.map((img: any) => img.url) || [];
+
+            if (images.length === 0) {
+                throw new Error("לא נוצרו תמונות");
+            }
+
+            console.log("Generated", images.length, "images");
+
+            // Save generation record
+            const generationId = nanoid();
+            await supabaseAdmin.from("generations").insert({
+                id: generationId,
+                user_id: user.id,
+                type: "image",
+                feature: "character_image",
                 prompt: fullPrompt,
-                loras: [
-                    {
-                        path: character.lora_url,
-                        scale: 0.9,
-                    },
-                ],
-                image_size: imageSizeMap[aspect_ratio] || "square",
-                num_images: Math.min(num_images, 4),
-                output_format: "jpeg",
-                guidance_scale: 3.5,
-                num_inference_steps: 28,
-                enable_safety_checker: false,
-            },
-            logs: true,
-            onQueueUpdate: (update) => {
-                if (update.status === "IN_PROGRESS") {
-                    console.log("FAL:", update.logs?.map(l => l.message).join(", "));
-                }
-            },
-        });
+                result_urls: images,
+                status: "completed",
+                completed_at: new Date().toISOString(),
+            });
 
-        const images = result.data.images?.map((img: any) => img.url) || [];
+            console.log("=== SUCCESS ===");
 
-        if (images.length === 0) {
-            throw new Error("לא נוצרו תמונות");
+            return NextResponse.json({
+                success: true,
+                images,
+                seed: result.data.seed,
+                generationId,
+            });
+
+        } catch (genError: any) {
+            console.error("Character image generation error:", genError);
+
+            // Refund credits on failure
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.image_generation,
+                "החזר - יצירת תמונת דמות נכשלה"
+            );
+
+            return NextResponse.json(
+                { error: genError.message || "שגיאה ביצירת התמונה" },
+                { status: 500 }
+            );
         }
-
-        console.log("Generated", images.length, "images");
-
-        // Save generation record
-        const generationId = nanoid();
-        await supabaseAdmin.from("generations").insert({
-            id: generationId,
-            user_id: user.id,
-            type: "image",
-            feature: "character_image",
-            prompt: fullPrompt,
-            result_urls: images,
-            status: "completed",
-            completed_at: new Date().toISOString(),
-        });
-
-        // Deduct 2 credits
-        const newBalance = (credits.image_credits || 2) - 2;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ image_credits: newBalance })
-            .eq("user_id", user.id);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: user.id,
-            credit_type: "image",
-            amount: -2,
-            balance_after: newBalance,
-            reason: "character_image",
-            related_id: generationId,
-        });
-
-        console.log("=== SUCCESS ===");
-
-        return NextResponse.json({
-            success: true,
-            images,
-            seed: result.data.seed,
-            generationId,
-        });
 
     } catch (error: any) {
         console.error("Character image error:", error);

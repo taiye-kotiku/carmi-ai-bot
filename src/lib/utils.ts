@@ -5,7 +5,8 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: Date | string): string {
+export function formatDate(date: Date | string | null | undefined): string {
+    if (!date) return "";
     return new Intl.DateTimeFormat("he-IL", {
         day: "numeric",
         month: "long",
@@ -13,7 +14,8 @@ export function formatDate(date: Date | string): string {
     }).format(new Date(date));
 }
 
-export function formatRelativeTime(date: Date | string): string {
+export function formatRelativeTime(date: Date | string | null | undefined): string {
+    if (!date) return "";
     const now = new Date();
     const then = new Date(date);
     const diffInSeconds = Math.floor((now.getTime() - then.getTime()) / 1000);

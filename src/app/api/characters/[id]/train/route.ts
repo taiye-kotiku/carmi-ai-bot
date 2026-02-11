@@ -1,9 +1,10 @@
-// src/app/api/characters/[id]/train/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fal } from "@fal-ai/client";
 import JSZip from "jszip";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -52,26 +53,18 @@ export async function POST(
             );
         }
 
-        // Check credits
-        const TRAINING_COST = 50;
-        const { data: credits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!credits || credits.image_credits < TRAINING_COST) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "character_training");
+        } catch (err) {
             return NextResponse.json(
-                { error: `Need ${TRAINING_COST} credits. You have ${credits?.image_credits || 0}` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
-
-        // Deduct credits
-        await supabaseAdmin
-            .from("credits")
-            .update({ image_credits: credits.image_credits - TRAINING_COST })
-            .eq("user_id", user.id);
 
         // Update status
         await supabaseAdmin
@@ -122,7 +115,6 @@ export async function POST(
                 });
 
             if (uploadError) {
-                // Try creating bucket
                 await supabaseAdmin.storage.createBucket("training", { public: true });
                 await supabaseAdmin.storage
                     .from("training")
@@ -170,11 +162,13 @@ export async function POST(
         } catch (falError: any) {
             console.error("[Train] FAL error:", falError);
 
-            // Refund credits
-            await supabaseAdmin
-                .from("credits")
-                .update({ image_credits: credits.image_credits })
-                .eq("user_id", user.id);
+            // Refund credits on failure
+            await addCredits(
+                user.id,
+                CREDIT_COSTS.character_training,
+                "החזר - אימון דמות נכשל",
+                characterId
+            );
 
             await supabaseAdmin
                 .from("characters")

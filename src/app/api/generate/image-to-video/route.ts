@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { imageToVideo, enhancePrompt } from "@/lib/services/gemini";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(req: Request) {
     try {
@@ -24,17 +26,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("video_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const videoCost = 25; // Fixed cost: 25 credits per video
-        if (!credits || credits.video_credits < videoCost) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "video_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: `נדרשים ${videoCost} קרדיטים ליצירת סרטון` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         });
 
         // Process in background
-        processImageToVideo(jobId, user.id, base64Image, prompt || "", videoCost);
+        processImageToVideo(jobId, user.id, base64Image, prompt || "");
 
         return NextResponse.json({ jobId });
     } catch (error) {
@@ -67,8 +67,7 @@ async function processImageToVideo(
     jobId: string,
     userId: string,
     imageBase64: string,
-    prompt: string,
-    videoCost: number
+    prompt: string
 ) {
     try {
         await supabaseAdmin
@@ -144,29 +143,7 @@ async function processImageToVideo(
             completed_at: new Date().toISOString(),
         });
 
-        // Deduct credits
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("video_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const newBalance = (currentCredits?.video_credits || videoCost) - videoCost;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ video_credits: newBalance })
-            .eq("user_id", userId);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: userId,
-            credit_type: "video",
-            amount: -videoCost,
-            balance_after: newBalance,
-            reason: "image_to_video",
-            related_id: generationId,
-        });
-
+        // Complete job
         await supabaseAdmin
             .from("jobs")
             .update({
@@ -181,6 +158,15 @@ async function processImageToVideo(
 
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+        // Refund credits on failure
+        await addCredits(
+            userId,
+            CREDIT_COSTS.video_generation,
+            "החזר - יצירת וידאו מתמונה נכשלה",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })

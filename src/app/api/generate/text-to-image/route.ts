@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { generateImage, enhancePrompt } from "@/lib/services/gemini";
 import sharp from "sharp";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(req: Request) {
     try {
@@ -23,17 +25,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const requiredCredits = 3; // Fixed cost: 3 credits per image
-        if (!credits || credits.image_credits < requiredCredits) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "image_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: `אין מספיק קרדיטים ליצירת תמונה (נדרשים ${requiredCredits})` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -70,18 +70,17 @@ async function processTextToImage(
             .update({ status: "processing", progress: 10 })
             .eq("id", jobId);
 
-        // Enhance prompt if requested (skip if we want faster generation)
+        // Enhance prompt if requested
         let finalPrompt = prompt;
         if (enhanceWithAI) {
             await supabaseAdmin
                 .from("jobs")
                 .update({ progress: 20 })
                 .eq("id", jobId);
-            
-            // Use Promise.race with timeout to prevent hanging
+
             finalPrompt = await Promise.race([
                 enhancePrompt(prompt, "image"),
-                new Promise<string>((resolve) => setTimeout(() => resolve(prompt), 5000)) // 5s timeout
+                new Promise<string>((resolve) => setTimeout(() => resolve(prompt), 5000))
             ]);
         }
 
@@ -93,7 +92,7 @@ async function processTextToImage(
         // Generate image with timeout protection
         const images = await Promise.race([
             generateImage(finalPrompt),
-            new Promise<never>((_, reject) => 
+            new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error("Image generation timeout after 60 seconds")), 60000)
             )
         ]);
@@ -114,15 +113,13 @@ async function processTextToImage(
             const base64Data = images[i].replace(/^data:image\/\w+;base64,/, "");
             const originalBuffer = Buffer.from(base64Data, "base64");
 
-            // Check if resizing is needed (only resize if not already 1080x1080)
             let resizedBuffer: Buffer = originalBuffer;
             try {
                 const metadata = await sharp(originalBuffer).metadata();
                 if (metadata.width !== 1080 || metadata.height !== 1080) {
-                    // Resize to exactly 1080x1080px
                     const resized = await sharp(originalBuffer)
                         .resize(1080, 1080, {
-                            fit: "cover", // Cover the entire area, may crop if needed
+                            fit: "cover",
                             position: "center",
                         })
                         .png({ quality: 100 })
@@ -131,7 +128,6 @@ async function processTextToImage(
                 }
             } catch (resizeError) {
                 console.warn("Resize failed, using original:", resizeError);
-                // Use original if resize fails
                 resizedBuffer = originalBuffer;
             }
 
@@ -172,30 +168,6 @@ async function processTextToImage(
             completed_at: new Date().toISOString(),
         });
 
-        // Deduct credit
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("image_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const requiredCredits = 3;
-        const newBalance = (currentCredits?.image_credits || requiredCredits) - requiredCredits;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ image_credits: newBalance })
-            .eq("user_id", userId);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: userId,
-            credit_type: "image",
-            amount: -requiredCredits,
-            balance_after: newBalance,
-            reason: "text_to_image",
-            related_id: generationId,
-        });
-
         // Complete job
         await supabaseAdmin
             .from("jobs")
@@ -209,6 +181,15 @@ async function processTextToImage(
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("Processing error:", error);
+
+        // Refund credits on failure
+        await addCredits(
+            userId,
+            CREDIT_COSTS.image_generation,
+            "החזר - יצירת תמונה נכשלה",
+            jobId
+        );
+
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })

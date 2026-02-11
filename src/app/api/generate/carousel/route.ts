@@ -1,7 +1,5 @@
-
-// src/app/api/generate/carousel/route.ts
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic"; // recommended, since you hit DB + auth
+export const dynamic = "force-dynamic";
 
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -10,7 +8,8 @@ import { nanoid } from "nanoid";
 import { generateCarousel } from "@/lib/services/carousel";
 import { generateCarouselContent } from "@/lib/services/carousel-content";
 import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
-
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(req: Request) {
     try {
@@ -50,9 +49,7 @@ export async function POST(req: Request) {
         }
 
         // Allow "custom" template if custom_background_base64 is provided
-        // Also allow any template_id that exists as a file (auto-registered templates)
         if (!template_id || (template_id !== "custom" && !CAROUSEL_TEMPLATES[template_id])) {
-            // Check if template file exists (for auto-registered templates)
             if (template_id !== "custom") {
                 const fs = require("fs");
                 const path = require("path");
@@ -74,7 +71,7 @@ export async function POST(req: Request) {
                 }
             }
         }
-        
+
         if (template_id === "custom" && !custom_background_base64) {
             return NextResponse.json(
                 { error: "נא להעלות תמונת רקע מותאמת אישית" },
@@ -82,17 +79,15 @@ export async function POST(req: Request) {
             );
         }
 
-        // Check credits
-        const { data: credits } = await supabase
-            .from("credits")
-            .select("carousel_credits")
-            .eq("user_id", user.id)
-            .single();
-
-        const requiredCredits = 3; // Fixed cost: 3 credits per carousel
-        if (!credits || credits.carousel_credits < requiredCredits) {
+        // Deduct credits upfront (atomic check + deduction)
+        try {
+            await deductCredits(user.id, "carousel_generation");
+        } catch (err) {
             return NextResponse.json(
-                { error: `אין מספיק קרדיטים (נדרשים ${requiredCredits})` },
+                {
+                    error: (err as Error).message,
+                    code: "INSUFFICIENT_CREDITS",
+                },
                 { status: 402 }
             );
         }
@@ -140,7 +135,6 @@ export async function POST(req: Request) {
             logoPosition,
             logoSize: logo_size || "medium",
             logoTransparent: logo_transparent || false,
-            requiredCredits,
             fontFamily: font_family,
             headlineFontSize: headline_font_size,
             bodyFontSize: body_font_size,
@@ -167,7 +161,6 @@ interface ProcessOptions {
     logoPosition?: string;
     logoSize?: "small" | "medium" | "large";
     logoTransparent?: boolean;
-    requiredCredits: number;
     fontFamily?: string;
     headlineFontSize?: number;
     bodyFontSize?: number;
@@ -289,29 +282,6 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
             completed_at: new Date().toISOString(),
         });
 
-        // Deduct credits
-        const { data: currentCredits } = await supabaseAdmin
-            .from("credits")
-            .select("carousel_credits")
-            .eq("user_id", userId)
-            .single();
-
-        const newBalance = (currentCredits?.carousel_credits || options.requiredCredits) - options.requiredCredits;
-
-        await supabaseAdmin
-            .from("credits")
-            .update({ carousel_credits: newBalance })
-            .eq("user_id", userId);
-
-        await supabaseAdmin.from("credit_transactions").insert({
-            user_id: userId,
-            credit_type: "carousel",
-            amount: -options.requiredCredits,
-            balance_after: newBalance,
-            reason: "carousel_generation",
-            related_id: generationId,
-        });
-
         // Complete job
         await supabaseAdmin
             .from("jobs")
@@ -331,40 +301,24 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
         const errorStack = error instanceof Error ? error.stack : String(error);
         console.error(`[Carousel ${jobId}] Processing error:`, errorMessage);
         console.error(`[Carousel ${jobId}] Stack:`, errorStack);
-        
+
         try {
             await supabaseAdmin
                 .from("jobs")
-                .update({ 
-                    status: "failed", 
+                .update({
+                    status: "failed",
                     error: errorMessage,
                     progress: 0
                 })
                 .eq("id", jobId);
-            
+
             // Refund credits on failure
-            const { data: currentCredits } = await supabaseAdmin
-                .from("credits")
-                .select("carousel_credits")
-                .eq("user_id", userId)
-                .single();
-            
-            if (currentCredits) {
-                const refundedBalance = (currentCredits.carousel_credits || 0) + options.requiredCredits;
-                await supabaseAdmin
-                    .from("credits")
-                    .update({ carousel_credits: refundedBalance })
-                    .eq("user_id", userId);
-                
-                await supabaseAdmin.from("credit_transactions").insert({
-                    user_id: userId,
-                    credit_type: "carousel",
-                    amount: options.requiredCredits,
-                    balance_after: refundedBalance,
-                    reason: "carousel_generation_failed_refund",
-                    related_id: jobId
-                });
-            }
+            await addCredits(
+                userId,
+                CREDIT_COSTS.carousel_generation,
+                "החזר - יצירת קרוסלה נכשלה",
+                jobId
+            );
         } catch (dbError) {
             console.error(`[Carousel ${jobId}] Failed to update job status:`, dbError);
         }

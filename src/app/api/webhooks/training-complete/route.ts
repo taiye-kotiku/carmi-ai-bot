@@ -1,6 +1,7 @@
-// src/app/api/webhooks/training-complete/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 interface TrainingWebhookPayload {
     character_id: string;
@@ -32,10 +33,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const admin = supabaseAdmin;
-
         // Fetch the character to get user_id for potential refund
-        const { data: character, error: fetchError } = await admin
+        const { data: character, error: fetchError } = await supabaseAdmin
             .from("characters")
             .select("user_id, trigger_word")
             .eq("id", character_id)
@@ -50,7 +49,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (status === "ready" && model_url) {
-            // ─── Training succeeded ───
+            // Training succeeded
             const { error: updateError } = await supabaseAdmin
                 .from("characters")
                 .update({
@@ -71,9 +70,10 @@ export async function POST(request: NextRequest) {
             }
 
             console.log(`[Webhook] ✅ Character ${character_id} is ready`);
+
         } else if (status === "failed") {
-            // ─── Training failed — update status and refund credits ───
-            await admin
+            // Training failed — update status and refund credits
+            await supabaseAdmin
                 .from("characters")
                 .update({
                     status: "failed",
@@ -83,35 +83,18 @@ export async function POST(request: NextRequest) {
                 .eq("id", character_id);
 
             // Refund credits
-            const TRAINING_COST = 50;
-            const { data: credits } = await admin
-                .from("credits")
-                .select("image_credits")
-                .eq("user_id", character.user_id)
-                .single();
+            await addCredits(
+                character.user_id,
+                CREDIT_COSTS.character_training,
+                "החזר - אימון דמות נכשל",
+                character_id
+            );
 
-            if (credits) {
-                const refundedBalance = credits.image_credits + TRAINING_COST;
-                await admin
-                    .from("credits")
-                    .update({ image_credits: refundedBalance })
-                    .eq("user_id", character.user_id);
-
-                await admin.from("credit_transactions").insert({
-                    user_id: character.user_id,
-                    credit_type: "image_credits",
-                    amount: TRAINING_COST,
-                    balance_after: refundedBalance,
-                    reason: "training_refund_failed",
-                    related_id: character_id,
-                });
-
-                console.log(
-                    `[Webhook] 💰 Refunded ${TRAINING_COST} credits to user ${character.user_id}`
-                );
-            }
-
+            console.log(
+                `[Webhook] 💰 Refunded ${CREDIT_COSTS.character_training} credits to user ${character.user_id}`
+            );
             console.log(`[Webhook] ❌ Character ${character_id} failed: ${error}`);
+
         } else {
             return NextResponse.json(
                 { error: "Invalid status. Must be 'ready' or 'failed'" },

@@ -28,16 +28,13 @@ export async function POST(request: NextRequest) {
             language = "auto",
             preferLength = [0],
             aspectRatio = "9:16",
-            maxClips,
-            keywords,
-            projectName,
-            removeSilence = true,
-            subtitles = true,
-            highlight = true,
-            autoBroll = true,
-            headline = true,
+            // Dynamic from UI
             emoji = false,
-            templateId,
+            keywords,
+            maxClips,
+            projectName,
+            // Fixed — always ON regardless of what frontend sends
+            // removeSilence, subtitles, highlight, autoBroll, headline
         } = body;
 
         if (!videoUrl) {
@@ -47,23 +44,30 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Pass preferLength directly as the array — no conversion
+        // Validate preferLength — block value 1 (under 30s)
+        let validPreferLength = Array.isArray(preferLength)
+            ? preferLength.filter((v: number) => [0, 2, 3, 4].includes(v))
+            : [0];
+
+        if (validPreferLength.length === 0) {
+            validPreferLength = [0];
+        }
+
         const result = await createProjectFromUrl(videoUrl, {
             language,
-            preferLength: Array.isArray(preferLength)
-                ? preferLength
-                : [preferLength],
+            preferLength: validPreferLength,
             aspectRatio,
-            maxClips,
-            keywords,
-            projectName,
-            templateId,
-            removeSilence,
-            subtitles,
-            highlight,
-            autoBroll,
-            headline,
+            // Dynamic
             emoji,
+            keywords: keywords || undefined,
+            maxClips: maxClips || undefined,
+            projectName: projectName || undefined,
+            // Fixed — always ON
+            removeSilence: true,
+            subtitles: true,
+            highlight: true,
+            autoBroll: true,
+            headline: true,
         });
 
         return NextResponse.json({

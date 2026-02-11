@@ -40,10 +40,9 @@ function validatePreferLength(preferLength?: number[]): number[] {
         return [0];
     }
 
-    // Filter to only valid values: 0, 1, 2, 3, 4
-    const valid = preferLength.filter(
-        (v) => [0, 1, 2, 3, 4].includes(v)
-    );
+    // Filter to only valid values: 0, 2, 3, 4
+    // Value 1 (under 30 seconds) is blocked
+    const valid = preferLength.filter((v) => [0, 2, 3, 4].includes(v));
 
     if (valid.length === 0) {
         return [0];

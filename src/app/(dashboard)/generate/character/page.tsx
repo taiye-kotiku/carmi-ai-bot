@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import type { Tables } from "@/types/database";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 type Character = Tables<"characters">;
 
@@ -450,7 +451,7 @@ export default function CharacterGeneratePage() {
                             <span className="flex items-center gap-2">
                                 צור תמונה
                                 <span className="text-sm opacity-80">
-                                    (1 קרדיט)
+                                    ({CREDIT_COSTS.image_generation} קרדיטים)
                                 </span>
                             </span>
                         )}

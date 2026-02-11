@@ -1,20 +1,26 @@
+// src/app/api/generate/video-clips/route.ts
+
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import {
     createProjectFromUrl,
-    createProjectFromFile,
     waitForProject,
 } from "@/lib/services/vizard";
 
 export async function POST(req: Request) {
     try {
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
         const contentType = req.headers.get("content-type") || "";
@@ -24,8 +30,8 @@ export async function POST(req: Request) {
         let fileName: string | undefined;
         let options: {
             language?: string;
-            clipLength?: "short" | "medium" | "long";
-            aspectRatio?: "9:16" | "16:9" | "1:1";
+            preferLength?: number[];
+            aspectRatio?: "9:16" | "16:9" | "1:1" | "4:5";
             maxClips?: number;
         } = {};
 
@@ -45,11 +51,28 @@ export async function POST(req: Request) {
             videoFile = Buffer.from(arrayBuffer);
             fileName = file.name;
 
+            // Parse preferLength from form data
+            let preferLength: number[] = [0];
+            const preferLengthRaw = formData.get("preferLength") as string;
+            if (preferLengthRaw) {
+                try {
+                    preferLength = JSON.parse(preferLengthRaw);
+                } catch {
+                    preferLength = [0];
+                }
+            }
+
             options = {
-                language: formData.get("language") as string || "he",
-                clipLength: formData.get("clipLength") as "short" | "medium" | "long" || "short",
-                aspectRatio: formData.get("aspectRatio") as "9:16" | "16:9" | "1:1" || "9:16",
-                maxClips: parseInt(formData.get("maxClips") as string) || 10,
+                language: (formData.get("language") as string) || "he",
+                preferLength,
+                aspectRatio:
+                    (formData.get("aspectRatio") as
+                        | "9:16"
+                        | "16:9"
+                        | "1:1"
+                        | "4:5") || "9:16",
+                maxClips:
+                    parseInt(formData.get("maxClips") as string) || 10,
             };
         } else {
             // JSON with URL
@@ -57,7 +80,9 @@ export async function POST(req: Request) {
             videoUrl = body.videoUrl;
             options = {
                 language: body.language || "he",
-                clipLength: body.clipLength || "short",
+                preferLength: Array.isArray(body.preferLength)
+                    ? body.preferLength
+                    : [0],
                 aspectRatio: body.aspectRatio || "9:16",
                 maxClips: body.maxClips || 10,
             };
@@ -80,7 +105,9 @@ export async function POST(req: Request) {
 
         if (!credits || credits.reel_credits < clipCost) {
             return NextResponse.json(
-                { error: `נדרשים ${clipCost} קרדיטים לחיתוך סרטון` },
+                {
+                    error: `נדרשים ${clipCost} קרדיטים לחיתוך סרטון`,
+                },
                 { status: 402 }
             );
         }
@@ -96,16 +123,33 @@ export async function POST(req: Request) {
         });
 
         // Process in background
-        if (videoUrl) {
-            processVideoClipsFromUrl(jobId, user.id, videoUrl, options, clipCost);
-        } else if (videoFile && fileName) {
-            processVideoClipsFromFile(jobId, user.id, videoFile, fileName, options, clipCost);
+        if (videoFile && fileName) {
+            // File upload: upload to storage first, then use URL
+            processVideoClipsFromFile(
+                jobId,
+                user.id,
+                videoFile,
+                fileName,
+                options,
+                clipCost
+            );
+        } else if (videoUrl) {
+            processVideoClipsFromUrl(
+                jobId,
+                user.id,
+                videoUrl,
+                options,
+                clipCost
+            );
         }
 
         return NextResponse.json({ jobId });
     } catch (error) {
         console.error("Video clips error:", error);
-        return NextResponse.json({ error: "שגיאה בשרת" }, { status: 500 });
+        return NextResponse.json(
+            { error: "שגיאה בשרת" },
+            { status: 500 }
+        );
     }
 }
 
@@ -122,8 +166,8 @@ async function processVideoClipsFromUrl(
             .update({ status: "processing", progress: 5 })
             .eq("id", jobId);
 
-        // Create Vizard project
-        const projectId = await createProjectFromUrl(videoUrl, options);
+        // Create Vizard project — returns { projectId, shareLink }
+        const result = await createProjectFromUrl(videoUrl, options);
 
         await supabaseAdmin
             .from("jobs")
@@ -131,18 +175,27 @@ async function processVideoClipsFromUrl(
             .eq("id", jobId);
 
         // Wait for processing with progress updates
-        const clips = await waitForProject(projectId, async (progress) => {
-            await supabaseAdmin
-                .from("jobs")
-                .update({ progress: Math.min(progress, 80) })
-                .eq("id", jobId);
-        });
+        const clips = await waitForProject(
+            result.projectId,
+            async (progress) => {
+                await supabaseAdmin
+                    .from("jobs")
+                    .update({ progress: Math.min(progress, 80) })
+                    .eq("id", jobId);
+            }
+        );
 
         // Save clips to storage and database
-        await saveClipsToStorage(jobId, userId, videoUrl, clips, clipCost);
-
+        await saveClipsToStorage(
+            jobId,
+            userId,
+            videoUrl,
+            clips,
+            clipCost
+        );
     } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })
@@ -165,11 +218,12 @@ async function processVideoClipsFromFile(
             .eq("id", jobId);
 
         // Upload original video to our storage first
+        const ext = fileName.split(".").pop() || "mp4";
         const originalPath = `${userId}/${jobId}/original_${fileName}`;
         await supabaseAdmin.storage
             .from("content")
             .upload(originalPath, videoBuffer, {
-                contentType: "video/mp4",
+                contentType: `video/${ext}`,
                 upsert: true,
             });
 
@@ -177,13 +231,18 @@ async function processVideoClipsFromFile(
             .from("content")
             .getPublicUrl(originalPath);
 
+        const publicVideoUrl = originalUrlData.publicUrl;
+
         await supabaseAdmin
             .from("jobs")
             .update({ progress: 10 })
             .eq("id", jobId);
 
-        // Create Vizard project
-        const projectId = await createProjectFromFile(videoBuffer, fileName, options);
+        // Create Vizard project using the public URL of our uploaded file
+        const result = await createProjectFromUrl(publicVideoUrl, {
+            ...options,
+            // Force videoType detection to use direct URL (ext required)
+        });
 
         await supabaseAdmin
             .from("jobs")
@@ -191,18 +250,32 @@ async function processVideoClipsFromFile(
             .eq("id", jobId);
 
         // Wait for processing
-        const clips = await waitForProject(projectId, async (progress) => {
-            await supabaseAdmin
-                .from("jobs")
-                .update({ progress: Math.min(15 + progress * 0.65, 80) })
-                .eq("id", jobId);
-        });
+        const clips = await waitForProject(
+            result.projectId,
+            async (progress) => {
+                await supabaseAdmin
+                    .from("jobs")
+                    .update({
+                        progress: Math.min(
+                            15 + Math.round(progress * 0.65),
+                            80
+                        ),
+                    })
+                    .eq("id", jobId);
+            }
+        );
 
         // Save clips
-        await saveClipsToStorage(jobId, userId, originalUrlData.publicUrl, clips, clipCost);
-
+        await saveClipsToStorage(
+            jobId,
+            userId,
+            publicVideoUrl,
+            clips,
+            clipCost
+        );
     } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
         await supabaseAdmin
             .from("jobs")
             .update({ status: "failed", error: errorMessage })
@@ -223,9 +296,27 @@ async function saveClipsToStorage(
         const clip = clips[i];
 
         try {
-            // Download clip from Vizard
-            const clipResponse = await fetch(clip.video_url);
-            const clipBuffer = Buffer.from(await clipResponse.arrayBuffer());
+            // Vizard returns videoUrl directly on the clip object
+            const clipVideoUrl = clip.videoUrl || clip.video_url;
+
+            if (!clipVideoUrl) {
+                console.error(
+                    `[VideoClips] Clip ${i} has no video URL, skipping`
+                );
+                continue;
+            }
+
+            // Download clip from Vizard CDN
+            const clipResponse = await fetch(clipVideoUrl);
+            if (!clipResponse.ok) {
+                console.error(
+                    `[VideoClips] Failed to download clip ${i}: ${clipResponse.status}`
+                );
+                continue;
+            }
+            const clipBuffer = Buffer.from(
+                await clipResponse.arrayBuffer()
+            );
 
             // Upload to our storage
             const clipPath = `${userId}/${jobId}/clip_${i + 1}.mp4`;
@@ -240,51 +331,43 @@ async function saveClipsToStorage(
                 .from("content")
                 .getPublicUrl(clipPath);
 
-            // Download and upload thumbnail
+            // Use video URL as thumbnail fallback
             let thumbnailUrl = clipUrlData.publicUrl;
-            if (clip.thumbnail_url) {
-                try {
-                    const thumbResponse = await fetch(clip.thumbnail_url);
-                    const thumbBuffer = Buffer.from(await thumbResponse.arrayBuffer());
-                    const thumbPath = `${userId}/${jobId}/thumb_${i + 1}.jpg`;
-
-                    await supabaseAdmin.storage
-                        .from("content")
-                        .upload(thumbPath, thumbBuffer, {
-                            contentType: "image/jpeg",
-                            upsert: true,
-                        });
-
-                    const { data: thumbUrlData } = supabaseAdmin.storage
-                        .from("content")
-                        .getPublicUrl(thumbPath);
-                    thumbnailUrl = thumbUrlData.publicUrl;
-                } catch (e) {
-                    // Use video URL as thumbnail fallback
-                }
-            }
 
             uploadedClips.push({
                 url: clipUrlData.publicUrl,
                 thumbnail: thumbnailUrl,
                 title: clip.title || `קליפ ${i + 1}`,
-                duration: clip.duration,
-                startTime: clip.start_time,
-                endTime: clip.end_time,
+                duration: clip.videoMsDuration
+                    ? Math.round(clip.videoMsDuration / 1000)
+                    : clip.duration,
                 transcript: clip.transcript,
-                viralityScore: clip.virality_score,
+                viralScore: clip.viralScore,
+                viralReason: clip.viralReason,
+                editorUrl: clip.clipEditorUrl,
             });
 
             // Update progress
-            const progress = 80 + Math.round((i / clips.length) * 15);
+            const progress =
+                80 + Math.round(((i + 1) / clips.length) * 15);
             await supabaseAdmin
                 .from("jobs")
                 .update({ progress })
                 .eq("id", jobId);
-
         } catch (error) {
-            console.error(`Failed to save clip ${i}:`, error);
+            console.error(`[VideoClips] Failed to save clip ${i}:`, error);
         }
+    }
+
+    if (uploadedClips.length === 0) {
+        await supabaseAdmin
+            .from("jobs")
+            .update({
+                status: "failed",
+                error: "לא הצלחנו לשמור אף קליפ",
+            })
+            .eq("id", jobId);
+        return;
     }
 
     // Save generation record
@@ -295,7 +378,7 @@ async function saveClipsToStorage(
         type: "video",
         feature: "video_clips",
         source_url: sourceUrl,
-        result_urls: uploadedClips.map(c => c.url),
+        result_urls: uploadedClips.map((c) => c.url),
         thumbnail_url: uploadedClips[0]?.thumbnail,
         status: "completed",
         job_id: jobId,
@@ -309,7 +392,8 @@ async function saveClipsToStorage(
         .eq("user_id", userId)
         .single();
 
-    const newBalance = (currentCredits?.reel_credits || clipCost) - clipCost;
+    const newBalance =
+        (currentCredits?.reel_credits || clipCost) - clipCost;
 
     await supabaseAdmin
         .from("credits")

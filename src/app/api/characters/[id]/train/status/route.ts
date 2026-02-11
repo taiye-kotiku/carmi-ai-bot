@@ -40,6 +40,7 @@ export async function GET(
             elapsed_minutes = Math.round((Date.now() - started) / 60000);
         }
 
+
         return NextResponse.json({
             id: character.id,
             status: character.status,

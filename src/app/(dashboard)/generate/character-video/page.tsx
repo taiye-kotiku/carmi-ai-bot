@@ -23,7 +23,7 @@ export default function CharacterVideoPage() {
     const [characters, setCharacters] = useState<Character[]>([]);
     const [selectedCharId, setSelectedCharId] = useState<string>("");
     const [prompt, setPrompt] = useState("");
-    const [sceneCount, setSceneCount] = useState(1);
+    const sceneCount = 1; // Always 1 scene
 
     // Status
     const [loading, setLoading] = useState(false);
@@ -64,10 +64,8 @@ export default function CharacterVideoPage() {
         loadChars();
     }, []);
 
-    // Credit cost calculation
-    const imageCost = sceneCount * CREDIT_COSTS.image_generation;
-    const videoCost = sceneCount * CREDIT_COSTS.video_generation;
-    const totalCost = imageCost + videoCost;
+    // Credit cost calculation - fixed cost for video generation
+    const totalCost = CREDIT_COSTS.video_generation;
 
     // Main generate handler
     const handleGenerate = async () => {
@@ -199,8 +197,7 @@ export default function CharacterVideoPage() {
                     variant="secondary"
                     className="text-base px-4 py-1"
                 >
-                    עלות: {totalCost} קרדיטים ({imageCost} תמונה + {videoCost}{" "}
-                    וידאו)
+                    עלות: {totalCost} קרדיטים
                 </Badge>
             </div>
 
@@ -275,29 +272,6 @@ export default function CharacterVideoPage() {
                     </Card>
 
                     {/* Scene Count */}
-                    <Card className="p-5">
-                        <Label className="text-lg font-semibold mb-3 block">
-                            3. מספר סצנות
-                        </Label>
-                        <div className="flex gap-2">
-                            {[1, 2, 3, 5].map((n) => (
-                                <button
-                                    key={n}
-                                    onClick={() => setSceneCount(n)}
-                                    disabled={loading}
-                                    className={`flex-1 py-3 rounded-lg border-2 text-center font-bold transition-all ${sceneCount === n
-                                            ? "border-primary bg-primary/10 text-primary"
-                                            : "border-muted hover:border-muted-foreground/30"
-                                        }`}
-                                >
-                                    {n}
-                                </button>
-                            ))}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                            כל סצנה = תמונה ({CREDIT_COSTS.image_generation} קרדיטים) + וידאו 5 שניות ({CREDIT_COSTS.video_generation} קרדיטים)
-                        </p>
-                    </Card>
 
                     {/* Error */}
                     {error && (

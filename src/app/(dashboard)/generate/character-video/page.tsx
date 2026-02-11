@@ -128,7 +128,7 @@ export default function CharacterVideoPage() {
                     setStatusMsg("📝 מייצר תסריט סצנות...");
                 } else if (jobProgress < 45) {
                     setStep("images");
-                    setStatusMsg("🎨 מייצר תמונות דמות (Modal LoRA)...");
+                    setStatusMsg("🎨 מייצר תמונות דמות...");
                 } else if (jobProgress < 95) {
                     setStep("video");
                     setStatusMsg("🎬 מייצר וידאו (Veo 3)...");
@@ -189,8 +189,8 @@ export default function CharacterVideoPage() {
                         🎬 יצירת וידאו דמות
                     </h1>
                     <p className="text-muted-foreground">
-                        תהליך אוטומטי: תסריט ⬅️ תמונות דמות (Modal) ⬅️ הנפשה
-                        (Veo 3)
+                        תהליך אוטומטי: תסריט ⬅️ תמונות דמות ⬅️ הנפשה
+                
                     </p>
                 </div>
                 <Badge

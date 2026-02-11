@@ -74,14 +74,47 @@ export default async function HomePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Fetch gallery items (images, videos, carousels) for display
-  const { data: galleryItems } = await supabase
+  // Fetch specific carousels by prompt
+  const { data: allCarousels } = await supabase
     .from("generations")
     .select("id, type, prompt, thumbnail_url, result_urls, created_at")
     .eq("status", "completed")
-    .in("type", ["image", "video", "carousel"])
+    .eq("type", "carousel")
     .order("created_at", { ascending: false })
-    .limit(12);
+    .limit(20);
+  
+  // Filter to only the two specific carousels
+  const carouselItems = allCarousels?.filter(item => 
+    item.prompt && (
+      item.prompt.includes("החופשה שלי בדרום אמריקה") ||
+      item.prompt.includes("ליווי משפטי ברכישת נכס נדל")
+    )
+  ).slice(0, 2) || [];
+
+  // Fetch one video (astronaut video) and some images
+  const { data: videoItems } = await supabase
+    .from("generations")
+    .select("id, type, prompt, thumbnail_url, result_urls, created_at")
+    .eq("status", "completed")
+    .eq("type", "video")
+    .ilike("prompt", "%אסטרונאוט%")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const { data: imageItems } = await supabase
+    .from("generations")
+    .select("id, type, prompt, thumbnail_url, result_urls, created_at")
+    .eq("status", "completed")
+    .eq("type", "image")
+    .order("created_at", { ascending: false })
+    .limit(4);
+
+  // Combine all items
+  const galleryItems = [
+    ...(carouselItems || []),
+    ...(videoItems || []),
+    ...(imageItems || []),
+  ];
 
   // Prepare gallery items for display
   const displayItems: Array<{
@@ -97,7 +130,7 @@ export default async function HomePage() {
   if (galleryItems && galleryItems.length > 0) {
     galleryItems.forEach((item) => {
       if (item.type === "carousel" && item.result_urls && Array.isArray(item.result_urls)) {
-        // Carousel - use first slide as thumbnail
+        // Carousel - use all slides
         displayItems.push({
           id: item.id,
           src: item.thumbnail_url || item.result_urls[0],
@@ -105,18 +138,21 @@ export default async function HomePage() {
           prompt: item.prompt || undefined,
           label: "קרוסלה",
           color: "emerald",
-          slides: item.result_urls.slice(0, 6),
+          slides: item.result_urls, // Show all slides, not just 6
         });
       } else if (item.type === "video" && item.result_urls && item.result_urls[0]) {
-        // Video
-        displayItems.push({
-          id: item.id,
-          src: item.result_urls[0],
-          type: "video",
-          prompt: item.prompt || undefined,
-          label: "וידאו",
-          color: "amber",
-        });
+        // Video - only include astronaut videos
+        const prompt = item.prompt?.toLowerCase() || "";
+        if (prompt.includes("אסטרונאוט") || prompt.includes("astronaut") || prompt.includes("מאדים")) {
+          displayItems.push({
+            id: item.id,
+            src: item.result_urls[0],
+            type: "video",
+            prompt: item.prompt || undefined,
+            label: "וידאו",
+            color: "amber",
+          });
+        }
       } else if (item.type === "image" && item.thumbnail_url) {
         // Image
         displayItems.push({
@@ -131,9 +167,29 @@ export default async function HomePage() {
     });
   }
 
+  // Always include astronaut video if not already in displayItems
+  const hasAstronautVideo = displayItems.some(item => 
+    item.type === "video" && (
+      item.prompt?.toLowerCase().includes("אסטרונאוט") ||
+      item.prompt?.toLowerCase().includes("astronaut") ||
+      item.prompt?.toLowerCase().includes("מאדים")
+    )
+  );
+
+  if (!hasAstronautVideo) {
+    displayItems.push({
+      id: "static-video",
+      src: "/examples/astronaut-video.mp4",
+      type: "video" as const,
+      prompt: "אסטרונאוט צועד על פני מאדים, צילום קולנועי, תנועה איטית",
+      label: "וידאו",
+      color: "amber" as const,
+    });
+  }
+
   // Fallback to static examples if no gallery items
   const finalDisplayItems = displayItems.length > 0 
-    ? displayItems.slice(0, 8) 
+    ? displayItems
     : [
         ...galleryImages.map((img, idx) => ({
           id: `static-img-${idx}`,
@@ -273,6 +329,16 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-[300px]">
             {/* Large Card: Text to Image */}
             <div className="md:col-span-2 row-span-1 md:row-span-2 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-indigo-500/50 transition-all duration-500">
+              {/* Background Image */}
+              <div className="absolute inset-0 z-0">
+                <Image
+                  src="/examples/advanced-image-generator.png"
+                  alt="מחולל תמונות מתקדם"
+                  fill
+                  className="object-cover opacity-30 group-hover:opacity-40 transition-opacity duration-500"
+                  sizes="(max-width: 768px) 100vw, 66vw"
+                />
+              </div>
               <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-950/90 z-10" />
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950 opacity-100 group-hover:scale-105 transition-transform duration-700" />
 
@@ -395,12 +461,12 @@ export default async function HomePage() {
                       </div>
                     </div>
 
-                    {/* Carousel Preview Grid */}
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      {item.slides.slice(0, 6).map((slide, slideIndex) => (
+                    {/* Carousel Preview Grid - Show all slides */}
+                    <div className="grid grid-cols-3 gap-2 mb-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                      {item.slides.map((slide, slideIndex) => (
                         <div
                           key={slideIndex}
-                          className="relative aspect-square rounded-lg overflow-hidden border border-white/10"
+                          className="relative aspect-square rounded-lg overflow-hidden border border-white/10 hover:border-emerald-500/50 transition-colors"
                         >
                           <Image
                             src={slide}
@@ -409,9 +475,21 @@ export default async function HomePage() {
                             className="object-cover"
                             sizes="(max-width: 640px) 33vw, 25vw"
                           />
+                          {/* Slide number badge */}
+                          <div className="absolute top-1 left-1 h-5 w-5 rounded-full bg-slate-950/80 backdrop-blur-md flex items-center justify-center border border-white/20">
+                            <span className="text-[10px] font-bold text-slate-200">{slideIndex + 1}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
+                    {/* Show prompt as title */}
+                    {item.prompt && (
+                      <div className="mb-2">
+                        <p className="text-sm font-medium text-slate-200 line-clamp-2">
+                          {item.prompt}
+                        </p>
+                      </div>
+                    )}
 
                     {/* Prompt on hover */}
                     {item.prompt && (

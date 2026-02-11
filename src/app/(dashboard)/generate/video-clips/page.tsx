@@ -1,399 +1,436 @@
-// src/app/(dashboard)/generate/video-clips/page.tsx
+// src/app/(dashboard)/video-slice/page.tsx
+
 "use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import {
+    Loader2,
+    Scissors,
+    Download,
+    ExternalLink,
+    Star,
+} from "lucide-react";
+
+const VIDEO_TYPES = [
+    { value: 2, label: "YouTube" },
+    { value: 1, label: "קישור ישיר (MP4)" },
+    { value: 3, label: "Google Drive" },
+    { value: 4, label: "Vimeo" },
+    { value: 6, label: "TikTok" },
+    { value: 7, label: "Twitter / X" },
+    { value: 11, label: "Facebook" },
+    { value: 12, label: "LinkedIn" },
+];
 
 const CLIP_LENGTHS = [
-    { value: [2, 3], label: "30-90 שניות", description: "מומלץ לשורטס" },
-    { value: [1, 2], label: "עד 60 שניות", description: "קליפים קצרים" },
-    { value: [3, 4], label: "60 שניות - 3 דקות", description: "קליפים ארוכים" },
-    { value: [0], label: "אוטומטי", description: "תן ל-AI להחליט" },
+    { value: 0, label: "אוטומטי (AI בוחר)" },
+    { value: 1, label: "עד 30 שניות" },
+    { value: 2, label: "30-60 שניות" },
+    { value: 3, label: "60-90 שניות" },
+    { value: 4, label: "90 שניות - 3 דקות" },
 ];
 
 const ASPECT_RATIOS = [
-    { value: 1, label: "9:16 אנכי", description: "TikTok, Reels, Shorts", icon: "📱" },
-    { value: 2, label: "1:1 ריבוע", description: "Instagram Feed", icon: "⬜" },
-    { value: 3, label: "4:5 פורטרט", description: "Instagram Feed מותאם", icon: "📷" },
-    { value: 4, label: "16:9 אופקי", description: "YouTube, LinkedIn", icon: "🖥️" },
+    { value: "9:16", label: "9:16 (TikTok, Reels)" },
+    { value: "1:1", label: "1:1 (Instagram Feed)" },
+    { value: "4:5", label: "4:5 (Instagram Portrait)" },
+    { value: "16:9", label: "16:9 (YouTube, LinkedIn)" },
 ];
 
-const LANGUAGES = [
-    { value: "auto", label: "זיהוי אוטומטי" },
-    { value: "he", label: "עברית" },
-    { value: "en", label: "English" },
-    { value: "ar", label: "العربية" },
-    { value: "ru", label: "Русский" },
-];
+interface Clip {
+    id: number;
+    title: string;
+    duration: number;
+    downloadUrl: string;
+    thumbnailUrl?: string;
+    transcript?: string;
+    viralScore?: string;
+    viralReason?: string;
+    editorUrl?: string;
+}
 
-export default function VideoClipsPage() {
+export default function VideoSlicePage() {
     const [videoUrl, setVideoUrl] = useState("");
-    const [videoType, setVideoType] = useState<1 | 2>(1); // 1=URL, 2=YouTube
-    const [language, setLanguage] = useState("auto");
-    const [preferLength, setPreferLength] = useState<number[]>([2, 3]);
-    const [ratioOfClip, setRatioOfClip] = useState(1);
-    const [maxClipNumber, setMaxClipNumber] = useState<number | undefined>(undefined);
-    const [keywords, setKeywords] = useState("");
-    const [projectName, setProjectName] = useState("");
-
-    const [loading, setLoading] = useState(false);
-    const [projectId, setProjectId] = useState<string | null>(null);
+    const [videoType, setVideoType] = useState(2);
+    const [preferLength, setPreferLength] = useState<number[]>([0]);
+    const [aspectRatio, setAspectRatio] = useState("9:16");
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [projectId, setProjectId] = useState<number | null>(null);
+    const [clips, setClips] = useState<Clip[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [status, setStatus] = useState<string | null>(null);
-    const [clips, setClips] = useState<any[]>([]);
+    const [shareLink, setShareLink] = useState<string | null>(null);
 
-    // Detect if URL is YouTube
-    const detectVideoType = (url: string) => {
-        if (url.includes("youtube.com") || url.includes("youtu.be")) {
-            setVideoType(2);
-        } else {
-            setVideoType(1);
-        }
-    };
+    const handleSlice = async () => {
+        if (!videoUrl.trim()) return;
 
-    const handleSubmit = async () => {
-        if (!videoUrl.trim()) {
-            setError("נא להזין קישור לוידאו");
-            return;
-        }
-
-        setLoading(true);
+        setIsProcessing(true);
+        setProgress(0);
         setError(null);
+        setClips([]);
         setProjectId(null);
-        setStatus("יוצר פרויקט...");
+        setShareLink(null);
 
         try {
-            const res = await fetch("/api/vizard/slice", {
+            // Create project
+            const response = await fetch("/api/vizard/slice", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    videoUrl: videoUrl.trim(),
+                    videoUrl,
                     videoType,
-                    language,
                     preferLength,
-                    ratioOfClip,
-                    maxClipNumber: maxClipNumber || undefined,
-                    keywords: keywords.trim() || undefined,
-                    projectName: projectName.trim() || undefined,
+                    aspectRatio,
+                    language: "auto",
+                    removeSilence: true,
+                    subtitles: true,
+                    highlight: true,
+                    autoBroll: true,
+                    headline: true,
                 }),
             });
 
-            const data = await res.json();
+            const data = await response.json();
 
-            if (!res.ok) {
-                throw new Error(data.error || "יצירת הפרויקט נכשלה");
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || "שגיאה ביצירת הפרויקט");
             }
 
             setProjectId(data.projectId);
-            setStatus("הפרויקט נוצר! בודק סטטוס...");
+            if (data.shareLink) setShareLink(data.shareLink);
 
-            // Start polling for status
-            pollStatus(data.projectId);
+            setProgress(5);
 
+            // Poll for clips
+            await pollForClips(data.projectId);
         } catch (err: any) {
             setError(err.message);
-            setStatus(null);
-        } finally {
-            setLoading(false);
+            setIsProcessing(false);
         }
     };
 
-    const pollStatus = async (pid: string) => {
-        let attempts = 0;
-        const maxAttempts = 60; // 10 minutes max
+    const pollForClips = async (pid: number) => {
+        const maxAttempts = 80; // ~40 minutes at 30s intervals
+        const pollInterval = 30000;
 
-        const check = async () => {
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
             try {
-                const res = await fetch(`/api/vizard/status?projectId=${pid}`);
-                const data = await res.json();
+                const response = await fetch(
+                    `/api/vizard/status?projectId=${pid}`
+                );
+                const data = await response.json();
 
-                if (data.status === "completed" || data.status === "done") {
-                    setStatus("הקליפים מוכנים!");
-                    setClips(data.clips || []);
+                // Update progress
+                const estimatedProgress = Math.min(5 + (i + 1) * 2, 90);
+                setProgress(estimatedProgress);
+
+                if (data.status === "completed" && data.clips?.length > 0) {
+                    setClips(data.clips);
+                    if (data.shareLink) setShareLink(data.shareLink);
+                    setProgress(100);
+                    setIsProcessing(false);
                     return;
                 }
 
-                if (data.status === "failed" || data.status === "error") {
-                    setError(data.error || "העיבוד נכשל");
-                    setStatus(null);
-                    return;
+                if (data.status === "error") {
+                    throw new Error(data.error || "עיבוד הוידאו נכשל");
                 }
 
-                attempts++;
-                if (attempts < maxAttempts) {
-                    setStatus(`מעבד... (${data.progress || 0}%)`);
-                    setTimeout(check, 10000); // Check every 10 seconds
-                } else {
-                    setError("הזמן הקצוב עבר. נסה שוב מאוחר יותר.");
-                    setStatus(null);
+                // status === "processing" → continue
+            } catch (err: any) {
+                if (
+                    err.message.includes("נכשל") ||
+                    err.message.includes("error")
+                ) {
+                    setError(err.message);
+                    setIsProcessing(false);
+                    return;
                 }
-            } catch (err) {
-                attempts++;
-                if (attempts < maxAttempts) {
-                    setTimeout(check, 10000);
-                }
+                console.error("Poll error:", err);
             }
-        };
+        }
 
-        setTimeout(check, 5000); // First check after 5 seconds
+        setError("עיבוד הוידאו לקח יותר מדי זמן. נסה שנית.");
+        setIsProcessing(false);
     };
 
-    const handleDownload = async (clipId: string) => {
-        try {
-            const res = await fetch(`/api/vizard/download?clipId=${clipId}`);
-            const data = await res.json();
-
-            if (data.downloadUrl) {
-                window.open(data.downloadUrl, "_blank");
+    const toggleLength = (value: number) => {
+        if (value === 0) {
+            // Auto mode — cannot combine with others
+            setPreferLength([0]);
+        } else {
+            let newLengths: number[];
+            if (preferLength.includes(0)) {
+                // Switching from auto to specific
+                newLengths = [value];
+            } else if (preferLength.includes(value)) {
+                // Deselect
+                newLengths = preferLength.filter((v) => v !== value);
+            } else {
+                // Add
+                newLengths = [...preferLength, value];
             }
-        } catch (err) {
-            console.error("Download error:", err);
+            // If nothing selected, fall back to auto
+            setPreferLength(newLengths.length > 0 ? newLengths : [0]);
         }
+    };
+
+    const formatDuration = (seconds: number): string => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return mins > 0
+            ? `${mins}:${secs.toString().padStart(2, "0")}`
+            : `${secs} שניות`;
     };
 
     return (
-        <div className="container mx-auto p-6 max-w-4xl" dir="rtl">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold mb-2">✂️ חיתוך וידאו לקליפים</h1>
-                <p className="text-muted-foreground">
-                    העלה סרטון ארוך וקבל קליפים קצרים מותאמים לרשתות חברתיות
-                </p>
-            </div>
-
-            <div className="grid gap-6">
-                {/* Video URL Input */}
-                <Card className="p-6">
-                    <Label className="text-lg font-semibold mb-3 block">
-                        קישור לוידאו
-                    </Label>
-                    <div className="flex gap-2">
-                        <Input
-                            value={videoUrl}
-                            onChange={(e) => {
-                                setVideoUrl(e.target.value);
-                                detectVideoType(e.target.value);
-                            }}
-                            placeholder="https://youtube.com/watch?v=... או קישור ישיר לקובץ"
-                            className="flex-1"
-                            dir="ltr"
-                        />
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2">
-                        {videoType === 2 ? "🎬 זוהה כקישור YouTube" : "📁 קישור ישיר לקובץ"}
+        <div className="container mx-auto py-8 px-4" dir="rtl">
+            <div className="max-w-4xl mx-auto">
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+                        <Scissors className="h-8 w-8 text-purple-500" />
+                        חיתוך וידאו לקליפים
+                    </h1>
+                    <p className="text-gray-600">
+                        הכנס קישור לוידאו ארוך ו-AI יחתוך אותו לקליפים קצרים
+                        וויראליים
                     </p>
-                </Card>
+                </div>
 
-                {/* Settings */}
-                <Card className="p-6">
-                    <Tabs defaultValue="basic" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 mb-4">
-                            <TabsTrigger value="basic">הגדרות בסיסיות</TabsTrigger>
-                            <TabsTrigger value="advanced">הגדרות מתקדמות</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="basic" className="space-y-6">
-                            {/* Clip Length */}
-                            <div>
-                                <Label className="font-semibold mb-3 block">אורך קליפים</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {CLIP_LENGTHS.map((opt) => (
-                                        <button
-                                            key={opt.label}
-                                            onClick={() => setPreferLength(opt.value)}
-                                            className={`p-3 rounded-lg border-2 text-right transition-all ${JSON.stringify(preferLength) === JSON.stringify(opt.value)
-                                                    ? "border-primary bg-primary/5"
-                                                    : "border-border hover:border-primary/50"
-                                                }`}
-                                        >
-                                            <div className="font-medium">{opt.label}</div>
-                                            <div className="text-xs text-muted-foreground">{opt.description}</div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Aspect Ratio */}
-                            <div>
-                                <Label className="font-semibold mb-3 block">יחס תצוגה</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {ASPECT_RATIOS.map((opt) => (
-                                        <button
-                                            key={opt.value}
-                                            onClick={() => setRatioOfClip(opt.value)}
-                                            className={`p-3 rounded-lg border-2 text-right transition-all ${ratioOfClip === opt.value
-                                                    ? "border-primary bg-primary/5"
-                                                    : "border-border hover:border-primary/50"
-                                                }`}
-                                        >
-                                            <div className="font-medium">
-                                                {opt.icon} {opt.label}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">{opt.description}</div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Language */}
-                            <div>
-                                <Label className="font-semibold mb-3 block">שפת הוידאו</Label>
-                                <div className="flex flex-wrap gap-2">
-                                    {LANGUAGES.map((lang) => (
-                                        <button
-                                            key={lang.value}
-                                            onClick={() => setLanguage(lang.value)}
-                                            className={`px-4 py-2 rounded-full border transition-all ${language === lang.value
-                                                    ? "border-primary bg-primary text-primary-foreground"
-                                                    : "border-border hover:border-primary/50"
-                                                }`}
-                                        >
-                                            {lang.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </TabsContent>
-
-                        <TabsContent value="advanced" className="space-y-6">
-                            {/* Max Clips */}
-                            <div>
-                                <Label className="font-semibold mb-2 block">
-                                    מספר קליפים מקסימלי
-                                </Label>
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    value={maxClipNumber || ""}
-                                    onChange={(e) => setMaxClipNumber(e.target.value ? parseInt(e.target.value) : undefined)}
-                                    placeholder="השאר ריק לכל הקליפים"
-                                    className="max-w-[200px]"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    1-100, השאר ריק לקבלת כל הקליפים
-                                </p>
-                            </div>
-
-                            {/* Keywords */}
-                            <div>
-                                <Label className="font-semibold mb-2 block">
-                                    נושאים ספציפיים (אופציונלי)
-                                </Label>
-                                <Input
-                                    value={keywords}
-                                    onChange={(e) => setKeywords(e.target.value)}
-                                    placeholder='למשל: "מצא את הרגע שבו מדברים על AI"'
-                                    dir="rtl"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    AI ימצא רק קליפים שמתאימים לתיאור זה
-                                </p>
-                            </div>
-
-                            {/* Project Name */}
-                            <div>
-                                <Label className="font-semibold mb-2 block">
-                                    שם הפרויקט (אופציונלי)
-                                </Label>
-                                <Input
-                                    value={projectName}
-                                    onChange={(e) => setProjectName(e.target.value)}
-                                    placeholder="שם מותאם לפרויקט"
-                                    dir="rtl"
-                                />
-                            </div>
-
-                            {/* Features Info */}
-                            <div className="bg-blue-50 dark:bg-blue-950/50 rounded-lg p-4">
-                                <p className="font-semibold text-sm mb-2">✨ פיצ'רים שיופעלו אוטומטית:</p>
-                                <ul className="text-sm text-muted-foreground space-y-1">
-                                    <li>✅ הסרת שקטים ומילות מילוי</li>
-                                    <li>✅ כתוביות אוטומטיות</li>
-                                    <li>✅ הדגשת מילות מפתח</li>
-                                    <li>✅ B-Roll אוטומטי</li>
-                                    <li>✅ כותרת פתיחה (Hook)</li>
-                                </ul>
-                            </div>
-                        </TabsContent>
-                    </Tabs>
-                </Card>
-
-                {/* Submit */}
-                <Button
-                    onClick={handleSubmit}
-                    disabled={loading || !videoUrl.trim()}
-                    size="lg"
-                    className="w-full text-lg py-6"
-                >
-                    {loading ? (
-                        <span className="flex items-center gap-2">
-                            <span className="animate-spin">⏳</span>
-                            מעבד...
-                        </span>
-                    ) : (
-                        "✂️ צור קליפים"
-                    )}
-                </Button>
-
-                {/* Status */}
-                {status && (
-                    <Card className="p-4 bg-blue-50 dark:bg-blue-950/50">
-                        <p className="text-center font-medium">{status}</p>
-                        {projectId && (
-                            <p className="text-center text-sm text-muted-foreground mt-1">
-                                מזהה פרויקט: {projectId}
-                            </p>
-                        )}
-                    </Card>
-                )}
-
-                {/* Error */}
-                {error && (
-                    <Card className="p-4 bg-destructive/10 text-destructive">
-                        <p className="text-center font-medium">❌ {error}</p>
-                    </Card>
-                )}
-
-                {/* Clips */}
-                {clips.length > 0 && (
-                    <Card className="p-6">
-                        <h2 className="text-xl font-bold mb-4">🎬 הקליפים שלך ({clips.length})</h2>
-                        <div className="grid gap-4">
-                            {clips.map((clip, i) => (
-                                <div
-                                    key={clip.id || i}
-                                    className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg"
-                                >
-                                    {clip.thumbnailUrl && (
-                                        <img
-                                            src={clip.thumbnailUrl}
-                                            alt={`Clip ${i + 1}`}
-                                            className="w-24 h-14 object-cover rounded"
-                                        />
-                                    )}
-                                    <div className="flex-1">
-                                        <p className="font-medium">
-                                            קליפ {i + 1}
-                                            {clip.duration && ` (${Math.round(clip.duration)}s)`}
-                                        </p>
-                                        {clip.title && (
-                                            <p className="text-sm text-muted-foreground">{clip.title}</p>
-                                        )}
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleDownload(clip.id)}
-                                    >
-                                        הורד
-                                    </Button>
-                                </div>
-                            ))}
+                <Card className="mb-6">
+                    <CardHeader>
+                        <CardTitle>הגדרות חיתוך</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {/* Video URL */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">
+                                קישור לוידאו
+                            </label>
+                            <Input
+                                placeholder="https://www.youtube.com/watch?v=..."
+                                value={videoUrl}
+                                onChange={(e) => setVideoUrl(e.target.value)}
+                                disabled={isProcessing}
+                                className="text-left"
+                                dir="ltr"
+                            />
                         </div>
+
+                        {/* Video Type */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">
+                                סוג הקישור
+                            </label>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {VIDEO_TYPES.map((type) => (
+                                    <button
+                                        key={type.value}
+                                        type="button"
+                                        onClick={() =>
+                                            setVideoType(type.value)
+                                        }
+                                        disabled={isProcessing}
+                                        className={`py-2 px-3 rounded-lg border text-sm transition-all ${videoType === type.value
+                                                ? "bg-purple-500 border-purple-500 text-white"
+                                                : "bg-white border-gray-300 hover:border-purple-300"
+                                            }`}
+                                    >
+                                        {type.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Aspect Ratio */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">
+                                יחס מסך
+                            </label>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {ASPECT_RATIOS.map((ratio) => (
+                                    <button
+                                        key={ratio.value}
+                                        type="button"
+                                        onClick={() =>
+                                            setAspectRatio(ratio.value)
+                                        }
+                                        disabled={isProcessing}
+                                        className={`py-2 px-3 rounded-lg border text-sm transition-all ${aspectRatio === ratio.value
+                                                ? "bg-purple-500 border-purple-500 text-white"
+                                                : "bg-white border-gray-300 hover:border-purple-300"
+                                            }`}
+                                    >
+                                        {ratio.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Clip Length */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">
+                                אורך הקליפים
+                            </label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {CLIP_LENGTHS.map((length) => (
+                                    <button
+                                        key={length.value}
+                                        type="button"
+                                        onClick={() =>
+                                            toggleLength(length.value)
+                                        }
+                                        disabled={isProcessing}
+                                        className={`py-2 px-3 rounded-lg border text-sm transition-all ${preferLength.includes(length.value)
+                                                ? "bg-purple-500 border-purple-500 text-white"
+                                                : "bg-white border-gray-300 hover:border-purple-300"
+                                            }`}
+                                    >
+                                        {length.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
+                            💡 חיתוך וידאו אורך כ-5-15 דקות בהתאם לאורך הוידאו
+                        </div>
+
+                        <Button
+                            onClick={handleSlice}
+                            disabled={!videoUrl.trim() || isProcessing}
+                            className="w-full"
+                            size="lg"
+                        >
+                            {isProcessing ? (
+                                <>
+                                    <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                                    מעבד וידאו...
+                                </>
+                            ) : (
+                                <>
+                                    <Scissors className="ml-2 h-5 w-5" />
+                                    התחל חיתוך
+                                </>
+                            )}
+                        </Button>
+
+                        {isProcessing && (
+                            <div className="space-y-2">
+                                <Progress value={progress} />
+                                <p className="text-sm text-center text-gray-500">
+                                    {Math.round(progress)}% — חיתוך וידאו לוקח
+                                    זמן, אנא המתן
+                                </p>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+                                {error}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Clips Results */}
+                {clips.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>
+                                הקליפים שלך מוכנים! ({clips.length} קליפים)
+                            </CardTitle>
+                            {shareLink && (
+                                <a
+                                    href={shareLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                                >
+                                    <ExternalLink className="h-3 w-3" />
+                                    פתח בעורך Vizard
+                                </a>
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid md:grid-cols-2 gap-4">
+                                {clips.map((clip, index) => (
+                                    <div
+                                        key={clip.id || index}
+                                        className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+                                    >
+                                        <div className="p-4 space-y-3">
+                                            <div className="flex items-start justify-between gap-2">
+                                                <h3 className="font-medium line-clamp-2 flex-1">
+                                                    {clip.title ||
+                                                        `קליפ ${index + 1}`}
+                                                </h3>
+                                                {clip.viralScore && (
+                                                    <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded text-xs font-medium text-yellow-700 shrink-0">
+                                                        <Star className="h-3 w-3" />
+                                                        {clip.viralScore}/10
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <p className="text-sm text-gray-500">
+                                                {formatDuration(clip.duration)}
+                                            </p>
+
+                                            {clip.viralReason && (
+                                                <p className="text-xs text-gray-400 line-clamp-2">
+                                                    {clip.viralReason}
+                                                </p>
+                                            )}
+
+                                            {clip.transcript && (
+                                                <p
+                                                    className="text-xs text-gray-400 line-clamp-3 border-t pt-2"
+                                                    dir="auto"
+                                                >
+                                                    {clip.transcript.substring(
+                                                        0,
+                                                        150
+                                                    )}
+                                                    ...
+                                                </p>
+                                            )}
+
+                                            <div className="flex gap-2 pt-1">
+                                                {clip.downloadUrl && (
+                                                    <a
+                                                        href={clip.downloadUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700"
+                                                    >
+                                                        <Download className="h-4 w-4" />
+                                                        הורד
+                                                    </a>
+                                                )}
+                                                {clip.editorUrl && (
+                                                    <a
+                                                        href={clip.editorUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+                                                    >
+                                                        <ExternalLink className="h-4 w-4" />
+                                                        ערוך
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
                     </Card>
                 )}
             </div>

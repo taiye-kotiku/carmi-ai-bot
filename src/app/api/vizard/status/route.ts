@@ -1,16 +1,21 @@
+// src/app/api/vizard/status/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-
-const VIZARD_API_KEY = process.env.VIZARD_API_KEY!;
-const VIZARD_BASE_URL = "https://elb-api.vizard.ai/hvizard-server-front/open-api/v1";
+import { getProjectStatus } from "@/lib/services/vizard";
 
 export async function GET(request: NextRequest) {
     try {
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
         const { searchParams } = new URL(request.url);
@@ -23,31 +28,32 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const response = await fetch(`${VIZARD_BASE_URL}/project/${projectId}`, {
-            headers: {
-                "VIZARDAI_API_KEY": VIZARD_API_KEY,
-            },
-        });
+        const data = await getProjectStatus(projectId);
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Vizard status error:", errorText);
-            return NextResponse.json(
-                { error: "שליפת סטטוס נכשלה" },
-                { status: response.status }
-            );
-        }
-
-        const data = await response.json();
+        // Map Vizard videos to a consistent clip format for the frontend
+        const clips = (data.videos || []).map((video: any) => ({
+            id: video.videoId,
+            title: video.title || "",
+            duration: video.videoMsDuration
+                ? Math.round(video.videoMsDuration / 1000)
+                : 0,
+            downloadUrl: video.videoUrl || "",
+            thumbnailUrl: null,
+            transcript: video.transcript || "",
+            viralScore: video.viralScore || "0",
+            viralReason: video.viralReason || "",
+            editorUrl: video.clipEditorUrl || "",
+        }));
 
         return NextResponse.json({
             success: true,
             status: data.status,
-            clips: data.clips || data.data?.clips || [],
-            progress: data.progress,
+            clips,
+            projectName: data.projectName,
+            shareLink: data.shareLink,
         });
     } catch (error: any) {
-        console.error("Vizard status error:", error);
+        console.error("[Vizard] Status error:", error);
         return NextResponse.json(
             { error: error.message || "שליפת סטטוס נכשלה" },
             { status: 500 }

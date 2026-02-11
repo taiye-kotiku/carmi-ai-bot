@@ -28,14 +28,15 @@ import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 import type { CarouselTemplate } from "@/lib/carousel/templates";
 import { requestNotificationPermission, notifyGenerationComplete } from "@/lib/services/notifications";
 import { ExportFormats } from "@/components/export-formats";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 const LOGO_POSITIONS = [
-    { value: "top-left", label: "פינה עליונה שמאל", grid: "col-start-1 row-start-1" },
-    { value: "top-middle", label: "מרכז עליון", grid: "col-start-2 row-start-1" },
     { value: "top-right", label: "פינה עליונה ימין", grid: "col-start-3 row-start-1" },
-    { value: "bottom-left", label: "פינה תחתונה שמאל", grid: "col-start-1 row-start-2" },
-    { value: "bottom-middle", label: "מרכז תחתון", grid: "col-start-2 row-start-2" },
+    { value: "top-middle", label: "מרכז עליון", grid: "col-start-2 row-start-1" },
+    { value: "top-left", label: "פינה עליונה שמאל", grid: "col-start-1 row-start-1" },
     { value: "bottom-right", label: "פינה תחתונה ימין", grid: "col-start-3 row-start-2" },
+    { value: "bottom-middle", label: "מרכז תחתון", grid: "col-start-2 row-start-2" },
+    { value: "bottom-left", label: "פינה תחתונה שמאל", grid: "col-start-1 row-start-2" },
 ] as const;
 
 const STYLES = [
@@ -58,16 +59,16 @@ const CATEGORIES = [
 const SLIDE_COUNTS = [3, 4, 5, 6, 7, 8];
 
 const FONT_FAMILIES = [
-    { value: "Assistant-Bold", label: "אסיסטנט מודגש (ברירת מחדל)", file: "Assistant-Bold.ttf" },
-    { value: "Assistant-ExtraBold", label: "אסיסטנט מודגש מאוד", file: "Assistant-ExtraBold.ttf" },
-    { value: "Assistant-SemiBold", label: "אסיסטנט מודגש בינוני", file: "Assistant-SemiBold.ttf" },
-    { value: "Assistant-Medium", label: "אסיסטנט בינוני", file: "Assistant-Medium.ttf" },
-    { value: "Assistant-Regular", label: "אסיסטנט רגיל", file: "Assistant-Regular.ttf" },
-    { value: "Assistant-Light", label: "אסיסטנט דק", file: "Assistant-Light.ttf" },
-    { value: "Assistant-ExtraLight", label: "אסיסטנט דק מאוד", file: "Assistant-ExtraLight.ttf" },
-    { value: "Antiochus-Bold", label: "אנטיוכוס מודגש", file: "Antiochus-Bold.ttf" },
-    { value: "Rubik-Medium-Italic", label: "רוביק בינוני נטוי", file: "Rubik-Medium-Italic.ttf" },
-    { value: "GveretLevin-AlefAlefAlef-Regular", label: "גברת לוין אלף", file: "GveretLevin-AlefAlefAlef-Regular.ttf" },
+    { value: "Assistant-Bold", label: "הדגשה חזקה מאוד (כותרות גדולות)", file: "Assistant-Bold.ttf" },
+    { value: "Assistant-ExtraBold", label: "הדגשה חזקה (כותרות)", file: "Assistant-ExtraBold.ttf" },
+    { value: "Assistant-SemiBold", label: "הדגשה בינונית", file: "Assistant-SemiBold.ttf" },
+    { value: "Assistant-Medium", label: "הדגשה רגילה", file: "Assistant-Medium.ttf" },
+    { value: "Assistant-Regular", label: "טקסט ארוך (פסקאות)", file: "Assistant-Regular.ttf" },
+    { value: "Assistant-Light", label: "טקסט משני (הערות)", file: "Assistant-Light.ttf" },
+    { value: "Assistant-ExtraLight", label: "עיצוב עדין (עיטורים)", file: "Assistant-ExtraLight.ttf" },
+    { value: "Antiochus-Bold", label: "סגנון תנכי (מסורתי, רשמי)", file: "Antiochus-Bold.ttf" },
+    { value: "Rubik-Medium-Italic", label: "מודרני נטוי (הייטק)", file: "Rubik-Medium-Italic.ttf" },
+    { value: "GveretLevin-AlefAlefAlef-Regular", label: "כתב יד ישראלי (אנושי)", file: "GveretLevin-AlefAlefAlef-Regular.ttf" },
 ];
 
 export default function CarouselGenerationPage() {
@@ -1076,7 +1077,7 @@ export default function CarouselGenerationPage() {
                             </Button>
 
                             <p className="text-sm text-pink-600 text-center">
-                                עלות: {contentMode === "custom" || contentMode === "chat" ? customSlides.length : slideCount} קרדיטים
+                                עלות: {CREDIT_COSTS.carousel_generation} קרדיטים
                             </p>
                         </CardContent>
                     </Card>

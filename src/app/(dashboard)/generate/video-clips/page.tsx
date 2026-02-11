@@ -17,6 +17,7 @@ import {
     ChevronUp,
     Smile,
 } from "lucide-react";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 const VIDEO_TYPES = [
     { value: 2, label: "YouTube" },
@@ -492,7 +493,7 @@ export default function VideoSlicePage() {
                             ) : (
                                 <>
                                     <Scissors className="ml-2 h-5 w-5" />
-                                    התחל חיתוך
+                                    התחל חיתוך ({CREDIT_COSTS.video_clips} קרדיטים)
                                 </>
                             )}
                         </Button>

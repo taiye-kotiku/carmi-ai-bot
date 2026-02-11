@@ -23,7 +23,7 @@ import {
 
 const quickLinks = [
     { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
-    { name: "תמונה", href: "/generate/text-to-image", icon: Image },
+    { name: "תמונה", href: "/generate/image", icon: Image },
     { name: "סרטון", href: "/generate/text-to-video", icon: Video },
     { name: "דמות", href: "/generate/character", icon: Sparkles },
     { name: "גלריה", href: "/gallery", icon: FolderOpen },
@@ -32,7 +32,7 @@ const quickLinks = [
 const allLinks = [
     {
         section: "יצירת תוכן", items: [
-            { name: "יצירת תמונה", href: "/generate/text-to-image", icon: Image },
+            { name: "יצירת תמונה", href: "/generate/image", icon: Image },
             { name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
             { name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
             { name: "המרת רילז", href: "/generate/reel-converter", icon: Film },

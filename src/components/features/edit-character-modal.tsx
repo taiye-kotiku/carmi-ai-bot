@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import type { Character } from "@/types/database";
+import type { Tables } from "@/types/database";
+
+type Character = Tables<"characters">;
 
 interface Props {
     character: Character;

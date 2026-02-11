@@ -9,7 +9,9 @@ import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import type { Character } from "@/types/database";
+import type { Tables } from "@/types/database";
+
+type Character = Tables<"characters">;
 
 const PRESET_PROMPTS = [
     {

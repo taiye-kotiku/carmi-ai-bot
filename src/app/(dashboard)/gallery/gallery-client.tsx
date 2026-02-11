@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
-import type { Generation } from "@/types/database";
+import type { Tables } from "@/types/database";
+
+type Generation = Tables<"generations">;
 
 // Check if URL is a video
 function isVideoUrl(url: string): boolean {

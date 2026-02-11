@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Check, User } from "lucide-react";
-import type { Character } from "@/types/database";
+import type { Tables } from "@/types/database";
+
+type Character = Tables<"characters">;
 
 interface Props {
     selectedId?: string | null;
@@ -20,7 +22,7 @@ export function CharacterSelector({ selectedId, onSelect, onCreateNew }: Props) 
                 const res = await fetch("/api/characters");
                 const data = await res.json();
                 const readyCharacters = (data.characters || []).filter(
-                    (c: any) => c.status === "ready"
+                    (c: Character) => c.status === "ready"
                 );
                 setCharacters(readyCharacters);
             } catch (err) {

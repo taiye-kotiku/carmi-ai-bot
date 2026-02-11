@@ -74,22 +74,42 @@ export default async function HomePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Fetch specific carousels by prompt
-  const { data: allCarousels } = await supabase
-    .from("generations")
-    .select("id, type, prompt, thumbnail_url, result_urls, created_at")
-    .eq("status", "completed")
-    .eq("type", "carousel")
-    .order("created_at", { ascending: false })
-    .limit(20);
-  
-  // Filter to only the two specific carousels
-  const carouselItems = allCarousels?.filter(item => 
-    item.prompt && (
-      item.prompt.includes("החופשה שלי בדרום אמריקה") ||
-      item.prompt.includes("ליווי משפטי ברכישת נכס נדל")
-    )
-  ).slice(0, 2) || [];
+  // Define static carousel items with uploaded images
+  const legalCarouselSlides = [
+    "/examples/carousels/legal-1.png",
+    "/examples/carousels/legal-2.png",
+    "/examples/carousels/legal-3.png",
+    "/examples/carousels/legal-4.png",
+    "/examples/carousels/legal-5.png",
+  ];
+
+  const southAmericaCarouselSlides = [
+    "/examples/carousels/south-america-1.png",
+    "/examples/carousels/south-america-2.png",
+    "/examples/carousels/south-america-3.png",
+    "/examples/carousels/south-america-4.png",
+    "/examples/carousels/south-america-5.png",
+  ];
+
+  // Create static carousel items
+  const carouselItems = [
+    {
+      id: "legal-carousel",
+      type: "carousel" as const,
+      prompt: "ליווי משפטי ברכישת נכס נדל\"ן",
+      thumbnail_url: legalCarouselSlides[0],
+      result_urls: legalCarouselSlides,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: "south-america-carousel",
+      type: "carousel" as const,
+      prompt: "החופשה שלי בדרום אמריקה",
+      thumbnail_url: southAmericaCarouselSlides[0],
+      result_urls: southAmericaCarouselSlides,
+      created_at: new Date().toISOString(),
+    },
+  ];
 
   // Fetch one video (astronaut video) and some images
   const { data: videoItems } = await supabase
@@ -380,7 +400,7 @@ export default async function HomePage() {
                 </div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
-                <h3 className="text-xl font-bold mb-2">אימון דמות (LoRA)</h3>
+                <h3 className="text-xl font-bold mb-2">אימון דמות </h3>
                 <p className="text-slate-400 text-sm">
                   אמן את ה-AI להכיר את הפנים שלך. צור תוכן בכיכובך בכל סגנון.
                 </p>
@@ -466,26 +486,27 @@ export default async function HomePage() {
                       {item.slides.map((slide, slideIndex) => (
                         <div
                           key={slideIndex}
-                          className="relative aspect-square rounded-lg overflow-hidden border border-white/10 hover:border-emerald-500/50 transition-colors"
+                          className="relative aspect-square rounded-lg overflow-hidden border-2 border-white/20 hover:border-emerald-500/70 transition-all duration-300 shadow-lg hover:shadow-emerald-500/20"
                         >
                           <Image
                             src={slide}
                             alt={`שקופית ${slideIndex + 1}`}
                             fill
-                            className="object-cover"
+                            className="object-cover brightness-100 hover:brightness-110 transition-all duration-300"
                             sizes="(max-width: 640px) 33vw, 25vw"
+                            quality={90}
                           />
                           {/* Slide number badge */}
-                          <div className="absolute top-1 left-1 h-5 w-5 rounded-full bg-slate-950/80 backdrop-blur-md flex items-center justify-center border border-white/20">
-                            <span className="text-[10px] font-bold text-slate-200">{slideIndex + 1}</span>
+                          <div className="absolute top-1 left-1 h-6 w-6 rounded-full bg-slate-950/90 backdrop-blur-md flex items-center justify-center border-2 border-emerald-500/50 shadow-lg">
+                            <span className="text-[11px] font-bold text-emerald-300">{slideIndex + 1}</span>
                           </div>
                         </div>
                       ))}
                     </div>
                     {/* Show prompt as title */}
                     {item.prompt && (
-                      <div className="mb-2">
-                        <p className="text-sm font-medium text-slate-200 line-clamp-2">
+                      <div className="mb-2 px-2">
+                        <p className="text-base font-bold text-white line-clamp-2 bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
                           {item.prompt}
                         </p>
                       </div>

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 interface Character {
     id: string;
@@ -64,8 +65,8 @@ export default function CharacterVideoPage() {
     }, []);
 
     // Credit cost calculation
-    const imageCost = sceneCount * 1;
-    const videoCost = sceneCount * 3;
+    const imageCost = sceneCount * CREDIT_COSTS.image_generation;
+    const videoCost = sceneCount * CREDIT_COSTS.video_generation;
     const totalCost = imageCost + videoCost;
 
     // Main generate handler
@@ -294,8 +295,7 @@ export default function CharacterVideoPage() {
                             ))}
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
-                            כל סצנה = תמונה (1 קרדיט) + וידאו 5 שניות (3
-                            קרדיטים)
+                            כל סצנה = תמונה ({CREDIT_COSTS.image_generation} קרדיטים) + וידאו 5 שניות ({CREDIT_COSTS.video_generation} קרדיטים)
                         </p>
                     </Card>
 

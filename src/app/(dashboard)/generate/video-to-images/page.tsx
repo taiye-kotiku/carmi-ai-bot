@@ -9,6 +9,7 @@ import {
     CheckCircle,
     ImageIcon,
     X,
+    Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 
-/* ───────────────────────────── Types ─────────────────────────────── */
+/* ═══════════════════════════ Types ═══════════════════════════════ */
 
 interface ExtractedImage {
     url: string;
@@ -41,26 +42,147 @@ interface FrameData {
 type SegmenterInstance = any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-/* ────────────────────────── Component ────────────────────────────── */
+/* ═══════════════════ Mask Refinement Utilities ═══════════════════ */
+
+/**
+ * Separable box blur with running-sum — O(width × height) per pass.
+ */
+function boxBlur(
+    input: Float32Array<ArrayBuffer>,
+    width: number,
+    height: number,
+    radius: number
+): Float32Array<ArrayBuffer> {
+    const temp = new Float32Array(input.length);
+    const output = new Float32Array(input.length);
+
+    // ── Horizontal pass ──
+    for (let y = 0; y < height; y++) {
+        const row = y * width;
+        let sum = 0;
+        let count = 0;
+
+        for (let x = 0; x <= radius && x < width; x++) {
+            sum += input[row + x];
+            count++;
+        }
+        temp[row] = sum / count;
+
+        for (let x = 1; x < width; x++) {
+            const addIdx = x + radius;
+            if (addIdx < width) {
+                sum += input[row + addIdx];
+                count++;
+            }
+            const remIdx = x - radius - 1;
+            if (remIdx >= 0) {
+                sum -= input[row + remIdx];
+                count--;
+            }
+            temp[row + x] = sum / count;
+        }
+    }
+
+    // ── Vertical pass ──
+    for (let x = 0; x < width; x++) {
+        let sum = 0;
+        let count = 0;
+
+        for (let y = 0; y <= radius && y < height; y++) {
+            sum += temp[y * width + x];
+            count++;
+        }
+        output[x] = sum / count;
+
+        for (let y = 1; y < height; y++) {
+            const addIdx = y + radius;
+            if (addIdx < height) {
+                sum += temp[addIdx * width + x];
+                count++;
+            }
+            const remIdx = y - radius - 1;
+            if (remIdx >= 0) {
+                sum -= temp[remIdx * width + x];
+                count--;
+            }
+            output[y * width + x] = sum / count;
+        }
+    }
+
+    return output;
+}
+
+/**
+ * Refine a MediaPipe confidence mask for smooth, natural edges.
+ *
+ * "high" — still images (radius 4, 3 passes)
+ * "fast" — video frames  (radius 3, 2 passes)
+ */
+function refineMask(
+    mask: Float32Array,
+    width: number,
+    height: number,
+    quality: "high" | "fast" = "high"
+): Float32Array<ArrayBuffer> {
+    const radius = quality === "high" ? 4 : 3;
+    const passes = quality === "high" ? 3 : 2;
+
+    // 1. Noise cleanup
+    const cleaned = new Float32Array(mask.length);
+    for (let i = 0; i < mask.length; i++) {
+        const v = mask[i];
+        cleaned[i] = v < 0.15 ? 0 : v > 0.85 ? 1 : v;
+    }
+
+    // 2. Multi-pass box blur ≈ Gaussian
+    let result: Float32Array<ArrayBuffer> = cleaned;
+    for (let p = 0; p < passes; p++) {
+        result = boxBlur(result, width, height, radius);
+    }
+
+    // 3. Smoothstep contrast boost — pushes edges towards 0/1 smoothly
+    for (let i = 0; i < result.length; i++) {
+        const v = result[i];
+        result[i] = v < 0.02 ? 0 : v > 0.98 ? 1 : v * v * (3 - 2 * v);
+    }
+
+    return result;
+}
+
+/* ═══════════════════════ Component ═══════════════════════════════ */
 
 export default function VideoToImagesPage() {
+    /* ── State ───────────────────────────────────────────────────── */
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [backgroundImage, setBackgroundImage] = useState<File | null>(null);
     const [backgroundPreview, setBackgroundPreview] = useState<string | null>(
         null
     );
     const [imageCount, setImageCount] = useState<"5" | "10" | "15">("10");
+
+    // Image extraction
     const [loading, setLoading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [progressText, setProgressText] = useState("");
-    const [extractedImages, setExtractedImages] = useState<ExtractedImage[]>([]);
+    const [extractedImages, setExtractedImages] = useState<ExtractedImage[]>(
+        []
+    );
     const [error, setError] = useState<string | null>(null);
+
+    // Video creation
+    const [videoProcessing, setVideoProcessing] = useState(false);
+    const [videoProgress, setVideoProgress] = useState(0);
+    const [videoProgressText, setVideoProgressText] = useState("");
+    const [processedVideoUrl, setProcessedVideoUrl] = useState<string | null>(
+        null
+    );
+
     const videoInputRef = useRef<HTMLInputElement>(null);
     const bgInputRef = useRef<HTMLInputElement>(null);
 
     const { addGenerationNotification } = useNotifications();
 
-    /* ─── File Handlers ─────────────────────────────────────────── */
+    /* ── File Handlers ──────────────────────────────────────────── */
 
     const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -74,7 +196,9 @@ export default function VideoToImagesPage() {
         }
     };
 
-    const handleBackgroundChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleBackgroundChange = (
+        e: React.ChangeEvent<HTMLInputElement>
+    ) => {
         const file = e.target.files?.[0];
         if (file) {
             setBackgroundImage(file);
@@ -91,19 +215,17 @@ export default function VideoToImagesPage() {
         if (bgInputRef.current) bgInputRef.current.value = "";
     };
 
-    /* ─── MediaPipe Initialization ──────────────────────────────── */
+    /* ── MediaPipe Initialization ───────────────────────────────── */
 
     async function initSegmenter(): Promise<SegmenterInstance | null> {
         try {
             const { ImageSegmenter, FilesetResolver } = await import(
                 "@mediapipe/tasks-vision"
             );
-
             const vision = await FilesetResolver.forVisionTasks(
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
             );
-
-            const segmenter = await ImageSegmenter.createFromOptions(vision, {
+            return await ImageSegmenter.createFromOptions(vision, {
                 baseOptions: {
                     modelAssetPath:
                         "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
@@ -113,18 +235,13 @@ export default function VideoToImagesPage() {
                 outputCategoryMask: false,
                 outputConfidenceMasks: true,
             });
-
-            return segmenter;
         } catch (err) {
-            console.warn(
-                "MediaPipe initialisation failed — falling back to sharpness only:",
-                err
-            );
+            console.warn("MediaPipe init failed:", err);
             return null;
         }
     }
 
-    /* ─── Frame Utilities ───────────────────────────────────────── */
+    /* ── Frame Utilities ────────────────────────────────────────── */
 
     function seekTo(video: HTMLVideoElement, time: number): Promise<void> {
         return new Promise((resolve) => {
@@ -153,7 +270,6 @@ export default function VideoToImagesPage() {
         });
     }
 
-    /** Laplacian-variance sharpness score */
     function calculateSharpness(
         ctx: CanvasRenderingContext2D,
         width: number,
@@ -181,77 +297,78 @@ export default function VideoToImagesPage() {
         return sumSq / len - mean * mean;
     }
 
-    /** Run MediaPipe selfie segmentation → returns person confidence 0..1 */
+    /** Person-confidence score from MediaPipe selfie segmentation */
     function getPersonScore(
         segmenter: SegmenterInstance,
         canvas: HTMLCanvasElement
     ): number {
         try {
             const result = segmenter.segment(canvas);
-            if (!result.confidenceMasks || result.confidenceMasks.length === 0)
-                return 0;
+            if (!result.confidenceMasks?.length) return 0;
 
             const mask: Float32Array =
                 result.confidenceMasks[0].getAsFloat32Array();
             let personSum = 0;
             for (let i = 0; i < mask.length; i++) personSum += mask[i];
 
-            // Free GPU resources
             result.confidenceMasks.forEach((m: { close: () => void }) =>
                 m.close()
             );
-
             return personSum / mask.length;
         } catch (err) {
-            console.warn("Segmentation failed for frame:", err);
+            console.warn("Segmentation failed:", err);
             return 0;
         }
     }
 
-    /** Alpha-blend person (from frame) on top of a background image */
-    function compositeWithBackground(
+    /**
+     * Composite person (from frame canvas) onto a background image
+     * using a **refined** mask for smooth, natural edges.
+     */
+    function compositeWithRefinedBg(
         canvas: HTMLCanvasElement,
         segmenter: SegmenterInstance,
-        bgImg: HTMLImageElement
+        bgImg: HTMLImageElement,
+        quality: "high" | "fast" = "high"
     ): void {
-        const width = canvas.width;
-        const height = canvas.height;
+        const w = canvas.width;
+        const h = canvas.height;
         const ctx = canvas.getContext("2d")!;
 
         const result = segmenter.segment(canvas);
-        if (!result.confidenceMasks || result.confidenceMasks.length === 0)
-            return;
+        if (!result.confidenceMasks?.length) return;
 
-        const mask: Float32Array =
+        const rawMask: Float32Array =
             result.confidenceMasks[0].getAsFloat32Array();
+        const mask = refineMask(rawMask, w, h, quality);
 
-        const frameData = ctx.getImageData(0, 0, width, height);
+        const frameData = ctx.getImageData(0, 0, w, h);
 
-        // Draw & get background pixels at same resolution
+        // Background at same resolution
         const bgCanvas = document.createElement("canvas");
-        bgCanvas.width = width;
-        bgCanvas.height = height;
+        bgCanvas.width = w;
+        bgCanvas.height = h;
         const bgCtx = bgCanvas.getContext("2d")!;
-        bgCtx.drawImage(bgImg, 0, 0, width, height);
-        const bgData = bgCtx.getImageData(0, 0, width, height);
+        bgCtx.drawImage(bgImg, 0, 0, w, h);
+        const bgData = bgCtx.getImageData(0, 0, w, h);
 
-        const output = ctx.createImageData(width, height);
+        const output = ctx.createImageData(w, h);
         for (let i = 0; i < mask.length; i++) {
-            const alpha = mask[i]; // person confidence
-            const pi = i * 4;
-            output.data[pi] =
-                frameData.data[pi] * alpha + bgData.data[pi] * (1 - alpha);
-            output.data[pi + 1] =
-                frameData.data[pi + 1] * alpha +
-                bgData.data[pi + 1] * (1 - alpha);
-            output.data[pi + 2] =
-                frameData.data[pi + 2] * alpha +
-                bgData.data[pi + 2] * (1 - alpha);
-            output.data[pi + 3] = 255;
+            const a = mask[i];
+            const j = i * 4;
+            output.data[j] =
+                frameData.data[j] * a + bgData.data[j] * (1 - a);
+            output.data[j + 1] =
+                frameData.data[j + 1] * a + bgData.data[j + 1] * (1 - a);
+            output.data[j + 2] =
+                frameData.data[j + 2] * a + bgData.data[j + 2] * (1 - a);
+            output.data[j + 3] = 255;
         }
         ctx.putImageData(output, 0, 0);
 
-        result.confidenceMasks.forEach((m: { close: () => void }) => m.close());
+        result.confidenceMasks.forEach((m: { close: () => void }) =>
+            m.close()
+        );
     }
 
     /** Load a File into an HTMLImageElement */
@@ -271,7 +388,7 @@ export default function VideoToImagesPage() {
         });
     }
 
-    /* ─── Upload Helper ─────────────────────────────────────────── */
+    /* ── Upload Helper ──────────────────────────────────────────── */
 
     async function uploadFrameWithSignedUrl(
         blob: Blob,
@@ -295,11 +412,126 @@ export default function VideoToImagesPage() {
         });
         if (!uploadRes.ok)
             throw new Error(`שגיאה בהעלאת תמונה ${index + 1}`);
-
         return publicUrl;
     }
 
-    /* ─── Main Process Handler ──────────────────────────────────── */
+    /* ══════════════ Video Creation with BG Replacement ══════════ */
+
+    /**
+     * Create a background-replaced video (WebM) entirely in the browser.
+     *
+     * Phase 1 — Process every frame: seek → draw → segment → refine → composite → store blob
+     * Phase 2 — Record video: play blobs at correct FPS onto canvas → MediaRecorder
+     */
+    async function createBgReplacedVideo(
+        file: File,
+        bgImg: HTMLImageElement,
+        segmenter: SegmenterInstance,
+        onProgress: (pct: number, text: string) => void
+    ): Promise<Blob> {
+        // Load video metadata
+        const video = document.createElement("video");
+        video.preload = "auto";
+        video.muted = true;
+        video.playsInline = true;
+        const objUrl = URL.createObjectURL(file);
+        video.src = objUrl;
+
+        await new Promise<void>((resolve, reject) => {
+            video.onloadedmetadata = () => resolve();
+            video.onerror = () => reject(new Error("Cannot load video"));
+        });
+
+        const duration = video.duration;
+        // Adaptive FPS — keep total frames reasonable
+        const fps = duration > 90 ? 8 : duration > 45 ? 12 : 15;
+        const totalFrames = Math.ceil(duration * fps);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d")!;
+
+        /* ── Phase 1: process all frames ─────────────────────────── */
+        onProgress(0, "מעבד וידאו — שלב 1/2...");
+        const processedBlobs: Blob[] = [];
+
+        for (let i = 0; i < totalFrames; i++) {
+            await seekTo(video, i / fps);
+            ctx.drawImage(video, 0, 0);
+            compositeWithRefinedBg(canvas, segmenter, bgImg, "fast");
+            processedBlobs.push(await canvasToBlob(canvas, 0.85));
+
+            onProgress(
+                Math.floor((i / totalFrames) * 70),
+                `מעבד פריים ${i + 1}/${totalFrames}`
+            );
+        }
+
+        URL.revokeObjectURL(objUrl);
+
+        /* ── Phase 2: record at correct FPS ──────────────────────── */
+        onProgress(70, "יוצר וידאו — שלב 2/2...");
+
+        const mimeType =
+            [
+                "video/webm;codecs=vp9",
+                "video/webm;codecs=vp8",
+                "video/webm",
+            ].find((t) => MediaRecorder.isTypeSupported(t)) || "video/webm";
+
+        const stream = canvas.captureStream(fps);
+        const recorder = new MediaRecorder(stream, {
+            mimeType,
+            videoBitsPerSecond: 5_000_000,
+        });
+
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        return new Promise<Blob>((resolve, reject) => {
+            recorder.onstop = () => {
+                resolve(
+                    new Blob(chunks, { type: mimeType.split(";")[0] })
+                );
+            };
+            recorder.onerror = () =>
+                reject(new Error("MediaRecorder error"));
+
+            recorder.start();
+
+            let idx = 0;
+            const playNext = () => {
+                if (idx >= processedBlobs.length) {
+                    // Small delay so the last frame is captured
+                    setTimeout(() => recorder.stop(), 200);
+                    return;
+                }
+
+                createImageBitmap(processedBlobs[idx]).then((bmp) => {
+                    ctx.drawImage(bmp, 0, 0);
+                    bmp.close();
+                    idx++;
+
+                    onProgress(
+                        70 +
+                            Math.floor(
+                                (idx / processedBlobs.length) * 30
+                            ),
+                        `יוצר וידאו... (${idx}/${processedBlobs.length})`
+                    );
+
+                    setTimeout(playNext, 1000 / fps);
+                });
+            };
+
+            playNext();
+        });
+    }
+
+    /* ══════════════════ Main Process Handler ═════════════════════ */
 
     const handleProcess = async () => {
         if (!videoFile) {
@@ -311,30 +543,29 @@ export default function VideoToImagesPage() {
         setProgress(0);
         setError(null);
         setExtractedImages([]);
+        setProcessedVideoUrl(null);
+
+        let segmenter: SegmenterInstance | null = null;
 
         try {
             const count = parseInt(imageCount);
 
-            /* ── 1. Init MediaPipe ────────────────────────────────── */
+            /* ── 1. Init MediaPipe ───────────────────────────────── */
             setProgressText("טוען מודל MediaPipe לזיהוי אדם...");
             setProgress(5);
-            const segmenter = await initSegmenter();
+            segmenter = await initSegmenter();
 
-            if (segmenter) {
-                setProgressText("מודל MediaPipe נטען ✓");
-            } else {
-                setProgressText(
-                    "ממשיך ללא זיהוי אדם (שימוש בחדות בלבד)"
-                );
-            }
+            setProgressText(
+                segmenter
+                    ? "מודל MediaPipe נטען ✓"
+                    : "ממשיך ללא זיהוי אדם (חדות בלבד)"
+            );
 
-            /* ── 2. Load optional background image ────────────────── */
+            /* ── 2. Load optional background image ───────────────── */
             let bgImg: HTMLImageElement | null = null;
-            if (backgroundImage) {
-                bgImg = await loadImage(backgroundImage);
-            }
+            if (backgroundImage) bgImg = await loadImage(backgroundImage);
 
-            /* ── 3. Extract & score frames ────────────────────────── */
+            /* ── 3. Extract & score frames (NO bg replacement) ──── */
             setProgress(10);
             setProgressText("מחלץ ומנתח פריימים...");
 
@@ -345,143 +576,93 @@ export default function VideoToImagesPage() {
             const objectUrl = URL.createObjectURL(videoFile);
             video.src = objectUrl;
 
-            const frames = await new Promise<FrameData[]>((resolve, reject) => {
-                video.onloadedmetadata = async () => {
-                    try {
-                        const duration = video.duration;
-                        if (!duration || duration < 1)
-                            throw new Error("וידאו קצר מדי או לא תקין");
+            const frames = await new Promise<FrameData[]>(
+                (resolve, reject) => {
+                    video.onloadedmetadata = async () => {
+                        try {
+                            const duration = video.duration;
+                            if (!duration || duration < 1)
+                                throw new Error("וידאו קצר מדי או לא תקין");
 
-                        const samplesToTake = Math.max(
-                            count,
-                            Math.min(count * 3, Math.floor(duration * 2))
-                        );
-                        const interval = duration / (samplesToTake + 1);
-
-                        const canvas = document.createElement("canvas");
-                        const ctx = canvas.getContext("2d")!;
-                        const allFrames: FrameData[] = [];
-
-                        for (let i = 0; i < samplesToTake; i++) {
-                            const timestamp = interval * (i + 1);
-                            await seekTo(video, timestamp);
-
-                            canvas.width = video.videoWidth;
-                            canvas.height = video.videoHeight;
-                            ctx.drawImage(video, 0, 0);
-
-                            const sharpness = calculateSharpness(
-                                ctx,
-                                canvas.width,
-                                canvas.height
+                            const samplesToTake = Math.max(
+                                count,
+                                Math.min(count * 3, Math.floor(duration * 2))
                             );
-                            const personScore = segmenter
-                                ? getPersonScore(segmenter, canvas)
-                                : 0;
+                            const interval = duration / (samplesToTake + 1);
 
-                            // Sharpness + heavy person-presence boost
-                            const combinedScore =
-                                sharpness * (1 + personScore * 2);
+                            const c = document.createElement("canvas");
+                            const cCtx = c.getContext("2d")!;
+                            const allFrames: FrameData[] = [];
 
-                            const blob = await canvasToBlob(canvas);
-                            allFrames.push({
-                                blob,
-                                timestamp,
-                                sharpness,
-                                personScore,
-                                combinedScore,
-                            });
+                            for (let i = 0; i < samplesToTake; i++) {
+                                const ts = interval * (i + 1);
+                                await seekTo(video, ts);
 
-                            const pct =
-                                10 +
-                                Math.floor(
-                                    ((i + 1) / samplesToTake) * 50
+                                c.width = video.videoWidth;
+                                c.height = video.videoHeight;
+                                cCtx.drawImage(video, 0, 0);
+
+                                const sharpness = calculateSharpness(
+                                    cCtx,
+                                    c.width,
+                                    c.height
                                 );
-                            setProgress(pct);
-                            setProgressText(
-                                `מנתח פריים ${i + 1}/${samplesToTake}` +
-                                    (personScore > 0.1
-                                        ? ` (אדם: ${Math.round(
-                                              personScore * 100
-                                          )}%)`
-                                        : "")
-                            );
+                                const personScore = segmenter
+                                    ? getPersonScore(segmenter, c)
+                                    : 0;
+                                const combinedScore =
+                                    sharpness * (1 + personScore * 2);
+
+                                const blob = await canvasToBlob(c);
+                                allFrames.push({
+                                    blob,
+                                    timestamp: ts,
+                                    sharpness,
+                                    personScore,
+                                    combinedScore,
+                                });
+
+                                const pct =
+                                    10 +
+                                    Math.floor(
+                                        ((i + 1) / samplesToTake) * 50
+                                    );
+                                setProgress(pct);
+                                setProgressText(
+                                    `מנתח פריים ${i + 1}/${samplesToTake}` +
+                                        (personScore > 0.1
+                                            ? ` (אדם: ${Math.round(personScore * 100)}%)`
+                                            : "")
+                                );
+                            }
+
+                            URL.revokeObjectURL(objectUrl);
+                            resolve(allFrames);
+                        } catch (err) {
+                            URL.revokeObjectURL(objectUrl);
+                            reject(err);
                         }
-
+                    };
+                    video.onerror = () => {
                         URL.revokeObjectURL(objectUrl);
-                        resolve(allFrames);
-                    } catch (err) {
-                        URL.revokeObjectURL(objectUrl);
-                        reject(err);
-                    }
-                };
-
-                video.onerror = () => {
-                    URL.revokeObjectURL(objectUrl);
-                    reject(
-                        new Error(
-                            "לא ניתן לקרוא את הווידאו. נסה פורמט אחר."
-                        )
-                    );
-                };
-            });
+                        reject(
+                            new Error(
+                                "לא ניתן לקרוא את הווידאו. נסה פורמט אחר."
+                            )
+                        );
+                    };
+                }
+            );
 
             if (frames.length === 0)
                 throw new Error("לא הצלחנו לחלץ תמונות מהווידאו");
 
-            /* ── 4. Select best frames ────────────────────────────── */
+            /* ── 4. Select best frames — upload originals ─────────── */
             frames.sort((a, b) => b.combinedScore - a.combinedScore);
-            let bestFrames = frames.slice(0, count);
-            bestFrames.sort((a, b) => a.timestamp - b.timestamp); // chronological
+            const bestFrames = frames.slice(0, count);
+            bestFrames.sort((a, b) => a.timestamp - b.timestamp);
 
             setProgress(65);
-
-            /* ── 5. Background replacement on selected frames ─────── */
-            if (bgImg && segmenter) {
-                setProgressText("מחליף רקע בתמונות נבחרות...");
-                const processed: FrameData[] = [];
-
-                for (let i = 0; i < bestFrames.length; i++) {
-                    const frame = bestFrames[i];
-
-                    // Reload blob onto a canvas
-                    const bmp = await createImageBitmap(frame.blob);
-                    const canvas = document.createElement("canvas");
-                    canvas.width = bmp.width;
-                    canvas.height = bmp.height;
-                    const ctx = canvas.getContext("2d")!;
-                    ctx.drawImage(bmp, 0, 0);
-
-                    compositeWithBackground(canvas, segmenter, bgImg);
-
-                    const newBlob = await canvasToBlob(canvas);
-                    processed.push({ ...frame, blob: newBlob });
-
-                    const pct =
-                        65 +
-                        Math.floor(
-                            ((i + 1) / bestFrames.length) * 10
-                        );
-                    setProgress(pct);
-                    setProgressText(
-                        `מחליף רקע... (${i + 1}/${bestFrames.length})`
-                    );
-                }
-
-                bestFrames = processed;
-            }
-
-            // Cleanup segmenter
-            if (segmenter) {
-                try {
-                    segmenter.close();
-                } catch {
-                    /* ignore */
-                }
-            }
-
-            /* ── 6. Upload frames ─────────────────────────────────── */
-            setProgress(78);
             setProgressText("מעלה תמונות...");
 
             const uploadedImages: ExtractedImage[] = [];
@@ -493,19 +674,18 @@ export default function VideoToImagesPage() {
                     timestamp: frame.timestamp,
                     score: frame.combinedScore,
                 });
-
                 const pct =
-                    78 +
-                    Math.floor(((i + 1) / bestFrames.length) * 15);
+                    65 +
+                    Math.floor(((i + 1) / bestFrames.length) * 20);
                 setProgress(pct);
                 setProgressText(
                     `מעלה תמונות... (${i + 1}/${bestFrames.length})`
                 );
             }
 
-            /* ── 7. Save generation + deduct credits ──────────────── */
+            /* ── 5. Save generation + deduct credits ─────────────── */
             setProgressText("שומר...");
-            setProgress(95);
+            setProgress(90);
 
             const saveRes = await fetch("/api/generate/video-to-images", {
                 method: "POST",
@@ -527,38 +707,73 @@ export default function VideoToImagesPage() {
                 }
             }
 
-            /* ── Done ─────────────────────────────────────────────── */
+            /* ── 6. Show images immediately ──────────────────────── */
             setProgress(100);
             setProgressText("הושלם!");
             setExtractedImages(uploadedImages);
+            setLoading(false);
             toast.success(
                 `חולצו ${uploadedImages.length} תמונות בהצלחה!`
             );
             addGenerationNotification("image", uploadedImages.length);
+
+            /* ── 7. Create bg-replaced video (background task) ──── */
+            if (bgImg && segmenter) {
+                setVideoProcessing(true);
+                setVideoProgress(0);
+                setVideoProgressText("מתחיל יצירת וידאו עם רקע חדש...");
+
+                try {
+                    const videoBlob = await createBgReplacedVideo(
+                        videoFile,
+                        bgImg,
+                        segmenter,
+                        (pct, text) => {
+                            setVideoProgress(pct);
+                            setVideoProgressText(text);
+                        }
+                    );
+
+                    const blobUrl = URL.createObjectURL(videoBlob);
+                    setProcessedVideoUrl(blobUrl);
+                    toast.success("הוידאו עם החלפת רקע מוכן להורדה!");
+                } catch (err) {
+                    console.error("Video creation failed:", err);
+                    toast.error("שגיאה ביצירת הוידאו עם החלפת רקע");
+                }
+
+                setVideoProcessing(false);
+            }
         } catch (err: unknown) {
             const msg =
                 err instanceof Error ? err.message : "שגיאה לא ידועה";
             setError(msg);
             toast.error(msg);
-        } finally {
             setLoading(false);
+        } finally {
+            if (segmenter)
+                try {
+                    segmenter.close();
+                } catch {
+                    /* ignore */
+                }
         }
     };
 
-    /* ─── Download Helpers ──────────────────────────────────────── */
+    /* ── Download Helpers ────────────────────────────────────────── */
 
     const downloadImage = async (image: ExtractedImage, index: number) => {
         try {
             const response = await fetch(image.url);
             const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
+            const u = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = downloadUrl;
+            a.href = u;
             a.download = `extracted-image-${index + 1}.jpg`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            window.URL.revokeObjectURL(downloadUrl);
+            window.URL.revokeObjectURL(u);
             toast.success(`תמונה ${index + 1} הורדה!`);
         } catch {
             toast.error("שגיאה בהורדה");
@@ -574,11 +789,22 @@ export default function VideoToImagesPage() {
         toast.success("כל התמונות הורדו!");
     };
 
-    /* ─── Render ────────────────────────────────────────────────── */
+    const downloadVideo = () => {
+        if (!processedVideoUrl) return;
+        const a = document.createElement("a");
+        a.href = processedVideoUrl;
+        a.download = "video-background-replaced.webm";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success("וידאו הורד!");
+    };
+
+    /* ════════════════════════ Render ═════════════════════════════ */
 
     return (
         <div className="max-w-4xl mx-auto">
-            {/* Header */}
+            {/* ── Header ─────────────────────────────────────────── */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -592,12 +818,13 @@ export default function VideoToImagesPage() {
                             <Badge variant="secondary">MediaPipe AI</Badge>
                         </div>
                         <p className="text-gray-600">
-                            חילוץ תמונות חדות עם זיהוי אדם + החלפת רקע
+                            חילוץ תמונות חדות + יצירת וידאו עם רקע חדש
                         </p>
                     </div>
                 </div>
             </div>
 
+            {/* ── Form Card ──────────────────────────────────────── */}
             <Card className="mb-8">
                 <CardContent className="p-6 space-y-6">
                     {/* Video Upload */}
@@ -611,7 +838,7 @@ export default function VideoToImagesPage() {
                                 type="file"
                                 accept="video/*"
                                 onChange={handleVideoChange}
-                                disabled={loading}
+                                disabled={loading || videoProcessing}
                                 className="flex-1"
                             />
                             {videoFile && (
@@ -630,10 +857,10 @@ export default function VideoToImagesPage() {
                         </div>
                     </div>
 
-                    {/* Background Image Upload (optional) */}
+                    {/* Background Image (optional — for video creation) */}
                     <div>
                         <Label className="text-sm font-medium mb-2 block">
-                            תמונת רקע (אופציונלי — להחלפת רקע)
+                            תמונת רקע חדשה (אופציונלי)
                         </Label>
                         <div className="flex gap-3 items-center">
                             <Input
@@ -641,7 +868,7 @@ export default function VideoToImagesPage() {
                                 type="file"
                                 accept="image/*"
                                 onChange={handleBackgroundChange}
-                                disabled={loading}
+                                disabled={loading || videoProcessing}
                                 className="flex-1"
                             />
                             {backgroundPreview && (
@@ -661,12 +888,12 @@ export default function VideoToImagesPage() {
                             )}
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                            אם תעלה תמונת רקע, המערכת תחליף את הרקע בתמונות
-                            שבהן זוהה אדם
+                            אם תעלה תמונת רקע, ייווצר גם וידאו חדש עם החלפת
+                            רקע להורדה
                         </p>
                     </div>
 
-                    {/* Image Count Selection */}
+                    {/* Image Count */}
                     <div>
                         <Label className="text-sm font-medium mb-3 block">
                             מספר תמונות לחילוץ
@@ -676,7 +903,7 @@ export default function VideoToImagesPage() {
                             onValueChange={(v) =>
                                 setImageCount(v as "5" | "10" | "15")
                             }
-                            disabled={loading}
+                            disabled={loading || videoProcessing}
                         >
                             <div className="flex gap-4">
                                 {(["5", "10", "15"] as const).map((n) => (
@@ -703,7 +930,7 @@ export default function VideoToImagesPage() {
                     {/* Process Button */}
                     <Button
                         onClick={handleProcess}
-                        disabled={!videoFile || loading}
+                        disabled={!videoFile || loading || videoProcessing}
                         size="lg"
                         className="w-full"
                     >
@@ -720,19 +947,19 @@ export default function VideoToImagesPage() {
                         )}
                     </Button>
 
-                    <div className="flex items-center justify-between pt-2 border-t">
-                        <p className="text-sm text-gray-500">
-                            ✓ זיהוי אדם (MediaPipe) + חדות + החלפת רקע
-                        </p>
-                        <p className="text-sm text-primary font-medium">
+                    <div className="flex items-center justify-between pt-2 border-t text-sm">
+                        <span className="text-gray-500">
+                            ✓ תמונות מקוריות + וידאו עם רקע חדש
+                        </span>
+                        <span className="text-primary font-medium">
                             עלות: {CREDIT_COSTS.video_generation || 25}{" "}
                             קרדיטים
-                        </p>
+                        </span>
                     </div>
                 </CardContent>
             </Card>
 
-            {/* Progress */}
+            {/* ── Image Extraction Progress ──────────────────────── */}
             {loading && (
                 <Card className="mb-8">
                     <CardContent className="p-6">
@@ -749,7 +976,7 @@ export default function VideoToImagesPage() {
                 </Card>
             )}
 
-            {/* Error */}
+            {/* ── Error ──────────────────────────────────────────── */}
             {error && (
                 <Card className="mb-8 border-red-200 bg-red-50">
                     <CardContent className="p-6">
@@ -761,7 +988,7 @@ export default function VideoToImagesPage() {
                 </Card>
             )}
 
-            {/* Extracted Images */}
+            {/* ── Best Images Gallery (NO background replacement) ── */}
             {extractedImages.length > 0 && (
                 <Card className="mb-8">
                     <CardContent className="p-6">
@@ -769,8 +996,8 @@ export default function VideoToImagesPage() {
                             <div className="flex items-center gap-2">
                                 <CheckCircle className="h-5 w-5 text-green-500" />
                                 <h2 className="text-lg font-semibold">
-                                    התמונות שלך מוכנות! (
-                                    {extractedImages.length} תמונות)
+                                    התמונות הטובות ביותר (
+                                    {extractedImages.length})
                                 </h2>
                             </div>
                             <Button
@@ -804,7 +1031,8 @@ export default function VideoToImagesPage() {
                                         </Button>
                                     </div>
                                     <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                                        {index + 1}/{extractedImages.length}
+                                        {index + 1}/
+                                        {extractedImages.length}
                                     </div>
                                     <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
                                         {Math.round(image.timestamp)}s
@@ -816,34 +1044,91 @@ export default function VideoToImagesPage() {
                 </Card>
             )}
 
-            {/* Tips */}
-            {!loading && extractedImages.length === 0 && (
-                <Card className="bg-blue-50 border-blue-100">
+            {/* ── Video Processing Progress ──────────────────────── */}
+            {videoProcessing && (
+                <Card className="mb-8 border-purple-200">
                     <CardContent className="p-6">
-                        <h3 className="font-medium mb-2">
-                            MediaPipe AI — איך זה עובד?
-                        </h3>
-                        <ul className="text-sm text-gray-600 space-y-1">
-                            <li>
-                                • <strong>זיהוי אדם</strong> — המערכת מזהה
-                                פריימים שבהם מופיע אדם ומעדיפה אותם
-                            </li>
-                            <li>
-                                • <strong>ניקוד חדות</strong> — פריימים חדים
-                                ואיכותיים מקבלים ציון גבוה יותר
-                            </li>
-                            <li>
-                                • <strong>החלפת רקע</strong> — העלה תמונת רקע
-                                והמערכת תחליף אוטומטית את הרקע בתמונות הנבחרות
-                            </li>
-                            <li>
-                                • כל העיבוד מתבצע בדפדפן — מהיר ופרטי
-                            </li>
-                            <li>• גודל מקסימלי: 100MB</li>
-                        </ul>
+                        <div className="flex items-center gap-2 mb-4">
+                            <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
+                            <h2 className="text-lg font-semibold text-purple-700">
+                                יוצר וידאו עם רקע חדש...
+                            </h2>
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-gray-600">
+                                {videoProgressText}
+                            </span>
+                            <span className="text-sm font-medium">
+                                {Math.round(videoProgress)}%
+                            </span>
+                        </div>
+                        <Progress value={videoProgress} className="h-3" />
+                        <p className="text-xs text-gray-500 mt-2">
+                            התהליך עשוי לקחת מספר דקות — אפשר להמשיך לצפות
+                            בתמונות
+                        </p>
                     </CardContent>
                 </Card>
             )}
+
+            {/* ── Processed Video Download ───────────────────────── */}
+            {processedVideoUrl && (
+                <Card className="mb-8 border-green-200 bg-green-50/30">
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Video className="h-5 w-5 text-green-600" />
+                                <h2 className="text-lg font-semibold">
+                                    וידאו עם רקע חדש
+                                </h2>
+                            </div>
+                            <Button onClick={downloadVideo}>
+                                <Download className="h-4 w-4 ml-2" />
+                                הורד וידאו
+                            </Button>
+                        </div>
+                        <video
+                            src={processedVideoUrl}
+                            controls
+                            className="w-full rounded-lg border"
+                            style={{ maxHeight: "400px" }}
+                        />
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ── Tips ───────────────────────────────────────────── */}
+            {!loading &&
+                !videoProcessing &&
+                extractedImages.length === 0 && (
+                    <Card className="bg-blue-50 border-blue-100">
+                        <CardContent className="p-6">
+                            <h3 className="font-medium mb-2">
+                                MediaPipe AI — איך זה עובד?
+                            </h3>
+                            <ul className="text-sm text-gray-600 space-y-1">
+                                <li>
+                                    <strong>1. תמונות טובות</strong> — המערכת
+                                    מחלצת את הפריימים החדים ביותר (עם העדפה
+                                    לכאלה שמכילים אדם) ומציגה אותם ללא שינוי
+                                </li>
+                                <li>
+                                    <strong>2. וידאו עם רקע חדש</strong> — אם
+                                    תעלה תמונת רקע, ייווצר וידאו שלם שבו הרקע
+                                    מוחלף בתמונה שבחרת
+                                </li>
+                                <li>
+                                    <strong>3. איכות קצוות</strong> — המערכת
+                                    משתמשת ב-Gaussian blur + Smoothstep על
+                                    מסיכת הסגמנטציה ליצירת קצוות חלקים וטבעיים
+                                </li>
+                                <li>
+                                    • כל העיבוד בדפדפן — מהיר ופרטי | עד 100MB
+                                </li>
+                            </ul>
+                        </CardContent>
+                    </Card>
+                )}
         </div>
     );
 }

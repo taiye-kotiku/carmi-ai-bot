@@ -36,10 +36,24 @@ export async function GET(request: Request) {
             if (processedIds.has(id)) continue;
             
             // Determine category based on filename patterns
-            let category: "tech" | "gradient" | "office" | "abstract" | "dark" | "nature" = "abstract";
+            let category: "tech" | "gradient" | "office" | "abstract" | "dark" | "nature" | "pastel" = "abstract";
             let style = id;
             
-            if (id.startsWith("T_")) {
+            if (id.startsWith("G_")) {
+                const num = parseInt(id.replace("G_", ""));
+                if (!isNaN(num)) {
+                    if (num >= 37 && num <= 42) {
+                        category = "dark";
+                        style = `Dark Gradient ${num}`;
+                    } else if (num >= 29 && num <= 36 || num >= 43) {
+                        category = "pastel";
+                        style = `Pastel ${num}`;
+                    } else {
+                        category = "gradient";
+                        style = `Gradient ${num}`;
+                    }
+                }
+            } else if (id.startsWith("T_")) {
                 const num = parseInt(id.replace("T_", ""));
                 if (!isNaN(num)) {
                     if (num >= 96 && num <= 144) {

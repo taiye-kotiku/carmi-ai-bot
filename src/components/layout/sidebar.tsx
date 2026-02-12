@@ -19,6 +19,7 @@ import {
     CreditCard,
     HelpCircle,
     Palette,
+    Coins,
 } from "lucide-react";
 
 type NavItem =
@@ -54,6 +55,9 @@ const navigation: NavItem[] = [
     { type: "divider", label: "הגדרות" },
     { type: "link", name: "מנוי וקרדיטים", href: "/credits", icon: CreditCard },
     { type: "link", name: "הגדרות חשבון", href: "/settings", icon: Settings },
+
+    // Add this to your nav items in sidebar.tsx
+    { type: "link", name: "קרדיטים", href: "/credits", icon: Coins },
 ];
 
 export function Sidebar() {

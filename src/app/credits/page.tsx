@@ -1,221 +1,276 @@
+// src/app/credits/page.tsx
+
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useCredits } from "@/hooks/use-credits";
+import { CREDIT_PLANS } from "@/lib/cardcom/plans";
+import { CREDIT_COSTS } from "@/lib/config/credits";
+import {
+    Coins,
+    Sparkles,
+    Check,
+    Loader2,
+    CreditCard,
+    Zap,
+    Crown,
+    Building2,
+    Image,
+    Video,
+    Film,
+    Layers,
+    ArrowLeft,
+} from "lucide-react";
 import Link from "next/link";
-import { Loader2, Check, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+
+const PLAN_ICONS: Record<string, React.ReactNode> = {
+    starter: <Zap className="h-6 w-6" />,
+    creator: <Sparkles className="h-6 w-6" />,
+    pro: <Crown className="h-6 w-6" />,
+    business: <Building2 className="h-6 w-6" />,
+};
+
+const PLAN_COLORS: Record<string, string> = {
+    starter: "from-blue-500 to-blue-600",
+    creator: "from-purple-500 to-purple-600",
+    pro: "from-amber-500 to-orange-600",
+    business: "from-emerald-500 to-emerald-600",
+};
+
+const PLAN_BORDER_COLORS: Record<string, string> = {
+    starter: "border-blue-200 hover:border-blue-400",
+    creator: "border-purple-400 ring-2 ring-purple-200",
+    pro: "border-amber-200 hover:border-amber-400",
+    business: "border-emerald-200 hover:border-emerald-400",
+};
 
 export default function CreditsPage() {
-    const [credits, setCredits] = useState<{
-        image_credits: number;
-        reel_credits: number;
-        video_credits: number;
-        carousel_credits: number;
-    } | null>(null);
-    const [loading, setLoading] = useState(true);
-    const router = useRouter();
+    const { credits, loading: creditsLoading } = useCredits();
+    const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchCredits();
-    }, []);
+    const handlePurchase = async (planId: string) => {
+        setLoadingPlan(planId);
+        setError(null);
 
-    async function fetchCredits() {
         try {
-            const res = await fetch("/api/user/credits");
-            if (res.ok) {
-                const data = await res.json();
-                setCredits({
-                    image_credits: data.image_credits ?? 0,
-                    reel_credits: data.reel_credits ?? 0,
-                    video_credits: data.video_credits ?? 0,
-                    carousel_credits: data.carousel_credits ?? 0,
-                });
-            }
-        } catch (error) {
-            console.error("Failed to fetch credits");
-        } finally {
-            setLoading(false);
-        }
-    }
+            const response = await fetch("/api/payments/create-session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ planId }),
+            });
 
-    const plans = [
-        {
-            name: "חינם",
-            price: "₪0",
-            period: "/חודש",
-            popular: false,
-            features: [
-                "10 יצירות תמונה",
-                "2 המרות רילז",
-                "5 קרוסלות",
-            ],
-            cta: "התחל בחינם",
-            href: "/signup",
-        },
-        {
-            name: "סטארטר",
-            price: "₪139",
-            period: "/חודש",
-            popular: true,
-            features: [
-                "250 מודעות / תמונות בחודש",
-                "20 קרוסלות מותאמות",
-                "סוכן קופירייטר מקצועי",
-                "מחולל תמונות יצירתי ומתקדם",
-                "יצירת תוכן מותאם אישית",
-                "עריכת תמונות עם AI",
-                "יצירת סרטונים עם הדמות שלך",
-                "דמות ראשונה בחינם",
-            ],
-            cta: "בחר בתוכנית",
-            href: "/signup?plan=starter",
-        },
-        {
-            name: "יוצר תוכן מקצועי",
-            price: "₪229",
-            period: "/חודש",
-            popular: false,
-            features: [
-                "500 מודעות / תמונות בחודש",
-                "50 קרוסלות מותאמות",
-                "סוכן קופירייטר מקצועי",
-                "מחולל תמונות יצירתי ומתקדם",
-                "יצירת תוכן מותאם אישית",
-                "עריכת תמונות עם AI",
-                "יצירת סרטונים מקצועיים עם הדמות שלך",
-                "2 דמויות ראשונות בחינם",
-            ],
-            cta: "בחר בתוכנית",
-            href: "/signup?plan=pro",
-        },
-    ];
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to create payment session");
+            }
+
+            // Redirect to Cardcom payment page
+            window.location.href = data.url;
+        } catch (err) {
+            setError(
+                err instanceof Error ? err.message : "אירעה שגיאה. נסה שוב."
+            );
+            setLoadingPlan(null);
+        }
+    };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-8" dir="rtl">
-            <div className="max-w-6xl mx-auto">
-                <div className="mb-4 flex items-center justify-between">
-                    <a href="/" className="text-sm text-gray-500 hover:text-gray-700">← חזרה לדף הבית</a>
-                </div>
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-gray-900">מנוי וקרדיטים</h1>
-                    <p className="text-gray-500 mt-1">נהל את הקרדיטים שלך ושדרג את המנוי</p>
-                    <p className="text-amber-600 text-sm mt-2 bg-amber-50 px-3 py-2 rounded-lg">
-                        תצוגה מקדימה – <a href="/login" className="underline font-medium">התחבר</a> כדי לראות את היתרה האמיתית
+        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white" dir="rtl">
+            {/* Header */}
+            <div className="max-w-6xl mx-auto px-4 py-8">
+                <Link
+                    href="/dashboard"
+                    className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-8 transition-colors"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    חזרה לדשבורד
+                </Link>
+
+                {/* Title Section */}
+                <div className="text-center mb-12">
+                    <div className="inline-flex items-center gap-2 bg-purple-100 text-purple-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+                        <Coins className="h-4 w-4" />
+                        <span>חנות קרדיטים</span>
+                    </div>
+                    <h1 className="text-4xl font-bold text-gray-900 mb-3">
+                        קנה קרדיטים ליצירת תוכן
+                    </h1>
+                    <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                        בחר את החבילה שמתאימה לך. הקרדיטים לא פגים ואפשר להשתמש בהם בכל
+                        הכלים.
                     </p>
+
+                    {/* Current Balance */}
+                    <div className="mt-6 inline-flex items-center gap-3 bg-white border border-gray-200 rounded-2xl px-6 py-3 shadow-sm">
+                        <Coins className="h-5 w-5 text-purple-600" />
+                        <span className="text-gray-600">היתרה שלך:</span>
+                        {creditsLoading ? (
+                            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                        ) : (
+                            <span className="text-2xl font-bold text-purple-700">
+                                {credits}
+                            </span>
+                        )}
+                        <span className="text-gray-500">קרדיטים</span>
+                    </div>
                 </div>
 
-                {/* Current balance */}
-                <Card className="mb-8">
-                    <CardContent className="p-6">
-                        <h2 className="text-lg font-semibold mb-4">היתרה הנוכחית</h2>
-                        {loading ? (
-                            <div className="flex items-center gap-2 text-gray-500">
-                                <Loader2 className="h-5 w-5 animate-spin" />
-                                טוען...
-                            </div>
-                        ) : credits ? (
-                            <CreditSlider credits={credits} />
-                        ) : (
-                            <p className="text-gray-500">לא הצלחנו לטעון את היתרה</p>
-                        )}
-                    </CardContent>
-                </Card>
+                {/* Error Message */}
+                {error && (
+                    <div className="max-w-md mx-auto mb-8 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-center">
+                        {error}
+                    </div>
+                )}
 
-                {/* Plans */}
-                <h2 className="text-lg font-semibold mb-4">תוכניות מנוי</h2>
-                <div className="grid md:grid-cols-3 gap-6">
-                    {plans.map((plan) => (
-                        <Card
-                            key={plan.name}
-                            className={`relative ${plan.popular ? "border-purple-500 border-2 shadow-lg" : ""}`}
+                {/* Plans Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+                    {CREDIT_PLANS.map((plan) => (
+                        <div
+                            key={plan.id}
+                            className={`relative bg-white rounded-2xl border-2 p-6 transition-all duration-200 hover:shadow-lg ${PLAN_BORDER_COLORS[plan.id]
+                                } ${plan.popular ? "scale-[1.02] shadow-lg" : ""}`}
                         >
+                            {/* Popular Badge */}
                             {plan.popular && (
-                                <div className="absolute -top-3 right-4 bg-amber-400 text-amber-950 text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1">
-                                    <Zap className="h-3 w-3" />
-                                    הכי פופולרי
+                                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                                    <span className="bg-gradient-to-r from-purple-500 to-purple-600 text-white text-xs font-bold px-4 py-1 rounded-full shadow-md">
+                                        ⭐ הכי פופולרי
+                                    </span>
                                 </div>
                             )}
-                            <CardContent className="p-6">
-                                <h3 className="text-lg font-semibold mb-2">{plan.name}</h3>
-                                <div className="mb-6">
-                                    <span className="text-3xl font-bold">{plan.price}</span>
-                                    <span className="text-gray-500">{plan.period}</span>
-                                </div>
-                                <ul className="space-y-3 mb-6">
-                                    {plan.features.map((f) => (
-                                        <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
-                                            <Check className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                                            <span>{f}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                <Button
-                                    className="w-full"
-                                    variant={plan.popular ? "default" : "outline"}
-                                    asChild
+
+                            {/* Plan Header */}
+                            <div className="text-center mb-6">
+                                <div
+                                    className={`inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-r ${PLAN_COLORS[plan.id]} text-white mb-3`}
                                 >
-                                    <Link href={plan.href}>{plan.cta}</Link>
-                                </Button>
-                            </CardContent>
-                        </Card>
+                                    {PLAN_ICONS[plan.id]}
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900">
+                                    {plan.nameHe}
+                                </h3>
+                                {plan.savings && (
+                                    <span className="inline-block mt-1 text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                                        {plan.savings}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Price */}
+                            <div className="text-center mb-6">
+                                <div className="flex items-baseline justify-center gap-1">
+                                    <span className="text-4xl font-bold text-gray-900">
+                                        ₪{plan.price}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    {plan.credits} קרדיטים • ₪{plan.pricePerCredit.toFixed(2)}{" "}
+                                    לקרדיט
+                                </p>
+                            </div>
+
+                            {/* Features */}
+                            <ul className="space-y-3 mb-6">
+                                {plan.features.map((feature, i) => (
+                                    <li
+                                        key={i}
+                                        className="flex items-center gap-2 text-sm text-gray-600"
+                                    >
+                                        <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                        <span>{feature}</span>
+                                    </li>
+                                ))}
+                            </ul>
+
+                            {/* Purchase Button */}
+                            <button
+                                onClick={() => handlePurchase(plan.id)}
+                                disabled={loadingPlan !== null}
+                                className={`w-full py-3 px-4 rounded-xl font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 ${plan.popular
+                                        ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700 shadow-md hover:shadow-lg"
+                                        : "bg-gray-900 text-white hover:bg-gray-800"
+                                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                                {loadingPlan === plan.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <CreditCard className="h-4 w-4" />
+                                )}
+                                {loadingPlan === plan.id ? "מעבד..." : "רכוש עכשיו"}
+                            </button>
+                        </div>
                     ))}
                 </div>
 
-                <div className="mt-8">
-                    <Button variant="ghost" onClick={() => router.back()} className="text-gray-500">
-                        ← חזרה
-                    </Button>
+                {/* Credit Costs Table */}
+                <div className="max-w-3xl mx-auto">
+                    <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">
+                        כמה עולה כל פעולה?
+                    </h2>
+                    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="grid grid-cols-2 gap-0 divide-y divide-gray-100">
+                            {Object.entries(CREDIT_COSTS).map(([action, cost]) => {
+                                const actionLabels: Record<string, { icon: React.ReactNode; label: string }> = {
+                                    image: { icon: <Image className="h-4 w-4" />, label: "יצירת תמונה" },
+                                    carousel: { icon: <Layers className="h-4 w-4" />, label: "קרוסלה" },
+                                    video: { icon: <Video className="h-4 w-4" />, label: "וידאו מתמונה" },
+                                    text_to_video: { icon: <Film className="h-4 w-4" />, label: "טקסט לוידאו" },
+                                    text_to_image: { icon: <Image className="h-4 w-4" />, label: "טקסט לתמונה" },
+                                    cartoonize: { icon: <Sparkles className="h-4 w-4" />, label: "קריקטורה" },
+                                    character_train: { icon: <Crown className="h-4 w-4" />, label: "אימון דמות" },
+                                    character_image: { icon: <Image className="h-4 w-4" />, label: "תמונת דמות" },
+                                    character_video: { icon: <Video className="h-4 w-4" />, label: "וידאו דמות" },
+                                    reel: { icon: <Film className="h-4 w-4" />, label: "ריל" },
+                                    video_clips: { icon: <Film className="h-4 w-4" />, label: "חיתוך וידאו" },
+                                };
+
+                                const info = actionLabels[action] || {
+                                    icon: <Coins className="h-4 w-4" />,
+                                    label: action,
+                                };
+
+                                return (
+                                    <div
+                                        key={action}
+                                        className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-purple-600">{info.icon}</span>
+                                            <span className="text-gray-700 font-medium">
+                                                {info.label}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-bold text-gray-900">{cost}</span>
+                                            <Coins className="h-3.5 w-3.5 text-amber-500" />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-    );
-}
 
-function CreditSlider({ credits }: { credits: any }) {
-    // Credit costs
-    const creditCosts = {
-        carousel: 3,
-        image: 2,
-        video: 20,
-        reel: 4,
-        videoSlicing: 20,
-    };
-
-    // Current credit values
-    const carouselCredits = credits?.carousel_credits || 0;
-    const imageCredits = credits?.image_credits || 0;
-    const videoCredits = credits?.video_credits || 0;
-    const reelCredits = credits?.reel_credits || 0;
-    const videoSlicingCredits = credits?.reel_credits || 0; // Using reel_credits for video slicing
-
-    // Calculate total available credits (weighted by cost)
-    const totalWeightedCredits = 
-        Math.floor(carouselCredits / creditCosts.carousel) +
-        Math.floor(imageCredits / creditCosts.image) +
-        Math.floor(videoCredits / creditCosts.video) +
-        Math.floor(reelCredits / creditCosts.reel) +
-        Math.floor(videoSlicingCredits / creditCosts.videoSlicing);
-
-    // Maximum possible credits (for display purposes)
-    const maxDisplayCredits = 100; // Adjust based on your needs
-
-    const percentage = Math.min((totalWeightedCredits / maxDisplayCredits) * 100, 100);
-
-    return (
-        <div className="space-y-4">
-            {/* Single Progress Bar */}
-            <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 font-medium">סה"כ קרדיטים זמינים</span>
-                    <span className="font-bold text-lg text-gray-900">{totalWeightedCredits}</span>
-                </div>
-                <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-gradient-to-r from-purple-500 via-blue-500 to-green-500 transition-all"
-                        style={{ width: `${percentage}%` }}
-                    />
+                {/* Trust Section */}
+                <div className="mt-12 text-center text-sm text-gray-500 space-y-2">
+                    <p>🔒 תשלום מאובטח באמצעות Cardcom</p>
+                    <p>הקרדיטים לא פגים • ניתן לרכוש שוב בכל עת</p>
+                    <div className="flex items-center justify-center gap-4 mt-4">
+                        <Link
+                            href="/terms"
+                            className="text-purple-600 hover:text-purple-700 hover:underline"
+                        >
+                            תנאי שימוש
+                        </Link>
+                        <Link
+                            href="/privacy"
+                            className="text-purple-600 hover:text-purple-700 hover:underline"
+                        >
+                            מדיניות פרטיות
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>

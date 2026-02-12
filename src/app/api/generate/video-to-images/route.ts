@@ -267,7 +267,8 @@ async function extractBestFrames(
         
         // Try to use Python script, fallback to external service if not available
         const scriptPath = path.join(process.cwd(), "scripts", "video-processor.py");
-        let stdout: string, stderr: string;
+        let stdout: string = "";
+        let stderr: string = "";
         let usePython = false;
         
         try {
@@ -303,7 +304,7 @@ async function extractBestFrames(
             score: number;
         }> = [];
         
-        if (usePython) {
+        if (usePython && stdout && stderr) {
             // Parse progress from stderr and update job
             const progressLines = stderr.split("\n").filter((line: string) => line.startsWith("PROGRESS:"));
             for (const line of progressLines) {
@@ -430,7 +431,8 @@ async function createMergedVideo(
             .eq("id", jobId);
         
         const scriptPath = path.join(process.cwd(), "scripts", "video-processor.py");
-        let stdout: string, stderr: string;
+        let stdout: string = "";
+        let stderr: string = "";
         let usePython = false;
         
         try {
@@ -460,7 +462,7 @@ async function createMergedVideo(
             usePython = false;
         }
         
-        if (usePython) {
+        if (usePython && stdout && stderr) {
             // Parse progress from stderr and update job
             const progressLines = stderr.split("\n").filter((line: string) => line.startsWith("PROGRESS:"));
             for (const line of progressLines) {

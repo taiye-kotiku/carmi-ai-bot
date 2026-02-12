@@ -109,7 +109,7 @@ export default function VideoToImagesPage() {
                         setMergedVideoUrl(status.result.videoUrl);
                     }
                     toast.success("העיבוד הושלם בהצלחה! 🎉");
-                    addGenerationNotification("video_to_images", status.result.images?.length || 0);
+                    addGenerationNotification("image", status.result.images?.length || 0);
                     break;
                 }
 

@@ -296,7 +296,7 @@ export default async function HomePage() {
                   src="/examples/video-to-images.png"
                   alt="תמונות נבחרות מוידאו"
                   fill
-                  className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500"
+                  className="object-contain opacity-50 group-hover:opacity-70 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 33vw"
                 />
               </div>
@@ -321,7 +321,7 @@ export default async function HomePage() {
                   src="/examples/character-ai.png"
                   alt="אימון דמות"
                   fill
-                  className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500"
+                  className="object-contain opacity-50 group-hover:opacity-70 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 33vw"
                 />
               </div>
@@ -346,7 +346,7 @@ export default async function HomePage() {
                   src="/examples/image-edit.png"
                   alt="עריכת תמונה"
                   fill
-                  className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500"
+                  className="object-contain opacity-50 group-hover:opacity-70 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 33vw"
                 />
               </div>

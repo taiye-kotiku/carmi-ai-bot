@@ -1,18 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { nanoid } from "nanoid";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 import { updateUserStorage } from "@/lib/services/storage";
-import { exec } from "child_process";
-import { promisify } from "util";
-import * as fs from "fs/promises";
-import * as path from "path";
-import * as os from "os";
-// Using Python script for MediaPipe processing (better for serverless)
-
-const execAsync = promisify(exec);
+import sharp from "sharp";
 
 export const maxDuration = 300; // 5 minutes
 
@@ -30,7 +23,6 @@ export async function POST(req: Request) {
             );
         }
 
-        // Receive URLs (video already uploaded to Supabase Storage from client)
         const body = await req.json();
         const videoUrl: string = body.videoUrl;
         const backgroundUrl: string | null = body.backgroundUrl || null;
@@ -66,8 +58,10 @@ export async function POST(req: Request) {
             progress: 0,
         });
 
-        // Process in background
-        processVideoToImagesFromUrl(jobId, user.id, videoUrl, backgroundUrl, imageCount);
+        // Use after() to keep processing alive after response is sent
+        after(
+            processVideoToImages(jobId, user.id, videoUrl, backgroundUrl, imageCount)
+        );
 
         return NextResponse.json({ jobId });
     } catch (error) {
@@ -79,7 +73,9 @@ export async function POST(req: Request) {
     }
 }
 
-async function processVideoToImagesFromUrl(
+// ─── Background Processing ───────────────────────────────────────────
+
+async function processVideoToImages(
     jobId: string,
     userId: string,
     videoUrl: string,
@@ -87,59 +83,54 @@ async function processVideoToImagesFromUrl(
     imageCount: number
 ) {
     try {
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "processing", progress: 10 })
-            .eq("id", jobId);
+        await updateJob(jobId, { status: "processing", progress: 10 });
 
-        // Download video from URL
+        // Step 1: Download video
+        console.log(`[video-to-images] Downloading video: ${videoUrl.substring(0, 80)}...`);
         const videoResponse = await fetch(videoUrl);
         if (!videoResponse.ok) {
-            throw new Error("Failed to download video from URL");
+            throw new Error(`Failed to download video: ${videoResponse.status}`);
         }
         const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+        console.log(`[video-to-images] Video downloaded: ${(videoBuffer.length / 1024 / 1024).toFixed(1)}MB`);
 
-        // Download background image if provided
-        let backgroundBuffer: Buffer | null = null;
-        if (backgroundUrl) {
-            const bgResponse = await fetch(backgroundUrl);
-            if (bgResponse.ok) {
-                backgroundBuffer = Buffer.from(await bgResponse.arrayBuffer());
-            }
+        await updateJob(jobId, { progress: 20 });
+
+        // Step 2: Extract frames using external service
+        console.log(`[video-to-images] Extracting frames...`);
+        const frames = await extractFramesViaService(videoBuffer, imageCount * 3);
+        console.log(`[video-to-images] Got ${frames.length} raw frames`);
+
+        if (frames.length === 0) {
+            throw new Error("לא הצלחנו לחלץ תמונות מהווידאו. נסה וידאו אחר.");
         }
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 20 })
-            .eq("id", jobId);
+        await updateJob(jobId, { progress: 50 });
 
-        // Extract best frames with selfie segmentation
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 30 })
-            .eq("id", jobId);
-        
-        const extractedImages = await extractBestFrames(
-            videoBuffer,
-            imageCount,
-            backgroundBuffer,
-            jobId
-        );
+        // Step 3: Score frames by sharpness and pick the best ones
+        console.log(`[video-to-images] Scoring frames by quality...`);
+        const scoredFrames = await scoreFrames(frames);
+        const bestFrames = scoredFrames
+            .sort((a, b) => b.score - a.score)
+            .slice(0, imageCount);
+        console.log(`[video-to-images] Selected ${bestFrames.length} best frames`);
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 80 })
-            .eq("id", jobId);
+        await updateJob(jobId, { progress: 70 });
 
-        // Upload extracted images
+        // Step 4: Upload best frames to storage
         const imageUrls: Array<{ url: string; timestamp: number; score: number }> = [];
-        for (let i = 0; i < extractedImages.length; i++) {
-            const imageBuffer = extractedImages[i].buffer;
+        for (let i = 0; i < bestFrames.length; i++) {
+            const frame = bestFrames[i];
             const imageFileName = `images/${userId}/${jobId}/extracted_${i + 1}.jpg`;
-            
+
+            // Convert to high-quality JPEG using sharp
+            const jpegBuffer = await sharp(frame.buffer)
+                .jpeg({ quality: 90 })
+                .toBuffer();
+
             await supabaseAdmin.storage
                 .from("content")
-                .upload(imageFileName, imageBuffer, {
+                .upload(imageFileName, jpegBuffer, {
                     contentType: "image/jpeg",
                     upsert: true,
                 });
@@ -150,50 +141,18 @@ async function processVideoToImagesFromUrl(
 
             imageUrls.push({
                 url: urlData.publicUrl,
-                timestamp: extractedImages[i].timestamp,
-                score: extractedImages[i].score,
+                timestamp: frame.timestamp,
+                score: frame.score,
             });
         }
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 70 })
-            .eq("id", jobId);
-        
-        let mergedVideoUrl: string | null = null;
-        if (backgroundBuffer) {
-            // Create merged video with background
-            await supabaseAdmin
-                .from("jobs")
-                .update({ progress: 75 })
-                .eq("id", jobId);
-            
-            const mergedVideoBuffer = await createMergedVideo(
-                videoBuffer,
-                backgroundBuffer,
-                jobId
-            );
+        await updateJob(jobId, { progress: 90 });
 
-            const mergedVideoFileName = `videos/${userId}/${jobId}/merged.mp4`;
-            await supabaseAdmin.storage
-                .from("content")
-                .upload(mergedVideoFileName, mergedVideoBuffer, {
-                    contentType: "video/mp4",
-                    upsert: true,
-                });
-
-            const { data: mergedUrlData } = supabaseAdmin.storage
-                .from("content")
-                .getPublicUrl(mergedVideoFileName);
-
-            mergedVideoUrl = mergedUrlData.publicUrl;
-        }
-
-        // Update storage
-        const totalSize = videoBuffer.length + imageUrls.reduce((sum, img) => sum + 100000, 0);
+        // Step 5: Update storage usage
+        const totalSize = bestFrames.reduce((sum, f) => sum + f.buffer.length, 0);
         await updateUserStorage(userId, totalSize);
 
-        // Complete job
+        // Step 6: Complete job
         await supabaseAdmin
             .from("jobs")
             .update({
@@ -201,29 +160,31 @@ async function processVideoToImagesFromUrl(
                 progress: 100,
                 result: {
                     images: imageUrls,
-                    videoUrl: mergedVideoUrl,
+                    videoUrl: null,
                 },
             })
             .eq("id", jobId);
 
         // Save generation record
-        const generationId = nanoid();
         await supabaseAdmin.from("generations").insert({
-            id: generationId,
+            id: nanoid(),
             user_id: userId,
-            type: backgroundBuffer ? "video" : "image",
+            type: "image",
             feature: "video_to_images",
-            prompt: `Extracted ${imageCount} best frames from video`,
+            prompt: `Extracted ${bestFrames.length} best frames from video`,
             result_urls: imageUrls.map((img) => img.url),
             thumbnail_url: imageUrls[0]?.url,
             status: "completed",
             job_id: jobId,
             completed_at: new Date().toISOString(),
         });
-    } catch (error: unknown) {
-        const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
 
+        console.log(`[video-to-images] Job ${jobId} completed with ${imageUrls.length} images`);
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[video-to-images] Job ${jobId} failed:`, errorMessage);
+
+        // Refund credits
         await addCredits(
             userId,
             CREDIT_COSTS.video_generation,
@@ -238,305 +199,157 @@ async function processVideoToImagesFromUrl(
     }
 }
 
-async function extractBestFrames(
+// ─── Frame Extraction via External Service ───────────────────────────
+
+async function extractFramesViaService(
     videoBuffer: Buffer,
-    count: number,
-    backgroundBuffer: Buffer | null,
-    jobId: string
-): Promise<Array<{ buffer: Buffer; timestamp: number; score: number }>> {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "video-process-"));
-    const videoPath = path.join(tempDir, "input_video.mp4");
-    const framesDir = path.join(tempDir, "frames");
-    
-    try {
-        // Write video to temp file
-        await fs.writeFile(videoPath, videoBuffer);
-        await fs.mkdir(framesDir, { recursive: true });
-        
-        // Use Python script for MediaPipe processing
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 35 })
-            .eq("id", jobId);
-        
-        // Try to use Python script, fallback to external service if not available
-        const scriptPath = path.join(process.cwd(), "scripts", "video-processor.py");
-        let stdout: string = "";
-        let stderr: string = "";
-        let usePython = false;
-        
+    frameCount: number
+): Promise<Array<{ buffer: Buffer; timestamp: number }>> {
+    // Use the existing Render frame extractor service
+    const renderApiUrl = (
+        process.env.VIDEO_PROCESSOR_API_URL ||
+        process.env.RENDER_API_URL ||
+        "https://frame-extractor-oou7.onrender.com"
+    ).replace(/\/$/, "");
+
+    console.log(`[frame-extract] Using service: ${renderApiUrl}`);
+
+    const videoBase64 = videoBuffer.toString("base64");
+
+    // Try multiple endpoints (the service might use different paths)
+    const endpoints = ["/extract-frames", "/extract-reel", "/frames"];
+
+    for (const endpoint of endpoints) {
         try {
-            // Check if Python script exists
-            await fs.access(scriptPath);
-            
-            // Try python3 first
-            try {
-                ({ stdout, stderr } = await execAsync(
-                    `python3 "${scriptPath}" extract "${videoPath}" ${count} "${framesDir}"`
-                ));
-                usePython = true;
-            } catch (error) {
-                // Fallback to python
+            const fullUrl = `${renderApiUrl}${endpoint}`;
+            console.log(`[frame-extract] Trying: ${fullUrl}`);
+
+            const response = await fetch(fullUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    video_base64: videoBase64,
+                    frame_count: frameCount,
+                    fps: 1,
+                }),
+                signal: AbortSignal.timeout(120000), // 2 minutes timeout
+            });
+
+            if (!response.ok) {
+                if (response.status === 404) continue;
+                const errText = await response.text();
+                console.warn(`[frame-extract] ${endpoint} returned ${response.status}: ${errText}`);
+                continue;
+            }
+
+            const data = await response.json();
+            const rawFrames = data.frames || data.images || [];
+
+            if (rawFrames.length === 0) {
+                console.warn(`[frame-extract] ${endpoint} returned 0 frames`);
+                continue;
+            }
+
+            console.log(`[frame-extract] Success via ${endpoint}: ${rawFrames.length} frames`);
+
+            // Convert base64 frames to buffers
+            const frames: Array<{ buffer: Buffer; timestamp: number }> = [];
+            for (let i = 0; i < rawFrames.length; i++) {
+                const frame = rawFrames[i];
+                const base64 = typeof frame === "string"
+                    ? (frame.includes(",") ? frame.split(",")[1] : frame)
+                    : (frame.data || frame);
+
                 try {
-                    ({ stdout, stderr } = await execAsync(
-                        `python "${scriptPath}" extract "${videoPath}" ${count} "${framesDir}"`
-                    ));
-                    usePython = true;
-                } catch (fallbackError) {
-                    console.log("Python not available, will use external service");
-                    usePython = false;
+                    const buf = Buffer.from(base64, "base64");
+                    if (buf.length > 1000) {
+                        // Sanity check - valid image should be > 1KB
+                        frames.push({
+                            buffer: buf,
+                            timestamp: frame.timestamp || i,
+                        });
+                    }
+                } catch {
+                    // Skip invalid frames
                 }
             }
+
+            if (frames.length > 0) return frames;
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[frame-extract] ${endpoint} error: ${msg}`);
+        }
+    }
+
+    throw new Error(
+        "שירות חילוץ תמונות לא זמין. נא לוודא ש-RENDER_API_URL מוגדר נכון."
+    );
+}
+
+// ─── Frame Quality Scoring ──────────────────────────────────────────
+
+async function scoreFrames(
+    frames: Array<{ buffer: Buffer; timestamp: number }>
+): Promise<Array<{ buffer: Buffer; timestamp: number; score: number }>> {
+    const scored: Array<{ buffer: Buffer; timestamp: number; score: number }> = [];
+
+    for (const frame of frames) {
+        try {
+            const score = await calculateSharpness(frame.buffer);
+            scored.push({ ...frame, score });
         } catch {
-            console.log("Python script not found, will use external service");
-            usePython = false;
+            // Skip frames that can't be processed
+            scored.push({ ...frame, score: 0 });
         }
-        
-        let bestFrames: Array<{
-            buffer: Buffer;
-            timestamp: number;
-            score: number;
-        }> = [];
-        
-        if (usePython && stdout && stderr) {
-            // Parse progress from stderr and update job
-            const progressLines = stderr.split("\n").filter((line: string) => line.startsWith("PROGRESS:"));
-            for (const line of progressLines) {
-                const progress = parseInt(line.split(":")[1]);
-                // Map Python progress (0-100) to our range (35-60)
-                const mappedProgress = 35 + Math.floor(progress * 0.25);
-                await supabaseAdmin
-                    .from("jobs")
-                    .update({ progress: mappedProgress })
-                    .eq("id", jobId);
-            }
-            
-            // Parse results from stdout
-            const results = JSON.parse(stdout);
-            
-            // Read extracted frames
-            for (const result of results) {
-                const frameBuffer = await fs.readFile(result.path);
-                bestFrames.push({
-                    buffer: frameBuffer,
-                    timestamp: result.timestamp,
-                    score: result.score,
-                });
-            }
-        } else {
-            // Use external Python service for MediaPipe processing
-            await supabaseAdmin
-                .from("jobs")
-                .update({ progress: 40 })
-                .eq("id", jobId);
-            
-            // Use VIDEO_PROCESSOR_API_URL if available, otherwise use RENDER_API_URL
-            const processorApiUrl = process.env.VIDEO_PROCESSOR_API_URL || process.env.RENDER_API_URL || "https://video-processor-service.onrender.com";
-            const videoBase64 = videoBuffer.toString("base64");
-            
-            try {
-                const response = await fetch(`${processorApiUrl}/process-video`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        video_base64: videoBase64,
-                        image_count: count,
-                        action: "extract_frames",
-                    }),
-                    signal: AbortSignal.timeout(300000), // 5 minutes timeout
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`External service failed: ${response.status} - ${errorText}`);
-                }
-                
-                const data = await response.json();
-                
-                // Update progress
-                if (data.progress) {
-                    await supabaseAdmin
-                        .from("jobs")
-                        .update({ progress: 35 + Math.floor(data.progress * 0.25) })
-                        .eq("id", jobId);
-                }
-                
-                const frames = data.frames || data.images || [];
-                
-                // Process frames
-                for (let i = 0; i < Math.min(frames.length, count); i++) {
-                    const frame = frames[i];
-                    const frameBase64 = typeof frame === "string" 
-                        ? frame.replace(/^data:image\/\w+;base64,/, "")
-                        : frame.data || frame;
-                    const frameBuffer = Buffer.from(frameBase64, "base64");
-                    
-                    bestFrames.push({
-                        buffer: frameBuffer,
-                        timestamp: frame.timestamp || i,
-                        score: frame.score || (100 - i),
-                    });
-                }
-            } catch (error) {
-                console.error("External service error:", error);
-                throw new Error(
-                    `עיבוד וידאו נכשל: ${error instanceof Error ? error.message : "שגיאה לא ידועה"}. נא לוודא ש-VIDEO_PROCESSOR_API_URL מוגדר או ש-Python MediaPipe מותקן בשרת.`
-                );
-            }
+    }
+
+    return scored;
+}
+
+/**
+ * Calculate image sharpness using Laplacian variance via sharp.
+ * Higher variance = sharper image = better quality frame.
+ */
+async function calculateSharpness(imageBuffer: Buffer): Promise<number> {
+    try {
+        // Get grayscale raw pixels
+        const { data, info } = await sharp(imageBuffer)
+            .grayscale()
+            .resize(320, 240, { fit: "inside" }) // Downsize for speed
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const { width, height } = info;
+        const pixels = data;
+
+        // Calculate variance (proxy for sharpness)
+        let sum = 0;
+        let sumSq = 0;
+        const len = pixels.length;
+
+        for (let i = 0; i < len; i++) {
+            const v = pixels[i];
+            sum += v;
+            sumSq += v * v;
         }
-        
-        return bestFrames;
-    } finally {
-        // Cleanup temp files
-        await fs.rm(tempDir, { recursive: true, force: true });
+
+        const mean = sum / len;
+        const variance = sumSq / len - mean * mean;
+
+        return variance;
+    } catch {
+        return 0;
     }
 }
 
-// Helper functions removed - using Python script instead
+// ─── Helpers ────────────────────────────────────────────────────────
 
-async function createMergedVideo(
-    videoBuffer: Buffer,
-    backgroundBuffer: Buffer,
-    jobId: string
-): Promise<Buffer> {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "video-merge-"));
-    const videoPath = path.join(tempDir, "input_video.mp4");
-    const backgroundPath = path.join(tempDir, "background.jpg");
-    const framesDir = path.join(tempDir, "frames");
-    const mergedFramesDir = path.join(tempDir, "merged_frames");
-    const outputPath = path.join(tempDir, "merged_video.mp4");
-    
-    try {
-        // Write files to temp directory
-        await fs.writeFile(videoPath, videoBuffer);
-        await fs.writeFile(backgroundPath, backgroundBuffer);
-        await fs.mkdir(framesDir, { recursive: true });
-        await fs.mkdir(mergedFramesDir, { recursive: true });
-        
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 77 })
-            .eq("id", jobId);
-        
-        // Use Python script for video merging with MediaPipe
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 77 })
-            .eq("id", jobId);
-        
-        const scriptPath = path.join(process.cwd(), "scripts", "video-processor.py");
-        let stdout: string = "";
-        let stderr: string = "";
-        let usePython = false;
-        
-        try {
-            // Check if Python script exists
-            await fs.access(scriptPath);
-            
-            // Try python3 first
-            try {
-                ({ stdout, stderr } = await execAsync(
-                    `python3 "${scriptPath}" merge "${videoPath}" "${backgroundPath}" "${outputPath}"`
-                ));
-                usePython = true;
-            } catch (error) {
-                // Fallback to python
-                try {
-                    ({ stdout, stderr } = await execAsync(
-                        `python "${scriptPath}" merge "${videoPath}" "${backgroundPath}" "${outputPath}"`
-                    ));
-                    usePython = true;
-                } catch (fallbackError) {
-                    console.log("Python not available for video merging");
-                    usePython = false;
-                }
-            }
-        } catch {
-            console.log("Python script not found for video merging");
-            usePython = false;
-        }
-        
-        if (usePython && stdout && stderr) {
-            // Parse progress from stderr and update job
-            const progressLines = stderr.split("\n").filter((line: string) => line.startsWith("PROGRESS:"));
-            for (const line of progressLines) {
-                const progress = parseInt(line.split(":")[1]);
-                // Map Python progress (0-100) to our range (77-95)
-                const mappedProgress = 77 + Math.floor(progress * 0.18);
-                await supabaseAdmin
-                    .from("jobs")
-                    .update({ progress: mappedProgress })
-                    .eq("id", jobId);
-            }
-        } else {
-            // Use external Python service for video merging
-            await supabaseAdmin
-                .from("jobs")
-                .update({ progress: 80 })
-                .eq("id", jobId);
-            
-            const processorApiUrl = process.env.VIDEO_PROCESSOR_API_URL || process.env.RENDER_API_URL || "https://video-processor-service.onrender.com";
-            const videoBase64 = videoBuffer.toString("base64");
-            const backgroundBase64 = backgroundBuffer.toString("base64");
-            
-            try {
-                const response = await fetch(`${processorApiUrl}/process-video`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        video_base64: videoBase64,
-                        background_base64: backgroundBase64,
-                        action: "merge_video",
-                    }),
-                    signal: AbortSignal.timeout(300000), // 5 minutes timeout
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`External service failed: ${response.status} - ${errorText}`);
-                }
-                
-                const data = await response.json();
-                
-                // Update progress
-                if (data.progress) {
-                    await supabaseAdmin
-                        .from("jobs")
-                        .update({ progress: 80 + Math.floor(data.progress * 0.15) })
-                        .eq("id", jobId);
-                }
-                
-                // Download merged video
-                if (data.video_url) {
-                    const videoResponse = await fetch(data.video_url);
-                    const mergedVideoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-                    await fs.writeFile(outputPath, mergedVideoBuffer);
-                } else if (data.video_base64) {
-                    const videoBase64Data = data.video_base64.replace(/^data:video\/\w+;base64,/, "");
-                    const mergedVideoBuffer = Buffer.from(videoBase64Data, "base64");
-                    await fs.writeFile(outputPath, mergedVideoBuffer);
-                } else {
-                    throw new Error("No video data in response");
-                }
-                
-                await supabaseAdmin
-                    .from("jobs")
-                    .update({ progress: 95 })
-                    .eq("id", jobId);
-            } catch (error) {
-                console.error("External service error:", error);
-                throw new Error(
-                    `מיזוג וידאו נכשל: ${error instanceof Error ? error.message : "שגיאה לא ידועה"}. נא לוודא ש-VIDEO_PROCESSOR_API_URL מוגדר או ש-Python MediaPipe מותקן בשרת.`
-                );
-            }
-        }
-        
-        // Read merged video
-        const mergedVideoBuffer = await fs.readFile(outputPath);
-        
-        return mergedVideoBuffer;
-    } finally {
-        // Cleanup temp files
-        await fs.rm(tempDir, { recursive: true, force: true });
-    }
+async function updateJob(
+    jobId: string,
+    updates: Record<string, unknown>
+) {
+    await supabaseAdmin
+        .from("jobs")
+        .update(updates)
+        .eq("id", jobId);
 }

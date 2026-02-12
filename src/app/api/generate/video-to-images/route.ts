@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
         // Deduct credits
         try {
-            await deductCredits(user.id, "video_generation");
+            await deductCredits(user.id, "video_to_images");
         } catch (err) {
             return NextResponse.json(
                 {

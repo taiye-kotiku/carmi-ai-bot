@@ -9,6 +9,7 @@ import {
     CheckCircle,
     ImageIcon,
     X,
+    Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -636,58 +637,112 @@ export default function VideoToImagesPage() {
             {/* Form */}
             <Card className="mb-8">
                 <CardContent className="p-6 space-y-6">
-                    {/* Video Upload */}
+                    {/* Video Upload Button */}
                     <div>
-                        <Label className="text-sm font-medium mb-2 block">העלה וידאו (עד 100MB)</Label>
-                        <div className="flex gap-3">
-                            <Input
-                                ref={videoInputRef}
-                                type="file"
-                                accept="video/*"
-                                onChange={handleVideoChange}
+                        <Label className="text-sm font-medium mb-2 block">סרטון מקור</Label>
+                        <input
+                            ref={videoInputRef}
+                            type="file"
+                            accept="video/*"
+                            onChange={handleVideoChange}
+                            disabled={loading}
+                            className="hidden"
+                        />
+                        {!videoFile ? (
+                            <button
+                                type="button"
+                                onClick={() => videoInputRef.current?.click()}
                                 disabled={loading}
-                                className="flex-1"
-                            />
-                            {videoFile && (
-                                <Badge variant="outline" className="flex items-center gap-2">
-                                    <CheckCircle className="h-4 w-4" />
-                                    {(videoFile.size / (1024 * 1024)).toFixed(1)} MB
-                                </Badge>
-                            )}
-                        </div>
+                                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Upload className="h-8 w-8 text-gray-400 mx-auto mb-3" />
+                                <p className="text-sm font-medium text-gray-700">לחץ להעלאת סרטון</p>
+                                <p className="text-xs text-gray-500 mt-1">MP4, MOV, WebM — עד 100MB</p>
+                            </button>
+                        ) : (
+                            <div className="flex items-center justify-between border rounded-xl p-4 bg-green-50 border-green-200">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                        <Film className="h-5 w-5 text-green-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-800 truncate max-w-[200px]">
+                                            {videoFile.name}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            {(videoFile.size / (1024 * 1024)).toFixed(1)} MB
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setVideoFile(null);
+                                        if (videoInputRef.current) videoInputRef.current.value = "";
+                                    }}
+                                    disabled={loading}
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Background Image */}
+                    {/* Background Image Upload Button */}
                     <div>
-                        <Label className="text-sm font-medium mb-2 block">תמונת רקע חדשה (אופציונלי)</Label>
-                        <div className="flex gap-3 items-center">
-                            <Input
-                                ref={bgInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handleBackgroundChange}
+                        <Label className="text-sm font-medium mb-2 block">
+                            תמונת רקע חדשה
+                            <span className="text-gray-400 font-normal mr-1">(אופציונלי)</span>
+                        </Label>
+                        <input
+                            ref={bgInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleBackgroundChange}
+                            disabled={loading}
+                            className="hidden"
+                        />
+                        {!backgroundImage ? (
+                            <button
+                                type="button"
+                                onClick={() => bgInputRef.current?.click()}
                                 disabled={loading}
-                                className="flex-1"
-                            />
-                            {backgroundPreview && (
-                                <div className="relative">
-                                    <img
-                                        src={backgroundPreview}
-                                        alt="Background"
-                                        className="h-12 w-12 rounded-lg object-cover border"
-                                    />
-                                    <button
-                                        onClick={clearBackground}
-                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5"
-                                    >
-                                        <X className="h-3 w-3" />
-                                    </button>
+                                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-purple-400 hover:bg-purple-50/50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <ImageIcon className="h-7 w-7 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm font-medium text-gray-700">לחץ להעלאת תמונת רקע</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    תקבל סט נוסף של תמונות עם הרקע החדש
+                                </p>
+                            </button>
+                        ) : (
+                            <div className="flex items-center justify-between border rounded-xl p-4 bg-purple-50 border-purple-200">
+                                <div className="flex items-center gap-3">
+                                    {backgroundPreview && (
+                                        <img
+                                            src={backgroundPreview}
+                                            alt="Background"
+                                            className="h-10 w-10 rounded-lg object-cover border"
+                                        />
+                                    )}
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-800 truncate max-w-[200px]">
+                                            {backgroundImage.name}
+                                        </p>
+                                        <p className="text-xs text-purple-600">תמונת רקע נבחרה</p>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                            אם תעלה תמונת רקע, תקבל גם סט תמונות עם הרקע החדש
-                        </p>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={clearBackground}
+                                    disabled={loading}
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Image Count */}
@@ -733,7 +788,7 @@ export default function VideoToImagesPage() {
                                 : `✓ ${imageCount} תמונות מקוריות`}
                         </span>
                         <span className="text-primary font-medium">
-                            עלות: {CREDIT_COSTS.video_generation || 25} קרדיטים
+                            עלות: {CREDIT_COSTS.video_to_images} קרדיטים
                         </span>
                     </div>
                 </CardContent>

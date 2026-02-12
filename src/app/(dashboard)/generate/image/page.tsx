@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Download, Loader2, Wand2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { Sparkles, Download, Loader2, Wand2, Upload, X, ImageIcon, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,18 +24,85 @@ const STYLES = [
     { value: "minimal", label: "מינימליסטי", icon: "◻️" },
 ];
 
+type Mode = "create" | "edit";
+
+/** Resize an image file to max dimension, return base64 data URL */
+function resizeImage(file: File, maxDim = 1024): Promise<{ base64: string; mimeType: string }> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                    const scale = maxDim / Math.max(width, height);
+                    width = Math.round(width * scale);
+                    height = Math.round(height * scale);
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d")!;
+                ctx.drawImage(img, 0, 0, width, height);
+                const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+                const quality = mimeType === "image/jpeg" ? 0.85 : undefined;
+                const dataUrl = canvas.toDataURL(mimeType, quality);
+                // Strip the data:...;base64, prefix
+                const base64 = dataUrl.split(",")[1];
+                resolve({ base64, mimeType });
+            };
+            img.onerror = () => reject(new Error("Failed to load image"));
+            img.src = reader.result as string;
+        };
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+    });
+}
+
 export default function ImageGenerationPage() {
+    const [mode, setMode] = useState<Mode>("create");
     const [prompt, setPrompt] = useState("");
     const [aspectRatio, setAspectRatio] = useState("1:1");
     const [style, setStyle] = useState("realistic");
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<string | null>(null);
 
+    // Image edit state
+    const [sourceImage, setSourceImage] = useState<File | null>(null);
+    const [sourcePreview, setSourcePreview] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const { addGenerationNotification } = useNotifications();
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            toast.error("נא להעלות קובץ תמונה בלבד");
+            return;
+        }
+        if (file.size > 20 * 1024 * 1024) {
+            toast.error("גודל הקובץ חייב להיות עד 20MB");
+            return;
+        }
+        setSourceImage(file);
+        setSourcePreview(URL.createObjectURL(file));
+    };
+
+    const clearSourceImage = () => {
+        setSourceImage(null);
+        if (sourcePreview) URL.revokeObjectURL(sourcePreview);
+        setSourcePreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
 
     const handleGenerate = async () => {
         if (!prompt.trim()) {
             toast.error("נא להזין תיאור לתמונה");
+            return;
+        }
+        if (mode === "edit" && !sourceImage) {
+            toast.error("נא להעלות תמונה לעריכה");
             return;
         }
 
@@ -43,10 +110,19 @@ export default function ImageGenerationPage() {
         setResult(null);
 
         try {
+            // Build request body
+            const body: Record<string, string> = { prompt, aspectRatio, style };
+
+            if (mode === "edit" && sourceImage) {
+                const { base64, mimeType } = await resizeImage(sourceImage);
+                body.imageBase64 = base64;
+                body.imageMimeType = mimeType;
+            }
+
             const response = await fetch("/api/generate/image", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt, aspectRatio, style }),
+                body: JSON.stringify(body),
             });
 
             if (!response.ok) {
@@ -66,7 +142,7 @@ export default function ImageGenerationPage() {
 
                 if (status.status === "completed") {
                     setResult(status.result.url);
-                    toast.success("!התמונה נוצרה 🎨");
+                    toast.success(mode === "edit" ? "!התמונה נערכה בהצלחה" : "!התמונה נוצרה 🎨");
                     addGenerationNotification("image");
                     break;
                 }
@@ -93,7 +169,7 @@ export default function ImageGenerationPage() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "generated-image.png";
+            a.download = mode === "edit" ? "edited-image.png" : "generated-image.png";
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -113,12 +189,42 @@ export default function ImageGenerationPage() {
                         <Sparkles className="h-6 w-6 text-purple-600" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold">יצירת תמונה</h1>
+                        <h1 className="text-2xl font-bold">
+                            {mode === "edit" ? "עריכת תמונה" : "יצירת תמונה"}
+                        </h1>
                         <p className="text-gray-600">
-                            תאר את התמונה שאתה רוצה והבינה המלאכותית תיצור אותה
+                            {mode === "edit"
+                                ? "העלה תמונה ותאר מה לשנות — הבינה המלאכותית תערוך אותה"
+                                : "תאר את התמונה שאתה רוצה והבינה המלאכותית תיצור אותה"}
                         </p>
                     </div>
                 </div>
+            </div>
+
+            {/* Mode Toggle */}
+            <div className="flex gap-2 mb-6">
+                <button
+                    onClick={() => { setMode("create"); clearSourceImage(); }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        mode === "create"
+                            ? "bg-purple-600 text-white shadow-md"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                >
+                    <ImageIcon className="h-4 w-4" />
+                    יצירה חדשה
+                </button>
+                <button
+                    onClick={() => setMode("edit")}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        mode === "edit"
+                            ? "bg-purple-600 text-white shadow-md"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                >
+                    <PenLine className="h-4 w-4" />
+                    עריכת תמונה
+                </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -126,41 +232,95 @@ export default function ImageGenerationPage() {
                 <div className="space-y-6">
                     <Card>
                         <CardContent className="p-6 space-y-6">
+                            {/* Image Upload (edit mode only) */}
+                            {mode === "edit" && (
+                                <div>
+                                    <Label className="text-base">תמונת מקור</Label>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageChange}
+                                        disabled={loading}
+                                        className="hidden"
+                                    />
+                                    {!sourceImage ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={loading}
+                                            className="mt-2 w-full border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-purple-400 hover:bg-purple-50/50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-3" />
+                                            <p className="text-sm font-medium text-gray-700">לחץ להעלאת תמונה</p>
+                                            <p className="text-xs text-gray-500 mt-1">JPG, PNG, WebP — עד 20MB</p>
+                                        </button>
+                                    ) : (
+                                        <div className="mt-2 relative rounded-xl overflow-hidden border border-purple-200">
+                                            <img
+                                                src={sourcePreview!}
+                                                alt="Source"
+                                                className="w-full max-h-[240px] object-contain bg-gray-50"
+                                            />
+                                            <button
+                                                onClick={clearSourceImage}
+                                                disabled={loading}
+                                                className="absolute top-2 left-2 p-1.5 bg-white/90 rounded-full shadow hover:bg-red-50 transition-colors"
+                                            >
+                                                <X className="h-4 w-4 text-gray-600" />
+                                            </button>
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-3 py-1.5 truncate">
+                                                {sourceImage.name} — {(sourceImage.size / (1024 * 1024)).toFixed(1)} MB
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div>
                                 <Label htmlFor="prompt" className="text-base">
-                                    תיאור התמונה
+                                    {mode === "edit" ? "מה לשנות בתמונה?" : "תיאור התמונה"}
                                 </Label>
                                 <Textarea
                                     id="prompt"
-                                    placeholder="לדוגמה: חתול כתום יושב על ספה כחולה, אור חם של שקיעה נכנס מהחלון..."
+                                    placeholder={
+                                        mode === "edit"
+                                            ? "לדוגמה: שנה את הרקע לחוף ים, הוסף משקפי שמש, הפוך לציור שמן..."
+                                            : "לדוגמה: חתול כתום יושב על ספה כחולה, אור חם של שקיעה נכנס מהחלון..."
+                                    }
                                     value={prompt}
                                     onChange={(e) => setPrompt(e.target.value)}
                                     rows={4}
                                     className="mt-2"
                                 />
                                 <p className="text-sm text-gray-500 mt-1">
-                                    ככל שהתיאור מפורט יותר, התוצאה תהיה טובה יותר
+                                    {mode === "edit"
+                                        ? "תאר את השינויים שתרצה לבצע בתמונה"
+                                        : "ככל שהתיאור מפורט יותר, התוצאה תהיה טובה יותר"}
                                 </p>
                             </div>
 
-                            <div>
-                                <Label className="text-base">יחס תמונה</Label>
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                    {ASPECT_RATIOS.map((ratio) => (
-                                        <button
-                                            key={ratio.value}
-                                            onClick={() => setAspectRatio(ratio.value)}
-                                            className={`p-3 rounded-lg border text-sm flex items-center gap-2 transition-colors ${aspectRatio === ratio.value
-                                                ? "border-primary bg-primary/5 text-primary"
-                                                : "border-gray-200 hover:border-gray-300"
-                                                }`}
-                                        >
-                                            <span>{ratio.icon}</span>
-                                            <span>{ratio.label}</span>
-                                        </button>
-                                    ))}
+                            {/* Aspect ratio only for creation mode */}
+                            {mode === "create" && (
+                                <div>
+                                    <Label className="text-base">יחס תמונה</Label>
+                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                        {ASPECT_RATIOS.map((ratio) => (
+                                            <button
+                                                key={ratio.value}
+                                                onClick={() => setAspectRatio(ratio.value)}
+                                                className={`p-3 rounded-lg border text-sm flex items-center gap-2 transition-colors ${aspectRatio === ratio.value
+                                                    ? "border-primary bg-primary/5 text-primary"
+                                                    : "border-gray-200 hover:border-gray-300"
+                                                    }`}
+                                            >
+                                                <span>{ratio.icon}</span>
+                                                <span>{ratio.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             <div>
                                 <Label className="text-base">סגנון</Label>
@@ -183,19 +343,19 @@ export default function ImageGenerationPage() {
 
                             <Button
                                 onClick={handleGenerate}
-                                disabled={loading || !prompt.trim()}
+                                disabled={loading || !prompt.trim() || (mode === "edit" && !sourceImage)}
                                 className="w-full"
                                 size="lg"
                             >
                                 {loading ? (
                                     <>
                                         <Loader2 className="h-5 w-5 animate-spin ml-2" />
-                                        יוצר תמונה...
+                                        {mode === "edit" ? "עורך תמונה..." : "יוצר תמונה..."}
                                     </>
                                 ) : (
                                     <>
                                         <Wand2 className="h-5 w-5 ml-2" />
-                                        צור תמונה
+                                        {mode === "edit" ? "ערוך תמונה" : "צור תמונה"}
                                     </>
                                 )}
                             </Button>
@@ -217,7 +377,9 @@ export default function ImageGenerationPage() {
                                 <div className="flex-1 bg-gray-100 rounded-lg flex items-center justify-center min-h-[400px]">
                                     <div className="text-center">
                                         <Loader2 className="h-12 w-12 animate-spin text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-500">יוצר את התמונה שלך...</p>
+                                        <p className="text-gray-500">
+                                            {mode === "edit" ? "עורך את התמונה שלך..." : "יוצר את התמונה שלך..."}
+                                        </p>
                                         <p className="text-sm text-gray-400 mt-1">
                                             זה יכול לקחת עד 30 שניות
                                         </p>

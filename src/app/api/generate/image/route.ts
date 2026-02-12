@@ -17,7 +17,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { prompt, aspectRatio, style } = await req.json();
+        const { prompt, aspectRatio, style, imageBase64, imageMimeType } = await req.json();
 
         if (!prompt?.trim()) {
             return NextResponse.json(
@@ -41,16 +41,25 @@ export async function POST(req: Request) {
 
         // Create job
         const jobId = nanoid();
+        const isEdit = !!imageBase64;
         await supabaseAdmin.from("jobs").insert({
             id: jobId,
             user_id: user.id,
-            type: "generate_image",
+            type: isEdit ? "edit_image" : "generate_image",
             status: "pending",
             progress: 0,
         });
 
         // Start background processing
-        processImageGeneration(jobId, user.id, prompt, aspectRatio, style);
+        processImageGeneration(
+            jobId,
+            user.id,
+            prompt,
+            aspectRatio,
+            style,
+            imageBase64 || null,
+            imageMimeType || null
+        );
 
         return NextResponse.json({ jobId });
     } catch (error) {
@@ -67,7 +76,9 @@ async function processImageGeneration(
     userId: string,
     prompt: string,
     aspectRatio: string,
-    style: string
+    style: string,
+    imageBase64: string | null,
+    imageMimeType: string | null
 ) {
     try {
         // Update to processing
@@ -76,8 +87,25 @@ async function processImageGeneration(
             .update({ status: "processing", progress: 20 })
             .eq("id", jobId);
 
-        // Build enhanced prompt
-        const enhancedPrompt = buildEnhancedPrompt(prompt, style, aspectRatio);
+        // Build the request parts
+        const parts: any[] = [];
+
+        // If editing, add the source image first
+        if (imageBase64 && imageMimeType) {
+            parts.push({
+                inlineData: {
+                    mimeType: imageMimeType,
+                    data: imageBase64,
+                },
+            });
+            // Build edit prompt
+            const editPrompt = buildEditPrompt(prompt, style);
+            parts.push({ text: editPrompt });
+        } else {
+            // Text-to-image: enhanced prompt
+            const enhancedPrompt = buildEnhancedPrompt(prompt, style, aspectRatio);
+            parts.push({ text: enhancedPrompt });
+        }
 
         // Call Google Gemini API
         const response = await fetch(
@@ -88,7 +116,7 @@ async function processImageGeneration(
                 body: JSON.stringify({
                     contents: [
                         {
-                            parts: [{ text: enhancedPrompt }],
+                            parts,
                         },
                     ],
                     generationConfig: {
@@ -104,6 +132,8 @@ async function processImageGeneration(
             .eq("id", jobId);
 
         if (!response.ok) {
+            const errBody = await response.text();
+            console.error("Gemini API error:", response.status, errBody);
             throw new Error("Gemini API failed");
         }
 
@@ -142,11 +172,12 @@ async function processImageGeneration(
 
         // Save generation record
         const generationId = nanoid();
+        const isEdit = !!imageBase64;
         await supabaseAdmin.from("generations").insert({
             id: generationId,
             user_id: userId,
             type: "image",
-            feature: "generate_image",
+            feature: isEdit ? "edit_image" : "generate_image",
             prompt,
             result_urls: [urlData.publicUrl],
             thumbnail_url: urlData.publicUrl,
@@ -176,7 +207,7 @@ async function processImageGeneration(
         await addCredits(
             userId,
             CREDIT_COSTS.image_generation,
-            "החזר - יצירת תמונה נכשלה",
+            imageBase64 ? "החזר - עריכת תמונה נכשלה" : "החזר - יצירת תמונה נכשלה",
             jobId
         );
 
@@ -188,6 +219,18 @@ async function processImageGeneration(
             })
             .eq("id", jobId);
     }
+}
+
+function buildEditPrompt(prompt: string, style: string): string {
+    const stylePrompts: Record<string, string> = {
+        realistic: "photorealistic, highly detailed",
+        artistic: "artistic, creative, painterly",
+        cartoon: "cartoon style, animated, colorful",
+        minimal: "minimalist, clean, modern",
+    };
+
+    const styleHint = stylePrompts[style] || "";
+    return `Edit this image: ${prompt}. ${styleHint ? `Style: ${styleHint}.` : ""} Keep the overall composition and produce a high-quality result.`;
 }
 
 function buildEnhancedPrompt(

@@ -267,19 +267,19 @@ export default async function HomePage() {
                   src="/examples/advanced-image-generator.png"
                   alt="מחולל תמונות מתקדם"
                   fill
-                  className="object-cover opacity-30 group-hover:opacity-40 transition-opacity duration-500"
+                  className="object-cover opacity-50 group-hover:opacity-65 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 66vw"
                 />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-950/90 z-10" />
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950 opacity-100 group-hover:scale-105 transition-transform duration-700" />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/95 z-10" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-900/30 via-slate-950/60 to-slate-950/80 opacity-100 group-hover:scale-105 transition-transform duration-700" />
 
               <div className="relative z-20 p-8 h-full flex flex-col justify-end">
                 <div className="h-12 w-12 rounded-xl bg-indigo-500/20 flex items-center justify-center mb-4 backdrop-blur-md">
                   <Sparkles className="h-6 w-6 text-indigo-400" />
                 </div>
                 <h3 className="text-2xl font-bold mb-2">מחולל תמונות מתקדם</h3>
-                <p className="text-slate-400 mb-6 max-w-lg">
+                <p className="text-slate-300 mb-6 max-w-lg">
                   כתוב מה אתה מדמיין – וקבל תמונה פוטוריאליסטית תוך שניות.
                   המנוע שלנו מבין ניואנסים בעברית ויודע ליצור הכל: מתמונות מוצר ועד אומנות פנטזיה.
                 </p>
@@ -296,11 +296,11 @@ export default async function HomePage() {
                   src="/examples/video-to-images.png"
                   alt="תמונות נבחרות מוידאו"
                   fill
-                  className="object-cover opacity-30 group-hover:opacity-50 transition-opacity duration-500"
+                  className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 33vw"
                 />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 to-slate-950/90 z-10" />
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950/85 z-10" />
               <div className="absolute top-0 right-0 p-8 z-20">
                 <div className="h-12 w-12 rounded-xl bg-pink-500/20 flex items-center justify-center backdrop-blur-md">
                   <Film className="h-6 w-6 text-pink-400" />
@@ -308,7 +308,7 @@ export default async function HomePage() {
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
                 <h3 className="text-xl font-bold mb-2">תמונות נבחרות מוידאו</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-300 text-sm">
                   העלה וידאו וקבל מיידית 10 תמונות נבחרות.
                 </p>
               </div>
@@ -321,11 +321,11 @@ export default async function HomePage() {
                   src="/examples/character-ai.png"
                   alt="אימון דמות"
                   fill
-                  className="object-cover opacity-30 group-hover:opacity-50 transition-opacity duration-500"
+                  className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 33vw"
                 />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 to-slate-950/90 z-10" />
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950/85 z-10" />
               <div className="absolute top-0 right-0 p-8 z-20">
                 <div className="h-12 w-12 rounded-xl bg-cyan-500/20 flex items-center justify-center backdrop-blur-md">
                   <User className="h-6 w-6 text-cyan-400" />
@@ -333,7 +333,7 @@ export default async function HomePage() {
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
                 <h3 className="text-xl font-bold mb-2">אימון דמות</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-300 text-sm">
                   אמן את ה-AI להכיר את הפנים שלך. צור תוכן בכיכובך בכל סגנון.
                 </p>
               </div>
@@ -346,11 +346,11 @@ export default async function HomePage() {
                   src="/examples/image-edit.png"
                   alt="עריכת תמונה"
                   fill
-                  className="object-cover opacity-30 group-hover:opacity-50 transition-opacity duration-500"
+                  className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 33vw"
                 />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 to-slate-950/90 z-10" />
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950/85 z-10" />
               <div className="absolute top-0 right-0 p-8 z-20">
                 <div className="h-12 w-12 rounded-xl bg-purple-500/20 flex items-center justify-center backdrop-blur-md">
                   <PenLine className="h-6 w-6 text-purple-400" />
@@ -358,7 +358,7 @@ export default async function HomePage() {
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
                 <h3 className="text-xl font-bold mb-2">עריכת תמונה</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-300 text-sm">
                   העלה תמונה ותאר מה לשנות — הבינה המלאכותית תערוך אותה.
                 </p>
               </div>
@@ -373,7 +373,7 @@ export default async function HomePage() {
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
                 <h3 className="text-xl font-bold mb-2">טקסט לוידאו</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-300 text-sm">
                   הנפש תמונות או צור סרטונים מאפס. הקסם קורה בתנועה.
                 </p>
               </div>
@@ -386,7 +386,7 @@ export default async function HomePage() {
                   <Images className="h-6 w-6 text-emerald-400" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">קרוסלות ממותגות</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-300 text-sm">
                   יצירת קרוסלות מידע (Educational) או סיפוריות, כולל המיתוג והלוגו שלך באופן אוטומטי.
                 </p>
               </div>
@@ -435,11 +435,11 @@ export default async function HomePage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 mb-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                    <div className="grid grid-cols-2 gap-3 mb-4 max-h-[620px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                       {item.slides.map((slide, slideIndex) => (
                         <div
                           key={slideIndex}
-                          className="relative aspect-square rounded-lg overflow-hidden border-2 border-white/20 hover:border-emerald-500/70 transition-all duration-300 shadow-lg hover:shadow-emerald-500/20"
+                          className="relative aspect-[4/5] rounded-lg overflow-hidden border-2 border-white/20 hover:border-emerald-500/70 transition-all duration-300 shadow-lg hover:shadow-emerald-500/20"
                         >
                           <Image
                             src={slide}

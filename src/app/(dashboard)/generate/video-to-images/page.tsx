@@ -37,8 +37,8 @@ export default function VideoToImagesPage() {
     const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            if (file.size > 150 * 1024 * 1024) {
-                toast.error("גודל הקובץ חייב להיות עד 150MB");
+            if (file.size > 100 * 1024 * 1024) {
+                toast.error("גודל הקובץ חייב להיות עד 100MB");
                 return;
             }
             setVideoFile(file);
@@ -214,7 +214,7 @@ export default function VideoToImagesPage() {
                 <CardContent className="p-6 space-y-6">
                     {/* Video Upload */}
                     <div>
-                        <Label className="text-sm font-medium mb-2 block">העלה וידאו (עד 150MB)</Label>
+                        <Label className="text-sm font-medium mb-2 block">העלה וידאו (עד 100MB)</Label>
                         <div className="flex gap-3">
                             <Input
                                 ref={videoInputRef}
@@ -402,7 +402,7 @@ export default function VideoToImagesPage() {
                             <li>• המערכת מחפשת selfie segmentation ומחלצת תמונות חדות</li>
                             <li>• תמונת רקע אופציונלית - אם תעלה, הווידאו ימוזג עם הרקע</li>
                             <li>• העיבוד לוקח בין 1 ל-3 דקות בהתאם לאורך הווידאו</li>
-                            <li>• גודל מקסימלי: 150MB</li>
+                            <li>• גודל מקסימלי: 100MB</li>
                         </ul>
                     </CardContent>
                 </Card>

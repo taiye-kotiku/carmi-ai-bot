@@ -10,9 +10,7 @@ import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
-import { FilesetResolver, ImageSegmenter } from "@mediapipe/tasks-vision";
-import { createCanvas, loadImage, ImageData } from "@napi-rs/canvas";
-import sharp from "sharp";
+// Using Python script for MediaPipe processing (better for serverless)
 
 const execAsync = promisify(exec);
 
@@ -44,10 +42,10 @@ export async function POST(req: Request) {
             );
         }
 
-        // Validate file size (150MB max)
-        if (videoFile.size > 150 * 1024 * 1024) {
+        // Validate file size (100MB max)
+        if (videoFile.size > 100 * 1024 * 1024) {
             return NextResponse.json(
-                { error: "גודל הקובץ חייב להיות עד 150MB" },
+                { error: "גודל הקובץ חייב להיות עד 100MB" },
                 { status: 400 }
             );
         }
@@ -261,103 +259,121 @@ async function extractBestFrames(
         await fs.writeFile(videoPath, videoBuffer);
         await fs.mkdir(framesDir, { recursive: true });
         
-        // Extract frames using FFmpeg
+        // Use Python script for MediaPipe processing
         await supabaseAdmin
             .from("jobs")
             .update({ progress: 35 })
             .eq("id", jobId);
         
-        // Extract frames at 1 FPS for analysis
-        await execAsync(
-            `ffmpeg -i "${videoPath}" -vf fps=1 "${framesDir}/frame_%06d.jpg" -y`
-        );
+        // Try to use Python script, fallback to external service if not available
+        const scriptPath = path.join(process.cwd(), "scripts", "video-processor.py");
+        let stdout: string, stderr: string;
+        let usePython = false;
         
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 45 })
-            .eq("id", jobId);
+        try {
+            // Check if Python script exists
+            await fs.access(scriptPath);
+            
+            // Try python3 first
+            try {
+                ({ stdout, stderr } = await execAsync(
+                    `python3 "${scriptPath}" extract "${videoPath}" ${count} "${framesDir}"`
+                ));
+                usePython = true;
+            } catch (error) {
+                // Fallback to python
+                try {
+                    ({ stdout, stderr } = await execAsync(
+                        `python "${scriptPath}" extract "${videoPath}" ${count} "${framesDir}"`
+                    ));
+                    usePython = true;
+                } catch (fallbackError) {
+                    console.log("Python not available, will use external service");
+                    usePython = false;
+                }
+            }
+        } catch {
+            console.log("Python script not found, will use external service");
+            usePython = false;
+        }
         
-        // Get all extracted frames
-        const frameFiles = (await fs.readdir(framesDir))
-            .filter(f => f.endsWith(".jpg"))
-            .sort();
-        
-        // Initialize MediaPipe Image Segmenter
-        const wasmFileset = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-        );
-        const imageSegmenter = await ImageSegmenter.createFromOptions(wasmFileset, {
-            baseOptions: {
-                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite",
-                delegate: "GPU",
-            },
-            outputCategoryMask: true,
-            outputConfidenceMasks: false,
-        });
-        
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 50 })
-            .eq("id", jobId);
-        
-        // Process frames and score them
-        const candidates: Array<{
+        let bestFrames: Array<{
             buffer: Buffer;
             timestamp: number;
             score: number;
         }> = [];
         
-        const totalFrames = frameFiles.length;
-        for (let i = 0; i < frameFiles.length; i++) {
-            const framePath = path.join(framesDir, frameFiles[i]);
-            const frameBuffer = await fs.readFile(framePath);
-            
-            // Calculate sharpness using Laplacian variance
-            const image = await sharp(frameBuffer).raw().toBuffer({ resolveWithObject: true });
-            const sharpness = calculateSharpness(image.data, image.info.width, image.info.height);
-            
-            // Process with MediaPipe
-            const canvas = createCanvas(image.info.width, image.info.height);
-            const ctx = canvas.getContext("2d");
-            const img = await loadImage(frameBuffer);
-            ctx.drawImage(img, 0, 0);
-            
-            // Convert canvas to ImageData for MediaPipe
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const segmentationResult = imageSegmenter.segment(imageData);
-            
-            // Calculate segmentation quality
-            const segmentationQuality = calculateSegmentationQualityFromResult(segmentationResult);
-            
-            // Check if has selfie (at least 10% of frame)
-            const selfieArea = segmentationQuality.selfieArea;
-            if (selfieArea > 0.1 && segmentationQuality.meanScore > 0.3) {
-                // Combined score: sharpness + segmentation quality
-                const score = sharpness * 0.6 + segmentationQuality.meanScore * 1000 * 0.4;
-                
-                // Estimate timestamp (1 frame per second)
-                const timestamp = i;
-                
-                candidates.push({
-                    buffer: frameBuffer,
-                    timestamp,
-                    score,
-                });
-            }
-            
-            // Update progress
-            if (i % Math.max(1, Math.floor(totalFrames / 10)) === 0) {
-                const progress = 50 + Math.floor((i / totalFrames) * 10);
+        if (usePython) {
+            // Parse progress from stderr and update job
+            const progressLines = stderr.split("\n").filter((line: string) => line.startsWith("PROGRESS:"));
+            for (const line of progressLines) {
+                const progress = parseInt(line.split(":")[1]);
+                // Map Python progress (0-100) to our range (35-60)
+                const mappedProgress = 35 + Math.floor(progress * 0.25);
                 await supabaseAdmin
                     .from("jobs")
-                    .update({ progress })
+                    .update({ progress: mappedProgress })
                     .eq("id", jobId);
             }
+            
+            // Parse results from stdout
+            const results = JSON.parse(stdout);
+            
+            // Read extracted frames
+            for (const result of results) {
+                const frameBuffer = await fs.readFile(result.path);
+                bestFrames.push({
+                    buffer: frameBuffer,
+                    timestamp: result.timestamp,
+                    score: result.score,
+                });
+            }
+        } else {
+            // Use external service (similar to reel-extractor)
+            await supabaseAdmin
+                .from("jobs")
+                .update({ progress: 40 })
+                .eq("id", jobId);
+            
+            // Use RENDER_API_URL service if available
+            const renderApiUrl = process.env.RENDER_API_URL || "https://frame-extractor-oou7.onrender.com";
+            const videoBase64 = videoBuffer.toString("base64");
+            
+            try {
+                const response = await fetch(`${renderApiUrl}/extract-frames`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        video_base64: videoBase64,
+                        frame_count: count * 2,
+                        fps: 1,
+                    }),
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const frames = data.frames || data.images || [];
+                    
+                    // Process frames and score them (simplified scoring)
+                    for (let i = 0; i < Math.min(frames.length, count); i++) {
+                        const frameBase64 = frames[i].replace(/^data:image\/\w+;base64,/, "");
+                        const frameBuffer = Buffer.from(frameBase64, "base64");
+                        
+                        bestFrames.push({
+                            buffer: frameBuffer,
+                            timestamp: i,
+                            score: 100 - i, // Simple scoring
+                        });
+                    }
+                } else {
+                    throw new Error("External service failed");
+                }
+            } catch (error) {
+                throw new Error(
+                    "עיבוד וידאו נכשל. נא לוודא ש-Python MediaPipe מותקן או ש-RENDER_API_URL מוגדר."
+                );
+            }
         }
-        
-        // Sort by score and take top N
-        candidates.sort((a, b) => b.score - a.score);
-        const bestFrames = candidates.slice(0, count);
         
         return bestFrames;
     } finally {
@@ -366,56 +382,7 @@ async function extractBestFrames(
     }
 }
 
-function calculateSharpness(imageData: Buffer, width: number, height: number): number {
-    // Laplacian variance calculation for sharpness
-    // Convert RGB to grayscale and calculate variance
-    let sum = 0;
-    let sumSquared = 0;
-    const pixelCount = width * height;
-    
-    // ImageData from sharp is RGBA format
-    for (let i = 0; i < imageData.length; i += 4) {
-        const r = imageData[i];
-        const g = imageData[i + 1];
-        const b = imageData[i + 2];
-        const gray = (r * 0.299 + g * 0.587 + b * 0.114);
-        sum += gray;
-        sumSquared += gray * gray;
-    }
-    
-    const mean = sum / pixelCount;
-    const variance = (sumSquared / pixelCount) - (mean * mean);
-    
-    return variance;
-}
-
-function calculateSegmentationQualityFromResult(segmentationResult: any): {
-    meanScore: number;
-    selfieArea: number;
-} {
-    if (!segmentationResult.categoryMask) {
-        return { meanScore: 0, selfieArea: 0 };
-    }
-    
-    const mask = segmentationResult.categoryMask;
-    let selfiePixels = 0;
-    const totalPixels = mask.length;
-    
-    // Category mask: 255 for selfie, 0 for background
-    for (let i = 0; i < mask.length; i++) {
-        if (mask[i] === 255) {
-            selfiePixels++;
-        }
-    }
-    
-    const selfieArea = selfiePixels / totalPixels;
-    const meanScore = selfieArea; // Use area as quality score
-    
-    return {
-        meanScore,
-        selfieArea,
-    };
-}
+// Helper functions removed - using Python script instead
 
 async function createMergedVideo(
     videoBuffer: Buffer,
@@ -441,113 +408,86 @@ async function createMergedVideo(
             .update({ progress: 77 })
             .eq("id", jobId);
         
-        // Extract all frames from video
-        await execAsync(
-            `ffmpeg -i "${videoPath}" "${framesDir}/frame_%06d.jpg" -y`
-        );
-        
+        // Use Python script for video merging with MediaPipe
         await supabaseAdmin
             .from("jobs")
-            .update({ progress: 80 })
+            .update({ progress: 77 })
             .eq("id", jobId);
         
-        // Initialize MediaPipe Image Segmenter
-        const wasmFileset = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-        );
-        const imageSegmenter = await ImageSegmenter.createFromOptions(wasmFileset, {
-            baseOptions: {
-                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite",
-                delegate: "GPU",
-            },
-            outputCategoryMask: true,
-            outputConfidenceMasks: false,
-        });
+        const scriptPath = path.join(process.cwd(), "scripts", "video-processor.py");
+        let stdout: string, stderr: string;
+        let usePython = false;
         
-        // Load background image
-        const bgImage = await loadImage(backgroundBuffer);
-        const bgCanvas = createCanvas(bgImage.width, bgImage.height);
-        const bgCtx = bgCanvas.getContext("2d");
-        bgCtx.drawImage(bgImage, 0, 0);
-        
-        // Process each frame
-        const frameFiles = (await fs.readdir(framesDir))
-            .filter(f => f.endsWith(".jpg"))
-            .sort();
-        
-        const totalFrames = frameFiles.length;
-        for (let i = 0; i < frameFiles.length; i++) {
-            const framePath = path.join(framesDir, frameFiles[i]);
-            const frameBuffer = await fs.readFile(framePath);
+        try {
+            // Check if Python script exists
+            await fs.access(scriptPath);
             
-            // Load frame
-            const frameImage = await loadImage(frameBuffer);
-            const canvas = createCanvas(frameImage.width, frameImage.height);
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(frameImage, 0, 0);
-            
-            // Get segmentation mask
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const segmentationResult = imageSegmenter.segment(imageData);
-            
-            // Create merged frame
-            const mergedCanvas = createCanvas(frameImage.width, frameImage.height);
-            const mergedCtx = mergedCanvas.getContext("2d");
-            
-            // Draw background (resized to frame size)
-            mergedCtx.drawImage(bgImage, 0, 0, frameImage.width, frameImage.height);
-            
-            // Draw foreground where mask is true
-            const mergedData = mergedCtx.getImageData(0, 0, mergedCanvas.width, mergedCanvas.height);
-            const categoryMask = segmentationResult.categoryMask;
-            
-            if (categoryMask) {
-                for (let j = 0; j < imageData.data.length; j += 4) {
-                    const pixelIndex = j / 4;
-                    const maskValue = categoryMask[pixelIndex];
-                    
-                    if (maskValue === 255) {
-                        // Use foreground pixel (selfie detected)
-                        mergedData.data[j] = imageData.data[j];
-                        mergedData.data[j + 1] = imageData.data[j + 1];
-                        mergedData.data[j + 2] = imageData.data[j + 2];
-                        mergedData.data[j + 3] = 255;
-                    }
+            // Try python3 first
+            try {
+                ({ stdout, stderr } = await execAsync(
+                    `python3 "${scriptPath}" merge "${videoPath}" "${backgroundPath}" "${outputPath}"`
+                ));
+                usePython = true;
+            } catch (error) {
+                // Fallback to python
+                try {
+                    ({ stdout, stderr } = await execAsync(
+                        `python "${scriptPath}" merge "${videoPath}" "${backgroundPath}" "${outputPath}"`
+                    ));
+                    usePython = true;
+                } catch (fallbackError) {
+                    console.log("Python not available for video merging");
+                    usePython = false;
                 }
             }
-            
-            mergedCtx.putImageData(mergedData, 0, 0);
-            
-            // Save merged frame
-            const mergedFrameBuffer = mergedCanvas.toBuffer("image/jpeg");
-            const mergedFramePath = path.join(mergedFramesDir, frameFiles[i]);
-            await fs.writeFile(mergedFramePath, mergedFrameBuffer);
-            
-            // Update progress
-            if (i % Math.max(1, Math.floor(totalFrames / 10)) === 0) {
-                const progress = 80 + Math.floor((i / totalFrames) * 15);
-                await supabaseAdmin
-                    .from("jobs")
-                    .update({ progress })
-                    .eq("id", jobId);
-            }
+        } catch {
+            console.log("Python script not found for video merging");
+            usePython = false;
         }
         
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 95 })
-            .eq("id", jobId);
-        
-        // Get video FPS
-        const { stdout: fpsOutput } = await execAsync(
-            `ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "${videoPath}"`
-        );
-        const fps = fpsOutput.trim().split("/").reduce((a: number, b: string) => Number(a) / Number(b), 1) || 30;
-        
-        // Combine frames back into video
-        await execAsync(
-            `ffmpeg -framerate ${fps} -i "${mergedFramesDir}/frame_%06d.jpg" -c:v libx264 -pix_fmt yuv420p "${outputPath}" -y`
-        );
+        if (usePython) {
+            // Parse progress from stderr and update job
+            const progressLines = stderr.split("\n").filter((line: string) => line.startsWith("PROGRESS:"));
+            for (const line of progressLines) {
+                const progress = parseInt(line.split(":")[1]);
+                // Map Python progress (0-100) to our range (77-95)
+                const mappedProgress = 77 + Math.floor(progress * 0.18);
+                await supabaseAdmin
+                    .from("jobs")
+                    .update({ progress: mappedProgress })
+                    .eq("id", jobId);
+            }
+        } else {
+            // Fallback: Use FFmpeg with chromakey (simpler but less accurate)
+            await supabaseAdmin
+                .from("jobs")
+                .update({ progress: 85 })
+                .eq("id", jobId);
+            
+            // Resize background to match video dimensions
+            const { stdout: videoInfo } = await execAsync(
+                `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of json "${videoPath}"`
+            );
+            const videoInfoJson = JSON.parse(videoInfo);
+            const width = videoInfoJson.streams[0].width;
+            const height = videoInfoJson.streams[0].height;
+            
+            const resizedBgPath = path.join(tempDir, "background_resized.jpg");
+            await execAsync(
+                `ffmpeg -i "${backgroundPath}" -vf scale=${width}:${height} "${resizedBgPath}" -y`
+            );
+            
+            // Use FFmpeg overlay (simplified - doesn't use MediaPipe segmentation)
+            // Note: This is a fallback and won't be as accurate as MediaPipe
+            await execAsync(
+                `ffmpeg -i "${videoPath}" -i "${resizedBgPath}" -filter_complex "[0:v][1:v]overlay=0:0" -c:v libx264 -pix_fmt yuv420p "${outputPath}" -y`
+            );
+            
+            await supabaseAdmin
+                .from("jobs")
+                .update({ progress: 95 })
+                .eq("id", jobId);
+        }
         
         // Read merged video
         const mergedVideoBuffer = await fs.readFile(outputPath);

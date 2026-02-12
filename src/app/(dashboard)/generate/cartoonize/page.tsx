@@ -9,6 +9,7 @@ import { Loader2, Download, Upload, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { ExportFormats } from "@/components/export-formats";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export default function CartoonizePage() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -155,6 +156,10 @@ export default function CartoonizePage() {
                             {resultUrl && (<Button variant="outline" size="lg" onClick={handleDownload}><Download className="h-5 w-5 ml-2" />הורד</Button>)}
                             {previewUrl && (<Button variant="ghost" size="lg" onClick={handleReset}>התחל מחדש</Button>)}
                         </div>
+
+                        <p className="text-sm text-pink-600 text-center mt-3">
+                            עלות: {CREDIT_COSTS.caricature_generation} קרדיטים
+                        </p>
                     </CardContent>
                 </Card>
 

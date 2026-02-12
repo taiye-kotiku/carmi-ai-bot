@@ -7,7 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+<<<<<<< HEAD
 import { useNotifications } from "@/lib/notifications/notification-context";
+=======
+import { CREDIT_COSTS } from "@/lib/config/credits";
+>>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
 const ASPECT_RATIOS = [
     { value: "1:1", label: "ריבועי (1:1)", icon: "⬜" },
@@ -200,7 +204,7 @@ export default function ImageGenerationPage() {
                             </Button>
 
                             <p className="text-sm text-primary text-center">
-                                עלות: 1 קרדיט תמונה
+                                עלות: {CREDIT_COSTS.image_generation} קרדיטים
                             </p>
                         </CardContent>
                     </Card>

@@ -6,7 +6,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Download, Sparkles, Upload, Video, X } from "lucide-react";
+<<<<<<< HEAD
 import { useNotifications } from "@/lib/notifications/notification-context";
+=======
+import { CREDIT_COSTS } from "@/lib/config/credits";
+>>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
 export default function ImageToVideoPage() {
     const [image, setImage] = useState<File | null>(null);
@@ -155,7 +159,15 @@ export default function ImageToVideoPage() {
                         />
 
                         <Textarea
-                            placeholder="(אופציונלי) תאר איך התמונה צריכה לזוז... לדוגמה: תנועת שיער ברוח, עננים זזים"
+                            placeholder="תאר את הוידאו שתרצה ליצור, למשל:
+                            הפוך את התמונה לוידאו אנכי דינמי בסגנון רשתות חברתיות.
+                            תנועת מצלמה חלקה (זום איטי פנימה).
+                            תנועה טבעית של הדמות: מצמוץ, נשימה, מיקרו-הבעות פנים, תנועת ראש עדינה.
+                            רקע חי עם תנועה קלה (אור, עומק, תזוזת אלמנטים).
+                            תאורה רכה ומחמיאה, מראה נקי ומודרני.
+                            צבעים חיים, חדות גבוהה, תנועה יציבה ללא עיוותים.
+                            אורך: 5–7 שניות.
+                            איכות גבוהה, אנימציה חלקה, מראה ריאליסטי-דיגיטלי. "
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             rows={3}
@@ -164,7 +176,7 @@ export default function ImageToVideoPage() {
                         />
 
                         <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-                            💡 הנפשת תמונה עולה 3 קרדיטים ואורכת כ-2-3 דקות
+                            💡 הנפשת תמונה עולה קרדיטים ואורכת כ-2-3 דקות
                         </div>
 
                         <Button
@@ -181,7 +193,7 @@ export default function ImageToVideoPage() {
                             ) : (
                                 <>
                                     <Sparkles className="ml-2 h-5 w-5" />
-                                    הנפש תמונה (3 קרדיטים)
+                                    הנפש תמונה ({CREDIT_COSTS.video_generation} קרדיטים)
                                 </>
                             )}
                         </Button>

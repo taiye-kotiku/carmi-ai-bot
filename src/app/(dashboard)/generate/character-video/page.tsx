@@ -6,7 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+<<<<<<< HEAD
 import { useNotifications } from "@/lib/notifications/notification-context";
+=======
+import { CREDIT_COSTS } from "@/lib/config/credits";
+>>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
 interface Character {
     id: string;
@@ -21,7 +25,7 @@ export default function CharacterVideoPage() {
     const [characters, setCharacters] = useState<Character[]>([]);
     const [selectedCharId, setSelectedCharId] = useState<string>("");
     const [prompt, setPrompt] = useState("");
-    const [sceneCount, setSceneCount] = useState(1);
+    const sceneCount = 1; // Always 1 scene
 
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState<Step>("idle");
@@ -60,9 +64,14 @@ export default function CharacterVideoPage() {
         loadChars();
     }, []);
 
+<<<<<<< HEAD
     const imageCost = sceneCount * 1;
     const videoCost = sceneCount * 3;
     const totalCost = imageCost + videoCost;
+=======
+    // Credit cost calculation - fixed cost for video generation
+    const totalCost = CREDIT_COSTS.video_generation;
+>>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
     const handleGenerate = async () => {
         if (!selectedCharId || !prompt.trim()) return;
@@ -121,7 +130,7 @@ export default function CharacterVideoPage() {
                     setStatusMsg("📝 מייצר תסריט סצנות...");
                 } else if (jobProgress < 45) {
                     setStep("images");
-                    setStatusMsg("🎨 מייצר תמונות דמות (Modal LoRA)...");
+                    setStatusMsg("🎨 מייצר תמונות דמות...");
                 } else if (jobProgress < 95) {
                     setStep("video");
                     setStatusMsg("🎬 מייצר וידאו (Veo 3)...");
@@ -178,10 +187,27 @@ export default function CharacterVideoPage() {
         <div className="container mx-auto p-6 max-w-6xl" dir="rtl">
             <div className="flex items-center justify-between mb-8">
                 <div>
+<<<<<<< HEAD
                     <h1 className="text-3xl font-bold mb-2">🎬 יצירת וידאו דמות</h1>
                     <p className="text-muted-foreground">תהליך אוטומטי: תסריט ⬅️ תמונות דמות (Modal) ⬅️ הנפשה (Veo 3)</p>
                 </div>
                 <Badge variant="secondary" className="text-base px-4 py-1">עלות: {totalCost} קרדיטים ({imageCost} תמונה + {videoCost} וידאו)</Badge>
+=======
+                    <h1 className="text-3xl font-bold mb-2">
+                        🎬 יצירת וידאו דמות
+                    </h1>
+                    <p className="text-muted-foreground">
+                        תהליך אוטומטי: תסריט ⬅️ תמונות דמות ⬅️ הנפשה
+                
+                    </p>
+                </div>
+                <Badge
+                    variant="secondary"
+                    className="text-base px-4 py-1"
+                >
+                    עלות: {totalCost} קרדיטים
+                </Badge>
+>>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -213,6 +239,7 @@ export default function CharacterVideoPage() {
                         </div>
                     </Card>
 
+<<<<<<< HEAD
                     <Card className="p-5">
                         <Label className="text-lg font-semibold mb-3 block">3. מספר סצנות</Label>
                         <div className="flex gap-2">
@@ -222,6 +249,9 @@ export default function CharacterVideoPage() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">כל סצנה = תמונה (1 קרדיט) + וידאו 5 שניות (3 קרדיטים)</p>
                     </Card>
+=======
+                    {/* Scene Count */}
+>>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
                     {error && (<div className="bg-destructive/10 text-destructive p-4 rounded-lg text-sm font-medium">⚠️ {error}</div>)}
 

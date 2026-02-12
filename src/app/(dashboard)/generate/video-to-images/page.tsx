@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Film, Download, Loader2, AlertCircle, CheckCircle, Upload, Image as ImageIcon } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { Film, Download, Loader2, AlertCircle, CheckCircle, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -21,16 +21,13 @@ interface ExtractedImage {
 
 export default function VideoToImagesPage() {
     const [videoFile, setVideoFile] = useState<File | null>(null);
-    const [backgroundImage, setBackgroundImage] = useState<File | null>(null);
     const [imageCount, setImageCount] = useState<"5" | "10" | "15">("10");
     const [loading, setLoading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [progressText, setProgressText] = useState("");
     const [extractedImages, setExtractedImages] = useState<ExtractedImage[]>([]);
-    const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
-    const imageInputRef = useRef<HTMLInputElement>(null);
 
     const { addGenerationNotification } = useNotifications();
 
@@ -46,52 +43,199 @@ export default function VideoToImagesPage() {
         }
     };
 
-    const handleBackgroundChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setBackgroundImage(file);
-        }
-    };
+    // ─── Client-Side Frame Extraction ────────────────────────────────
 
     /**
-     * Upload a file using signed URL (bypasses Vercel 4.5MB limit and Supabase RLS)
+     * Extract frames from video using HTML5 Video + Canvas.
+     * Runs entirely in the browser — no server-side FFmpeg needed.
      */
-    const uploadFileWithSignedUrl = async (
-        file: File,
-        label: string
-    ): Promise<string> => {
-        const fileExt = file.name.split(".").pop() || "bin";
+    const extractFramesClientSide = useCallback(
+        async (
+            file: File,
+            count: number,
+            onProgress: (pct: number, text: string) => void
+        ): Promise<Array<{ blob: Blob; timestamp: number; score: number }>> => {
+            return new Promise((resolve, reject) => {
+                const video = document.createElement("video");
+                video.preload = "auto";
+                video.muted = true;
+                video.playsInline = true;
 
-        // Step 1: Get signed upload URL from our API (small JSON request)
-        const signedUrlRes = await fetch("/api/storage/signed-url", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileExt, contentType: file.type }),
+                const objectUrl = URL.createObjectURL(file);
+                video.src = objectUrl;
+
+                video.onloadedmetadata = async () => {
+                    try {
+                        const duration = video.duration;
+                        if (!duration || duration < 1) {
+                            throw new Error("וידאו קצר מדי או לא תקין");
+                        }
+
+                        // Sample more frames than needed so we can pick the best
+                        const samplesToTake = Math.min(count * 3, Math.floor(duration));
+                        const interval = duration / (samplesToTake + 1);
+
+                        const canvas = document.createElement("canvas");
+                        const ctx = canvas.getContext("2d")!;
+
+                        const allFrames: Array<{
+                            blob: Blob;
+                            timestamp: number;
+                            score: number;
+                        }> = [];
+
+                        onProgress(10, "מנתח וידאו...");
+
+                        for (let i = 0; i < samplesToTake; i++) {
+                            const timestamp = interval * (i + 1);
+
+                            // Seek to timestamp
+                            await seekTo(video, timestamp);
+
+                            // Draw frame to canvas
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            ctx.drawImage(video, 0, 0);
+
+                            // Calculate sharpness score
+                            const score = calculateSharpness(
+                                ctx,
+                                canvas.width,
+                                canvas.height
+                            );
+
+                            // Convert to blob
+                            const blob = await canvasToBlob(canvas);
+
+                            allFrames.push({ blob, timestamp, score });
+
+                            // Update progress
+                            const pct = 10 + Math.floor(((i + 1) / samplesToTake) * 60);
+                            onProgress(pct, `מחלץ תמונות... (${i + 1}/${samplesToTake})`);
+                        }
+
+                        // Sort by score and pick the best N
+                        allFrames.sort((a, b) => b.score - a.score);
+                        const bestFrames = allFrames.slice(0, count);
+
+                        // Sort best frames by timestamp for display order
+                        bestFrames.sort((a, b) => a.timestamp - b.timestamp);
+
+                        URL.revokeObjectURL(objectUrl);
+                        resolve(bestFrames);
+                    } catch (err) {
+                        URL.revokeObjectURL(objectUrl);
+                        reject(err);
+                    }
+                };
+
+                video.onerror = () => {
+                    URL.revokeObjectURL(objectUrl);
+                    reject(new Error("לא ניתן לקרוא את הווידאו. נסה פורמט אחר."));
+                };
+            });
+        },
+        []
+    );
+
+    /** Seek video to a specific time and wait for it to be ready */
+    function seekTo(video: HTMLVideoElement, time: number): Promise<void> {
+        return new Promise((resolve) => {
+            const onSeeked = () => {
+                video.removeEventListener("seeked", onSeeked);
+                resolve();
+            };
+            video.addEventListener("seeked", onSeeked);
+            video.currentTime = time;
         });
+    }
 
-        if (!signedUrlRes.ok) {
-            const err = await signedUrlRes.json().catch(() => ({ error: `שגיאה בהעלאת ${label}` }));
-            throw new Error(err.error || `שגיאה בהעלאת ${label}`);
+    /** Convert canvas to JPEG blob */
+    function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(
+                (blob) => {
+                    if (blob) resolve(blob);
+                    else reject(new Error("Failed to create blob"));
+                },
+                "image/jpeg",
+                0.92
+            );
+        });
+    }
+
+    /**
+     * Calculate image sharpness using Laplacian variance.
+     * Higher variance = sharper image.
+     */
+    function calculateSharpness(
+        ctx: CanvasRenderingContext2D,
+        width: number,
+        height: number
+    ): number {
+        // Downsample for speed
+        const sw = Math.min(width, 320);
+        const sh = Math.min(height, 240);
+        const smallCanvas = document.createElement("canvas");
+        smallCanvas.width = sw;
+        smallCanvas.height = sh;
+        const smallCtx = smallCanvas.getContext("2d")!;
+        smallCtx.drawImage(ctx.canvas, 0, 0, sw, sh);
+
+        const imageData = smallCtx.getImageData(0, 0, sw, sh);
+        const data = imageData.data;
+
+        // Convert to grayscale and calculate variance
+        let sum = 0;
+        let sumSq = 0;
+        const len = sw * sh;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            sum += gray;
+            sumSq += gray * gray;
         }
 
-        const { signedUrl, token, publicUrl } = await signedUrlRes.json();
+        const mean = sum / len;
+        const variance = sumSq / len - mean * mean;
+        return variance;
+    }
 
-        // Step 2: Upload file directly to Supabase using the signed URL
+    // ─── Upload Helper ──────────────────────────────────────────────
+
+    async function uploadFrameWithSignedUrl(
+        blob: Blob,
+        index: number
+    ): Promise<string> {
+        // Get signed upload URL
+        const res = await fetch("/api/storage/signed-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileExt: "jpg", contentType: "image/jpeg" }),
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "שגיאה" }));
+            throw new Error(err.error || "שגיאה ביצירת קישור העלאה");
+        }
+
+        const { signedUrl, publicUrl } = await res.json();
+
+        // Upload directly to Supabase
         const uploadRes = await fetch(signedUrl, {
             method: "PUT",
-            headers: {
-                "Content-Type": file.type,
-            },
-            body: file,
+            headers: { "Content-Type": "image/jpeg" },
+            body: blob,
         });
 
         if (!uploadRes.ok) {
-            const errText = await uploadRes.text().catch(() => "");
-            throw new Error(`שגיאה בהעלאת ${label}: ${uploadRes.status} ${errText}`);
+            throw new Error(`שגיאה בהעלאת תמונה ${index + 1}`);
         }
 
         return publicUrl;
-    };
+    }
+
+    // ─── Main Process Handler ───────────────────────────────────────
 
     const handleProcess = async () => {
         if (!videoFile) {
@@ -103,101 +247,72 @@ export default function VideoToImagesPage() {
         setProgress(0);
         setError(null);
         setExtractedImages([]);
-        setMergedVideoUrl(null);
 
         try {
-            // Upload video via signed URL (bypasses Vercel 4.5MB limit + RLS)
-            setProgressText("מעלה וידאו...");
-            setProgress(5);
+            const count = parseInt(imageCount);
 
-            const videoUrl = await uploadFileWithSignedUrl(videoFile, "וידאו");
-            setProgress(20);
+            // Step 1: Extract frames client-side (no server needed!)
+            const frames = await extractFramesClientSide(
+                videoFile,
+                count,
+                (pct, text) => {
+                    setProgress(pct);
+                    setProgressText(text);
+                }
+            );
 
-            // Upload background image if provided
-            let backgroundUrl: string | null = null;
-            if (backgroundImage) {
-                setProgressText("מעלה תמונת רקע...");
-                backgroundUrl = await uploadFileWithSignedUrl(backgroundImage, "תמונת רקע");
+            if (frames.length === 0) {
+                throw new Error("לא הצלחנו לחלץ תמונות מהווידאו");
             }
 
-            setProgress(30);
-            setProgressText("מתחיל עיבוד...");
+            // Step 2: Upload frames to Supabase Storage
+            setProgressText("מעלה תמונות...");
+            setProgress(75);
 
-            // Send only URLs to processing API (small JSON payload)
-            const response = await fetch("/api/generate/video-to-images", {
+            const uploadedImages: ExtractedImage[] = [];
+            for (let i = 0; i < frames.length; i++) {
+                const frame = frames[i];
+                const url = await uploadFrameWithSignedUrl(frame.blob, i);
+                uploadedImages.push({
+                    url,
+                    timestamp: frame.timestamp,
+                    score: frame.score,
+                });
+
+                const pct = 75 + Math.floor(((i + 1) / frames.length) * 15);
+                setProgress(pct);
+                setProgressText(`מעלה תמונות... (${i + 1}/${frames.length})`);
+            }
+
+            // Step 3: Save generation record + deduct credits
+            setProgressText("שומר...");
+            setProgress(95);
+
+            const saveRes = await fetch("/api/generate/video-to-images", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    videoUrl,
-                    backgroundUrl,
-                    imageCount: parseInt(imageCount),
+                    imageUrls: uploadedImages.map((img) => img.url),
+                    imageCount: uploadedImages.length,
                 }),
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                let errorData;
-                try {
-                    errorData = JSON.parse(errorText);
-                } catch {
-                    throw new Error(errorText || "שגיאה בעיבוד");
-                }
-                throw new Error(errorData.error || "שגיאה בעיבוד");
-            }
-
-            const { jobId } = await response.json();
-            setProgress(20);
-            setProgressText("מעבד וידאו...");
-
-            let attempts = 0;
-            const maxAttempts = 120; // 4 minutes max
-
-            while (attempts < maxAttempts) {
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-
-                const statusResponse = await fetch(`/api/jobs/${jobId}`);
-                const status = await statusResponse.json();
-
-                if (status.status === "completed") {
-                    setProgress(100);
-                    setProgressText("הושלם!");
-                    if (status.result.images) {
-                        setExtractedImages(status.result.images);
-                    }
-                    if (status.result.videoUrl) {
-                        setMergedVideoUrl(status.result.videoUrl);
-                    }
-                    toast.success("העיבוד הושלם בהצלחה! 🎉");
-                    addGenerationNotification("image", status.result.images?.length || 0);
-                    break;
-                }
-
-                if (status.status === "failed") {
-                    throw new Error(status.error || "העיבוד נכשל");
-                }
-
-                if (status.progress) {
-                    setProgress(20 + status.progress * 0.8);
-                }
-
-                if (status.progress < 30) {
-                    setProgressText("מנתח וידאו...");
-                } else if (status.progress < 60) {
-                    setProgressText("מזהה selfie ומחלץ תמונות...");
-                } else if (status.progress < 85) {
-                    setProgressText("ממזג עם רקע...");
+            if (!saveRes.ok) {
+                const errData = await saveRes.json().catch(() => ({ error: "שגיאה" }));
+                // If credit error, still show images (they're already extracted)
+                if (errData.code === "INSUFFICIENT_CREDITS") {
+                    toast.error(errData.error);
                 } else {
-                    setProgressText("מסיים...");
+                    console.warn("Save error:", errData.error);
                 }
-
-                attempts++;
             }
 
-            if (attempts >= maxAttempts) {
-                throw new Error("הזמן הקצוב עבר. נסה שוב.");
-            }
+            // Done!
+            setProgress(100);
+            setProgressText("הושלם!");
+            setExtractedImages(uploadedImages);
+            toast.success(`חולצו ${uploadedImages.length} תמונות בהצלחה! 🎉`);
+            addGenerationNotification("image", uploadedImages.length);
         } catch (err: any) {
             setError(err.message);
             toast.error(err.message);
@@ -205,6 +320,8 @@ export default function VideoToImagesPage() {
             setLoading(false);
         }
     };
+
+    // ─── Download Helpers ───────────────────────────────────────────
 
     const downloadImage = async (image: ExtractedImage, index: number) => {
         try {
@@ -233,24 +350,7 @@ export default function VideoToImagesPage() {
         toast.success("כל התמונות הורדו!");
     };
 
-    const downloadVideo = async () => {
-        if (!mergedVideoUrl) return;
-        try {
-            const response = await fetch(mergedVideoUrl);
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = downloadUrl;
-            a.download = `merged-video.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(downloadUrl);
-            toast.success("הווידאו הורד!");
-        } catch {
-            toast.error("שגיאה בהורדת הווידאו");
-        }
-    };
+    // ─── Render ─────────────────────────────────────────────────────
 
     return (
         <div className="max-w-4xl mx-auto">
@@ -265,7 +365,7 @@ export default function VideoToImagesPage() {
                             <Badge variant="secondary">חדש</Badge>
                         </div>
                         <p className="text-gray-600">
-                            העלה וידאו וקבל את התמונות הטובות ביותר עם selfie segmentation
+                            העלה וידאו וקבל את התמונות הטובות והחדות ביותר
                         </p>
                     </div>
                 </div>
@@ -275,7 +375,9 @@ export default function VideoToImagesPage() {
                 <CardContent className="p-6 space-y-6">
                     {/* Video Upload */}
                     <div>
-                        <Label className="text-sm font-medium mb-2 block">העלה וידאו (עד 100MB)</Label>
+                        <Label className="text-sm font-medium mb-2 block">
+                            העלה וידאו (עד 100MB)
+                        </Label>
                         <div className="flex gap-3">
                             <Input
                                 ref={videoInputRef}
@@ -288,7 +390,7 @@ export default function VideoToImagesPage() {
                             {videoFile && (
                                 <Badge variant="outline" className="flex items-center gap-2">
                                     <CheckCircle className="h-4 w-4" />
-                                    {(videoFile.size / (1024 * 1024)).toFixed(2)} MB
+                                    {(videoFile.size / (1024 * 1024)).toFixed(1)} MB
                                 </Badge>
                             )}
                         </div>
@@ -296,57 +398,48 @@ export default function VideoToImagesPage() {
 
                     {/* Image Count Selection */}
                     <div>
-                        <Label className="text-sm font-medium mb-3 block">מספר תמונות לחילוץ</Label>
-                        <RadioGroup value={imageCount} onValueChange={(v) => setImageCount(v as "5" | "10" | "15")} disabled={loading}>
+                        <Label className="text-sm font-medium mb-3 block">
+                            מספר תמונות לחילוץ
+                        </Label>
+                        <RadioGroup
+                            value={imageCount}
+                            onValueChange={(v) => setImageCount(v as "5" | "10" | "15")}
+                            disabled={loading}
+                        >
                             <div className="flex gap-4">
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="5" id="count-5" />
-                                    <Label htmlFor="count-5" className="cursor-pointer">5 תמונות</Label>
+                                    <Label htmlFor="count-5" className="cursor-pointer">
+                                        5 תמונות
+                                    </Label>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="10" id="count-10" />
-                                    <Label htmlFor="count-10" className="cursor-pointer">10 תמונות</Label>
+                                    <Label htmlFor="count-10" className="cursor-pointer">
+                                        10 תמונות
+                                    </Label>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="15" id="count-15" />
-                                    <Label htmlFor="count-15" className="cursor-pointer">15 תמונות</Label>
+                                    <Label htmlFor="count-15" className="cursor-pointer">
+                                        15 תמונות
+                                    </Label>
                                 </div>
                             </div>
                         </RadioGroup>
                     </div>
 
-                    {/* Background Image Upload (Optional) */}
-                    <div>
-                        <Label className="text-sm font-medium mb-2 block">
-                            תמונת רקע (אופציונלי) - למזג עם הווידאו
-                        </Label>
-                        <div className="flex gap-3">
-                            <Input
-                                ref={imageInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handleBackgroundChange}
-                                disabled={loading}
-                                className="flex-1"
-                            />
-                            {backgroundImage && (
-                                <Badge variant="outline" className="flex items-center gap-2">
-                                    <ImageIcon className="h-4 w-4" />
-                                    {backgroundImage.name}
-                                </Badge>
-                            )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                            אם תעלה תמונת רקע, הווידאו ימוזג עם הרקע (selfie segmentation)
-                        </p>
-                    </div>
-
                     {/* Process Button */}
-                    <Button onClick={handleProcess} disabled={!videoFile || loading} size="lg" className="w-full">
+                    <Button
+                        onClick={handleProcess}
+                        disabled={!videoFile || loading}
+                        size="lg"
+                        className="w-full"
+                    >
                         {loading ? (
                             <>
                                 <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                                מעבד...
+                                {progressText || "מעבד..."}
                             </>
                         ) : (
                             "התחל עיבוד"
@@ -354,7 +447,9 @@ export default function VideoToImagesPage() {
                     </Button>
 
                     <div className="flex items-center justify-between pt-2 border-t">
-                        <p className="text-sm text-gray-500">✓ מחפש selfie segmentation ומחלץ תמונות חדות</p>
+                        <p className="text-sm text-gray-500">
+                            ✓ מחלץ תמונות חדות ואיכותיות מהווידאו
+                        </p>
                         <p className="text-sm text-primary font-medium">
                             עלות: {CREDIT_COSTS.video_generation || 25} קרדיטים
                         </p>
@@ -362,6 +457,7 @@ export default function VideoToImagesPage() {
                 </CardContent>
             </Card>
 
+            {/* Progress */}
             {loading && (
                 <Card className="mb-8">
                     <CardContent className="p-6">
@@ -374,6 +470,7 @@ export default function VideoToImagesPage() {
                 </Card>
             )}
 
+            {/* Error */}
             {error && (
                 <Card className="mb-8 border-red-200 bg-red-50">
                     <CardContent className="p-6">
@@ -424,8 +521,8 @@ export default function VideoToImagesPage() {
                                     <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
                                         {index + 1}/{extractedImages.length}
                                     </div>
-                                    <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                                        Score: {image.score.toFixed(2)}
+                                    <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                                        {Math.round(image.timestamp)}s
                                     </div>
                                 </div>
                             ))}
@@ -434,35 +531,15 @@ export default function VideoToImagesPage() {
                 </Card>
             )}
 
-            {/* Merged Video */}
-            {mergedVideoUrl && (
-                <Card className="mb-8">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                                <CheckCircle className="h-5 w-5 text-green-500" />
-                                <h2 className="text-lg font-semibold">הווידאו הממוזג מוכן!</h2>
-                            </div>
-                            <Button onClick={downloadVideo} variant="outline">
-                                <Download className="h-4 w-4 ml-2" />
-                                הורד וידאו
-                            </Button>
-                        </div>
-                        <div className="rounded-lg overflow-hidden border">
-                            <video src={mergedVideoUrl} controls className="w-full" />
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
+            {/* Tips */}
             {!loading && extractedImages.length === 0 && (
                 <Card className="bg-blue-50 border-blue-100">
                     <CardContent className="p-6">
                         <h3 className="font-medium mb-2">💡 טיפים</h3>
                         <ul className="text-sm text-gray-600 space-y-1">
-                            <li>• המערכת מחפשת selfie segmentation ומחלצת תמונות חדות</li>
-                            <li>• תמונת רקע אופציונלית - אם תעלה, הווידאו ימוזג עם הרקע</li>
-                            <li>• העיבוד לוקח בין 1 ל-3 דקות בהתאם לאורך הווידאו</li>
+                            <li>• המערכת מחלצת פריימים מהווידאו ובוחרת את החדים ביותר</li>
+                            <li>• העיבוד מתבצע בדפדפן - מהיר ופרטי</li>
+                            <li>• מומלץ להשתמש בווידאו באיכות גבוהה</li>
                             <li>• גודל מקסימלי: 100MB</li>
                         </ul>
                     </CardContent>

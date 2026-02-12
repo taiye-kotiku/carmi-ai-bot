@@ -6,11 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Download, Sparkles, Upload, Video, X } from "lucide-react";
-<<<<<<< HEAD
 import { useNotifications } from "@/lib/notifications/notification-context";
-=======
 import { CREDIT_COSTS } from "@/lib/config/credits";
->>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
 export default function ImageToVideoPage() {
     const [image, setImage] = useState<File | null>(null);

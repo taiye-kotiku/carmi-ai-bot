@@ -664,14 +664,7 @@ export default function CarouselGenerationPage() {
                             <Button onClick={handleGenerate} disabled={loading || !canGenerate} className="w-full" size="lg">
                                 {loading ? (<><Loader2 className="h-5 w-5 animate-spin ml-2" />יוצר קרוסלה...</>) : (<><Wand2 className="h-5 w-5 ml-2" />צור קרוסלה</>)}
                             </Button>
-<<<<<<< HEAD
                             <p className="text-sm text-pink-600 text-center">עלות: {contentMode === "custom" || contentMode === "chat" ? customSlides.length : slideCount} קרדיטים</p>
-=======
-
-                            <p className="text-sm text-pink-600 text-center">
-                                עלות: {CREDIT_COSTS.carousel_generation} קרדיטים
-                            </p>
->>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
                         </CardContent>
                     </Card>
                 </div>

@@ -7,11 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-<<<<<<< HEAD
 import { useNotifications } from "@/lib/notifications/notification-context";
-=======
 import { CREDIT_COSTS } from "@/lib/config/credits";
->>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
 const ASPECT_RATIOS = [
     { value: "1:1", label: "ריבועי (1:1)", icon: "⬜" },
@@ -154,8 +151,8 @@ export default function ImageGenerationPage() {
                                             key={ratio.value}
                                             onClick={() => setAspectRatio(ratio.value)}
                                             className={`p-3 rounded-lg border text-sm flex items-center gap-2 transition-colors ${aspectRatio === ratio.value
-                                                    ? "border-primary bg-primary/5 text-primary"
-                                                    : "border-gray-200 hover:border-gray-300"
+                                                ? "border-primary bg-primary/5 text-primary"
+                                                : "border-gray-200 hover:border-gray-300"
                                                 }`}
                                         >
                                             <span>{ratio.icon}</span>
@@ -173,8 +170,8 @@ export default function ImageGenerationPage() {
                                             key={s.value}
                                             onClick={() => setStyle(s.value)}
                                             className={`p-3 rounded-lg border text-sm flex items-center gap-2 transition-colors ${style === s.value
-                                                    ? "border-primary bg-primary/5 text-primary"
-                                                    : "border-gray-200 hover:border-gray-300"
+                                                ? "border-primary bg-primary/5 text-primary"
+                                                : "border-gray-200 hover:border-gray-300"
                                                 }`}
                                         >
                                             <span>{s.icon}</span>

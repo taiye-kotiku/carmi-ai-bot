@@ -203,10 +203,6 @@ export default function CharacterGeneratePage() {
                         )}
                     </div>
 
-<<<<<<< HEAD
-                    <Button onClick={handleGenerate} disabled={isGenerating || !selectedId || !prompt.trim()} className="w-full text-lg py-6" size="lg">
-                        {isGenerating ? (<span className="flex items-center gap-3"><span className="animate-spin">|</span>מייצר תמונה... (10-30 שניות)</span>) : (<span className="flex items-center gap-2">צור תמונה<span className="text-sm opacity-80">(1 קרדיט)</span></span>)}
-=======
                     {/* Generate button */}
                     <Button
                         onClick={handleGenerate}
@@ -229,7 +225,6 @@ export default function CharacterGeneratePage() {
                                 </span>
                             </span>
                         )}
->>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
                     </Button>
                     {error && (<div className="bg-destructive/10 text-destructive rounded-lg p-4"><p className="font-medium">שגיאה</p><p className="text-sm mt-1">{error}</p></div>)}
                 </div>
@@ -265,7 +260,7 @@ export default function CharacterGeneratePage() {
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

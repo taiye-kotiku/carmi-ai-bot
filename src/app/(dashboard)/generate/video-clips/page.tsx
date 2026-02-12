@@ -15,11 +15,8 @@ import {
     ChevronUp,
     Smile,
 } from "lucide-react";
-<<<<<<< HEAD
 import { useNotifications } from "@/lib/notifications/notification-context";
-=======
 import { CREDIT_COSTS } from "@/lib/config/credits";
->>>>>>> 3e18db9e5aa5377a6d446065cd8eae94ee5a59c0
 
 const VIDEO_TYPES = [
     { value: 2, label: "YouTube" },

@@ -98,8 +98,7 @@ export default function CreditsPage() {
                         קנה קרדיטים ליצירת תוכן
                     </h1>
                     <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                        בחר את החבילה שמתאימה לך. הקרדיטים לא פגים ואפשר להשתמש בהם בכל
-                        הכלים.
+                        הקרדיטים הללו ישמשו אותך לחודש הקרוב בלבד. תוכל להשתמש בהם בכל הכלים.
                     </p>
 
                     {/* Current Balance */}
@@ -256,7 +255,7 @@ export default function CreditsPage() {
                 {/* Trust Section */}
                 <div className="mt-12 text-center text-sm text-gray-500 space-y-2">
                     <p>🔒 תשלום מאובטח באמצעות Cardcom</p>
-                    <p>הקרדיטים לא פגים • ניתן לרכוש שוב בכל עת</p>
+                    <p>   • ניתן לרכוש שוב בכל עת • </p>
                     <div className="flex items-center justify-center gap-4 mt-4">
                         <Link
                             href="/terms"

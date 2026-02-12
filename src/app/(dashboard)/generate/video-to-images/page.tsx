@@ -12,7 +12,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { CREDIT_COSTS } from "@/lib/config/credits";
-import { createClient } from "@/lib/supabase/client";
 
 interface ExtractedImage {
     url: string;
@@ -54,6 +53,46 @@ export default function VideoToImagesPage() {
         }
     };
 
+    /**
+     * Upload a file using signed URL (bypasses Vercel 4.5MB limit and Supabase RLS)
+     */
+    const uploadFileWithSignedUrl = async (
+        file: File,
+        label: string
+    ): Promise<string> => {
+        const fileExt = file.name.split(".").pop() || "bin";
+
+        // Step 1: Get signed upload URL from our API (small JSON request)
+        const signedUrlRes = await fetch("/api/storage/signed-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileExt, contentType: file.type }),
+        });
+
+        if (!signedUrlRes.ok) {
+            const err = await signedUrlRes.json().catch(() => ({ error: `שגיאה בהעלאת ${label}` }));
+            throw new Error(err.error || `שגיאה בהעלאת ${label}`);
+        }
+
+        const { signedUrl, token, publicUrl } = await signedUrlRes.json();
+
+        // Step 2: Upload file directly to Supabase using the signed URL
+        const uploadRes = await fetch(signedUrl, {
+            method: "PUT",
+            headers: {
+                "Content-Type": file.type,
+            },
+            body: file,
+        });
+
+        if (!uploadRes.ok) {
+            const errText = await uploadRes.text().catch(() => "");
+            throw new Error(`שגיאה בהעלאת ${label}: ${uploadRes.status} ${errText}`);
+        }
+
+        return publicUrl;
+    };
+
     const handleProcess = async () => {
         if (!videoFile) {
             toast.error("נא להעלות קובץ וידאו");
@@ -67,53 +106,18 @@ export default function VideoToImagesPage() {
         setMergedVideoUrl(null);
 
         try {
-            // Upload video directly to Supabase Storage (bypasses Vercel 4.5MB limit)
+            // Upload video via signed URL (bypasses Vercel 4.5MB limit + RLS)
             setProgressText("מעלה וידאו...");
             setProgress(5);
 
-            const supabase = createClient();
-            const videoExt = videoFile.name.split(".").pop() || "mp4";
-            const videoFileName = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${videoExt}`;
-
-            const { data: videoUploadData, error: videoUploadError } = await supabase.storage
-                .from("content")
-                .upload(videoFileName, videoFile, {
-                    contentType: videoFile.type,
-                    upsert: false,
-                });
-
-            if (videoUploadError) {
-                throw new Error("שגיאה בהעלאת וידאו: " + videoUploadError.message);
-            }
-
-            const { data: { publicUrl: videoUrl } } = supabase.storage
-                .from("content")
-                .getPublicUrl(videoFileName);
-
+            const videoUrl = await uploadFileWithSignedUrl(videoFile, "וידאו");
             setProgress(20);
 
-            // Upload background image directly if provided
+            // Upload background image if provided
             let backgroundUrl: string | null = null;
             if (backgroundImage) {
                 setProgressText("מעלה תמונת רקע...");
-                const bgExt = backgroundImage.name.split(".").pop() || "jpg";
-                const bgFileName = `uploads/${Date.now()}_bg_${Math.random().toString(36).slice(2)}.${bgExt}`;
-
-                const { error: bgUploadError } = await supabase.storage
-                    .from("content")
-                    .upload(bgFileName, backgroundImage, {
-                        contentType: backgroundImage.type,
-                        upsert: false,
-                    });
-
-                if (bgUploadError) {
-                    throw new Error("שגיאה בהעלאת תמונת רקע: " + bgUploadError.message);
-                }
-
-                const { data: { publicUrl: bgPublicUrl } } = supabase.storage
-                    .from("content")
-                    .getPublicUrl(bgFileName);
-                backgroundUrl = bgPublicUrl;
+                backgroundUrl = await uploadFileWithSignedUrl(backgroundImage, "תמונת רקע");
             }
 
             setProgress(30);

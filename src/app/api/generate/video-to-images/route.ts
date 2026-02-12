@@ -30,74 +30,17 @@ export async function POST(req: Request) {
             );
         }
 
-        const contentType = req.headers.get("content-type") || "";
-        let videoUrl: string;
-        let backgroundUrl: string | null = null;
-        let imageCount: number;
+        // Receive URLs (video already uploaded to Supabase Storage from client)
+        const body = await req.json();
+        const videoUrl: string = body.videoUrl;
+        const backgroundUrl: string | null = body.backgroundUrl || null;
+        const imageCount: number = parseInt(body.imageCount) || 10;
 
-        if (contentType.includes("application/json")) {
-            // New approach: receive URLs
-            const body = await req.json();
-            videoUrl = body.videoUrl;
-            backgroundUrl = body.backgroundUrl || null;
-            imageCount = parseInt(body.imageCount) || 10;
-
-            if (!videoUrl) {
-                return NextResponse.json(
-                    { error: "נא לספק קישור לוידאו" },
-                    { status: 400 }
-                );
-            }
-        } else {
-            // Legacy approach: receive files (for backward compatibility)
-            const formData = await req.formData();
-            const videoFile = formData.get("video") as File;
-            const backgroundImage = formData.get("backgroundImage") as File | null;
-            imageCount = parseInt(formData.get("imageCount") as string) || 10;
-
-            if (!videoFile) {
-                return NextResponse.json(
-                    { error: "נא להעלות קובץ וידאו" },
-                    { status: 400 }
-                );
-            }
-
-            // Validate file size (100MB max)
-            if (videoFile.size > 100 * 1024 * 1024) {
-                return NextResponse.json(
-                    { error: "גודל הקובץ חייב להיות עד 100MB" },
-                    { status: 400 }
-                );
-            }
-
-            // Upload files to storage
-            const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
-            const videoFileName = `videos/${user.id}/${nanoid()}/original_${videoFile.name}`;
-            await supabaseAdmin.storage
-                .from("content")
-                .upload(videoFileName, videoBuffer, {
-                    contentType: videoFile.type,
-                    upsert: true,
-                });
-            const { data: videoUrlData } = supabaseAdmin.storage
-                .from("content")
-                .getPublicUrl(videoFileName);
-            videoUrl = videoUrlData.publicUrl;
-
-            if (backgroundImage) {
-                const bgBuffer = Buffer.from(await backgroundImage.arrayBuffer());
-                const bgFileName = `images/${user.id}/${nanoid()}/background_${backgroundImage.name}`;
-                await supabaseAdmin.storage
-                    .from("content")
-                    .upload(bgFileName, bgBuffer, {
-                        contentType: backgroundImage.type,
-                        upsert: true,
-                    });
-                const { data: bgUrlData } = supabaseAdmin.storage
-                    .from("content")
-                    .getPublicUrl(bgFileName);
-                backgroundUrl = bgUrlData.publicUrl;
-            }
+        if (!videoUrl) {
+            return NextResponse.json(
+                { error: "נא לספק קישור לוידאו" },
+                { status: 400 }
+            );
         }
 
         // Deduct credits upfront

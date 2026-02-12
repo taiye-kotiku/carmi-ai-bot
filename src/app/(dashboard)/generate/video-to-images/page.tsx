@@ -67,56 +67,59 @@ export default function VideoToImagesPage() {
         setMergedVideoUrl(null);
 
         try {
+            // Upload video directly to Supabase Storage (bypasses Vercel 4.5MB limit)
             setProgressText("מעלה וידאו...");
-            setProgress(10);
+            setProgress(5);
 
-            // Upload video to Supabase Storage first
-            const videoFormData = new FormData();
-            videoFormData.append("video", videoFile);
-            const videoUploadRes = await fetch("/api/upload/video", {
-                method: "POST",
-                body: videoFormData,
-            });
+            const supabase = createClient();
+            const videoExt = videoFile.name.split(".").pop() || "mp4";
+            const videoFileName = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${videoExt}`;
 
-            if (!videoUploadRes.ok) {
-                const errorData = await videoUploadRes.json().catch(() => ({ error: "שגיאה בהעלאת וידאו" }));
-                throw new Error(errorData.error || "שגיאה בהעלאת וידאו");
+            const { data: videoUploadData, error: videoUploadError } = await supabase.storage
+                .from("content")
+                .upload(videoFileName, videoFile, {
+                    contentType: videoFile.type,
+                    upsert: false,
+                });
+
+            if (videoUploadError) {
+                throw new Error("שגיאה בהעלאת וידאו: " + videoUploadError.message);
             }
 
-            const { url: videoUrl } = await videoUploadRes.json();
+            const { data: { publicUrl: videoUrl } } = supabase.storage
+                .from("content")
+                .getPublicUrl(videoFileName);
+
             setProgress(20);
 
-            // Upload background image if provided
+            // Upload background image directly if provided
             let backgroundUrl: string | null = null;
             if (backgroundImage) {
                 setProgressText("מעלה תמונת רקע...");
-                const supabase = createClient();
-                const fileExt = backgroundImage.name.split(".").pop();
-                const fileName = `${Date.now()}.${fileExt}`;
-                const filePath = `uploads/${fileName}`;
+                const bgExt = backgroundImage.name.split(".").pop() || "jpg";
+                const bgFileName = `uploads/${Date.now()}_bg_${Math.random().toString(36).slice(2)}.${bgExt}`;
 
-                const arrayBuffer = await backgroundImage.arrayBuffer();
-                const { data, error: uploadError } = await supabase.storage
+                const { error: bgUploadError } = await supabase.storage
                     .from("content")
-                    .upload(filePath, arrayBuffer, {
+                    .upload(bgFileName, backgroundImage, {
                         contentType: backgroundImage.type,
                         upsert: false,
                     });
 
-                if (uploadError) {
-                    throw new Error("שגיאה בהעלאת תמונת רקע: " + uploadError.message);
+                if (bgUploadError) {
+                    throw new Error("שגיאה בהעלאת תמונת רקע: " + bgUploadError.message);
                 }
 
-                const {
-                    data: { publicUrl },
-                } = supabase.storage.from("content").getPublicUrl(filePath);
-                backgroundUrl = publicUrl;
+                const { data: { publicUrl: bgPublicUrl } } = supabase.storage
+                    .from("content")
+                    .getPublicUrl(bgFileName);
+                backgroundUrl = bgPublicUrl;
             }
 
             setProgress(30);
             setProgressText("מתחיל עיבוד...");
 
-            // Now send URLs to processing API
+            // Send only URLs to processing API (small JSON payload)
             const response = await fetch("/api/generate/video-to-images", {
                 method: "POST",
                 headers: {
@@ -125,7 +128,7 @@ export default function VideoToImagesPage() {
                 body: JSON.stringify({
                     videoUrl,
                     backgroundUrl,
-                    imageCount,
+                    imageCount: parseInt(imageCount),
                 }),
             });
 

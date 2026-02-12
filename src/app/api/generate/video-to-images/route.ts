@@ -329,48 +329,63 @@ async function extractBestFrames(
                 });
             }
         } else {
-            // Use external service (similar to reel-extractor)
+            // Use external Python service for MediaPipe processing
             await supabaseAdmin
                 .from("jobs")
                 .update({ progress: 40 })
                 .eq("id", jobId);
             
-            // Use RENDER_API_URL service if available
-            const renderApiUrl = process.env.RENDER_API_URL || "https://frame-extractor-oou7.onrender.com";
+            // Use VIDEO_PROCESSOR_API_URL if available, otherwise use RENDER_API_URL
+            const processorApiUrl = process.env.VIDEO_PROCESSOR_API_URL || process.env.RENDER_API_URL || "https://video-processor-service.onrender.com";
             const videoBase64 = videoBuffer.toString("base64");
             
             try {
-                const response = await fetch(`${renderApiUrl}/extract-frames`, {
+                const response = await fetch(`${processorApiUrl}/process-video`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         video_base64: videoBase64,
-                        frame_count: count * 2,
-                        fps: 1,
+                        image_count: count,
+                        action: "extract_frames",
                     }),
+                    signal: AbortSignal.timeout(300000), // 5 minutes timeout
                 });
                 
-                if (response.ok) {
-                    const data = await response.json();
-                    const frames = data.frames || data.images || [];
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`External service failed: ${response.status} - ${errorText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Update progress
+                if (data.progress) {
+                    await supabaseAdmin
+                        .from("jobs")
+                        .update({ progress: 35 + Math.floor(data.progress * 0.25) })
+                        .eq("id", jobId);
+                }
+                
+                const frames = data.frames || data.images || [];
+                
+                // Process frames
+                for (let i = 0; i < Math.min(frames.length, count); i++) {
+                    const frame = frames[i];
+                    const frameBase64 = typeof frame === "string" 
+                        ? frame.replace(/^data:image\/\w+;base64,/, "")
+                        : frame.data || frame;
+                    const frameBuffer = Buffer.from(frameBase64, "base64");
                     
-                    // Process frames and score them (simplified scoring)
-                    for (let i = 0; i < Math.min(frames.length, count); i++) {
-                        const frameBase64 = frames[i].replace(/^data:image\/\w+;base64,/, "");
-                        const frameBuffer = Buffer.from(frameBase64, "base64");
-                        
-                        bestFrames.push({
-                            buffer: frameBuffer,
-                            timestamp: i,
-                            score: 100 - i, // Simple scoring
-                        });
-                    }
-                } else {
-                    throw new Error("External service failed");
+                    bestFrames.push({
+                        buffer: frameBuffer,
+                        timestamp: frame.timestamp || i,
+                        score: frame.score || (100 - i),
+                    });
                 }
             } catch (error) {
+                console.error("External service error:", error);
                 throw new Error(
-                    "עיבוד וידאו נכשל. נא לוודא ש-Python MediaPipe מותקן או ש-RENDER_API_URL מוגדר."
+                    `עיבוד וידאו נכשל: ${error instanceof Error ? error.message : "שגיאה לא ידועה"}. נא לוודא ש-VIDEO_PROCESSOR_API_URL מוגדר או ש-Python MediaPipe מותקן בשרת.`
                 );
             }
         }
@@ -458,35 +473,66 @@ async function createMergedVideo(
                     .eq("id", jobId);
             }
         } else {
-            // Fallback: Use FFmpeg with chromakey (simpler but less accurate)
+            // Use external Python service for video merging
             await supabaseAdmin
                 .from("jobs")
-                .update({ progress: 85 })
+                .update({ progress: 80 })
                 .eq("id", jobId);
             
-            // Resize background to match video dimensions
-            const { stdout: videoInfo } = await execAsync(
-                `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of json "${videoPath}"`
-            );
-            const videoInfoJson = JSON.parse(videoInfo);
-            const width = videoInfoJson.streams[0].width;
-            const height = videoInfoJson.streams[0].height;
+            const processorApiUrl = process.env.VIDEO_PROCESSOR_API_URL || process.env.RENDER_API_URL || "https://video-processor-service.onrender.com";
+            const videoBase64 = videoBuffer.toString("base64");
+            const backgroundBase64 = backgroundBuffer.toString("base64");
             
-            const resizedBgPath = path.join(tempDir, "background_resized.jpg");
-            await execAsync(
-                `ffmpeg -i "${backgroundPath}" -vf scale=${width}:${height} "${resizedBgPath}" -y`
-            );
-            
-            // Use FFmpeg overlay (simplified - doesn't use MediaPipe segmentation)
-            // Note: This is a fallback and won't be as accurate as MediaPipe
-            await execAsync(
-                `ffmpeg -i "${videoPath}" -i "${resizedBgPath}" -filter_complex "[0:v][1:v]overlay=0:0" -c:v libx264 -pix_fmt yuv420p "${outputPath}" -y`
-            );
-            
-            await supabaseAdmin
-                .from("jobs")
-                .update({ progress: 95 })
-                .eq("id", jobId);
+            try {
+                const response = await fetch(`${processorApiUrl}/process-video`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        video_base64: videoBase64,
+                        background_base64: backgroundBase64,
+                        action: "merge_video",
+                    }),
+                    signal: AbortSignal.timeout(300000), // 5 minutes timeout
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`External service failed: ${response.status} - ${errorText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Update progress
+                if (data.progress) {
+                    await supabaseAdmin
+                        .from("jobs")
+                        .update({ progress: 80 + Math.floor(data.progress * 0.15) })
+                        .eq("id", jobId);
+                }
+                
+                // Download merged video
+                if (data.video_url) {
+                    const videoResponse = await fetch(data.video_url);
+                    const mergedVideoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+                    await fs.writeFile(outputPath, mergedVideoBuffer);
+                } else if (data.video_base64) {
+                    const videoBase64Data = data.video_base64.replace(/^data:video\/\w+;base64,/, "");
+                    const mergedVideoBuffer = Buffer.from(videoBase64Data, "base64");
+                    await fs.writeFile(outputPath, mergedVideoBuffer);
+                } else {
+                    throw new Error("No video data in response");
+                }
+                
+                await supabaseAdmin
+                    .from("jobs")
+                    .update({ progress: 95 })
+                    .eq("id", jobId);
+            } catch (error) {
+                console.error("External service error:", error);
+                throw new Error(
+                    `מיזוג וידאו נכשל: ${error instanceof Error ? error.message : "שגיאה לא ידועה"}. נא לוודא ש-VIDEO_PROCESSOR_API_URL מוגדר או ש-Python MediaPipe מותקן בשרת.`
+                );
+            }
         }
         
         // Read merged video

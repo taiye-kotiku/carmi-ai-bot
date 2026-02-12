@@ -53,12 +53,12 @@ export default async function DashboardPage() {
             color: "bg-purple-50 text-purple-600 hover:bg-purple-100",
         },
         {
-            name: "המרת רילז",
-            description: "הפוך רילז לקרוסלה",
-            href: "/generate/reel-converter",
+            name: "וידאו לתמונות",
+            description: "חלץ תמונות מוידאו עם selfie segmentation",
+            href: "/generate/video-to-images",
             icon: Film,
             color: "bg-blue-50 text-blue-600 hover:bg-blue-100",
-            badge: "⭐",
+            badge: "🆕",
         },
         {
             name: "יצירת קרוסלה",

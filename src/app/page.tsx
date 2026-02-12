@@ -385,9 +385,9 @@ export default async function HomePage() {
                 </div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
-                <h3 className="text-xl font-bold mb-2">רילז לקרוסלה</h3>
+                <h3 className="text-xl font-bold mb-2"> תמונות נבחרות מוידאו</h3>
                 <p className="text-slate-400 text-sm">
-                  הדבק קישור לרילז, קבל אוטומטית 10 פריימים מנצחים לקרוסלה.
+                  העלה וידאו וקבל  מיידית 10 תמונות נבחרות.
                 </p>
               </div>
             </div>
@@ -613,7 +613,7 @@ export default async function HomePage() {
                 </div>
                 <ul className="space-y-4 mb-8 text-sm text-slate-300">
                   <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 10 תמונות חינם</li>
-                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 2 המרות רילז</li>
+                  <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> 2 המרות וידאו</li>
                   <li className="flex gap-3"><Check className="h-5 w-5 text-emerald-500" /> גישה לכל הכלים</li>
                 </ul>
                 <Button className="w-full bg-slate-800 hover:bg-slate-700" asChild>

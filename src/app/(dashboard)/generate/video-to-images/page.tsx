@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { createClient } from "@/lib/supabase/client";
 
 interface ExtractedImage {
     url: string;
@@ -69,21 +70,74 @@ export default function VideoToImagesPage() {
             setProgressText("מעלה וידאו...");
             setProgress(10);
 
-            const formData = new FormData();
-            formData.append("video", videoFile);
-            formData.append("imageCount", imageCount);
-            if (backgroundImage) {
-                formData.append("backgroundImage", backgroundImage);
+            // Upload video to Supabase Storage first
+            const videoFormData = new FormData();
+            videoFormData.append("video", videoFile);
+            const videoUploadRes = await fetch("/api/upload/video", {
+                method: "POST",
+                body: videoFormData,
+            });
+
+            if (!videoUploadRes.ok) {
+                const errorData = await videoUploadRes.json().catch(() => ({ error: "שגיאה בהעלאת וידאו" }));
+                throw new Error(errorData.error || "שגיאה בהעלאת וידאו");
             }
 
+            const { url: videoUrl } = await videoUploadRes.json();
+            setProgress(20);
+
+            // Upload background image if provided
+            let backgroundUrl: string | null = null;
+            if (backgroundImage) {
+                setProgressText("מעלה תמונת רקע...");
+                const supabase = createClient();
+                const fileExt = backgroundImage.name.split(".").pop();
+                const fileName = `${Date.now()}.${fileExt}`;
+                const filePath = `uploads/${fileName}`;
+
+                const arrayBuffer = await backgroundImage.arrayBuffer();
+                const { data, error: uploadError } = await supabase.storage
+                    .from("content")
+                    .upload(filePath, arrayBuffer, {
+                        contentType: backgroundImage.type,
+                        upsert: false,
+                    });
+
+                if (uploadError) {
+                    throw new Error("שגיאה בהעלאת תמונת רקע: " + uploadError.message);
+                }
+
+                const {
+                    data: { publicUrl },
+                } = supabase.storage.from("content").getPublicUrl(filePath);
+                backgroundUrl = publicUrl;
+            }
+
+            setProgress(30);
+            setProgressText("מתחיל עיבוד...");
+
+            // Now send URLs to processing API
             const response = await fetch("/api/generate/video-to-images", {
                 method: "POST",
-                body: formData,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    videoUrl,
+                    backgroundUrl,
+                    imageCount,
+                }),
             });
 
             if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.error || "שגיאה בעיבוד");
+                const errorText = await response.text();
+                let errorData;
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch {
+                    throw new Error(errorText || "שגיאה בעיבוד");
+                }
+                throw new Error(errorData.error || "שגיאה בעיבוד");
             }
 
             const { jobId } = await response.json();

@@ -30,24 +30,74 @@ export async function POST(req: Request) {
             );
         }
 
-        const formData = await req.formData();
-        const videoFile = formData.get("video") as File;
-        const backgroundImage = formData.get("backgroundImage") as File | null;
-        const imageCount = parseInt(formData.get("imageCount") as string) || 10;
+        const contentType = req.headers.get("content-type") || "";
+        let videoUrl: string;
+        let backgroundUrl: string | null = null;
+        let imageCount: number;
 
-        if (!videoFile) {
-            return NextResponse.json(
-                { error: "נא להעלות קובץ וידאו" },
-                { status: 400 }
-            );
-        }
+        if (contentType.includes("application/json")) {
+            // New approach: receive URLs
+            const body = await req.json();
+            videoUrl = body.videoUrl;
+            backgroundUrl = body.backgroundUrl || null;
+            imageCount = parseInt(body.imageCount) || 10;
 
-        // Validate file size (100MB max)
-        if (videoFile.size > 100 * 1024 * 1024) {
-            return NextResponse.json(
-                { error: "גודל הקובץ חייב להיות עד 100MB" },
-                { status: 400 }
-            );
+            if (!videoUrl) {
+                return NextResponse.json(
+                    { error: "נא לספק קישור לוידאו" },
+                    { status: 400 }
+                );
+            }
+        } else {
+            // Legacy approach: receive files (for backward compatibility)
+            const formData = await req.formData();
+            const videoFile = formData.get("video") as File;
+            const backgroundImage = formData.get("backgroundImage") as File | null;
+            imageCount = parseInt(formData.get("imageCount") as string) || 10;
+
+            if (!videoFile) {
+                return NextResponse.json(
+                    { error: "נא להעלות קובץ וידאו" },
+                    { status: 400 }
+                );
+            }
+
+            // Validate file size (100MB max)
+            if (videoFile.size > 100 * 1024 * 1024) {
+                return NextResponse.json(
+                    { error: "גודל הקובץ חייב להיות עד 100MB" },
+                    { status: 400 }
+                );
+            }
+
+            // Upload files to storage
+            const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
+            const videoFileName = `videos/${user.id}/${nanoid()}/original_${videoFile.name}`;
+            await supabaseAdmin.storage
+                .from("content")
+                .upload(videoFileName, videoBuffer, {
+                    contentType: videoFile.type,
+                    upsert: true,
+                });
+            const { data: videoUrlData } = supabaseAdmin.storage
+                .from("content")
+                .getPublicUrl(videoFileName);
+            videoUrl = videoUrlData.publicUrl;
+
+            if (backgroundImage) {
+                const bgBuffer = Buffer.from(await backgroundImage.arrayBuffer());
+                const bgFileName = `images/${user.id}/${nanoid()}/background_${backgroundImage.name}`;
+                await supabaseAdmin.storage
+                    .from("content")
+                    .upload(bgFileName, bgBuffer, {
+                        contentType: backgroundImage.type,
+                        upsert: true,
+                    });
+                const { data: bgUrlData } = supabaseAdmin.storage
+                    .from("content")
+                    .getPublicUrl(bgFileName);
+                backgroundUrl = bgUrlData.publicUrl;
+            }
         }
 
         // Deduct credits upfront
@@ -74,23 +124,23 @@ export async function POST(req: Request) {
         });
 
         // Process in background
-        processVideoToImages(jobId, user.id, videoFile, backgroundImage, imageCount);
+        processVideoToImagesFromUrl(jobId, user.id, videoUrl, backgroundUrl, imageCount);
 
         return NextResponse.json({ jobId });
     } catch (error) {
         console.error("Video to images error:", error);
         return NextResponse.json(
-            { error: "שגיאה בשרת" },
+            { error: "שגיאה בשרת: " + (error instanceof Error ? error.message : "Unknown error") },
             { status: 500 }
         );
     }
 }
 
-async function processVideoToImages(
+async function processVideoToImagesFromUrl(
     jobId: string,
     userId: string,
-    videoFile: File,
-    backgroundImage: File | null,
+    videoUrl: string,
+    backgroundUrl: string | null,
     imageCount: number
 ) {
     try {
@@ -99,20 +149,21 @@ async function processVideoToImages(
             .update({ status: "processing", progress: 10 })
             .eq("id", jobId);
 
-        // Convert File to Buffer
-        const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
-        const backgroundBuffer = backgroundImage
-            ? Buffer.from(await backgroundImage.arrayBuffer())
-            : null;
+        // Download video from URL
+        const videoResponse = await fetch(videoUrl);
+        if (!videoResponse.ok) {
+            throw new Error("Failed to download video from URL");
+        }
+        const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
 
-        // Upload original video to storage
-        const videoFileName = `videos/${userId}/${jobId}/original_${videoFile.name}`;
-        await supabaseAdmin.storage
-            .from("content")
-            .upload(videoFileName, videoBuffer, {
-                contentType: videoFile.type,
-                upsert: true,
-            });
+        // Download background image if provided
+        let backgroundBuffer: Buffer | null = null;
+        if (backgroundUrl) {
+            const bgResponse = await fetch(backgroundUrl);
+            if (bgResponse.ok) {
+                backgroundBuffer = Buffer.from(await bgResponse.arrayBuffer());
+            }
+        }
 
         await supabaseAdmin
             .from("jobs")

@@ -8,6 +8,7 @@ import {
 } from "@/lib/services/vizard";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 export async function POST(req: Request) {
     try {
@@ -172,17 +173,11 @@ async function processVideoClipsFromUrl(
             }
         );
 
-        await saveClipsToStorage(
-            jobId,
-            userId,
-            videoUrl,
-            clips
-        );
+        await saveClipsToStorage(jobId, userId, videoUrl, clips);
     } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
 
-        // Refund credits on failure
         await addCredits(
             userId,
             CREDIT_COSTS.video_clips,
@@ -254,17 +249,11 @@ async function processVideoClipsFromFile(
             }
         );
 
-        await saveClipsToStorage(
-            jobId,
-            userId,
-            publicVideoUrl,
-            clips
-        );
+        await saveClipsToStorage(jobId, userId, publicVideoUrl, clips);
     } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
 
-        // Refund credits on failure
         await addCredits(
             userId,
             CREDIT_COSTS.video_clips,
@@ -286,6 +275,7 @@ async function saveClipsToStorage(
     clips: any[]
 ) {
     const uploadedClips: any[] = [];
+    let totalFileSize = 0;
 
     for (let i = 0; i < clips.length; i++) {
         const clip = clips[i];
@@ -311,6 +301,9 @@ async function saveClipsToStorage(
                 await clipResponse.arrayBuffer()
             );
 
+            // Track file size
+            totalFileSize += clipBuffer.length;
+
             const clipPath = `${userId}/${jobId}/clip_${i + 1}.mp4`;
             await supabaseAdmin.storage
                 .from("content")
@@ -323,7 +316,7 @@ async function saveClipsToStorage(
                 .from("content")
                 .getPublicUrl(clipPath);
 
-            let thumbnailUrl = clipUrlData.publicUrl;
+            const thumbnailUrl = clipUrlData.publicUrl;
 
             uploadedClips.push({
                 url: clipUrlData.publicUrl,
@@ -350,7 +343,6 @@ async function saveClipsToStorage(
     }
 
     if (uploadedClips.length === 0) {
-        // Refund credits — no clips saved
         await addCredits(
             userId,
             CREDIT_COSTS.video_clips,
@@ -381,7 +373,14 @@ async function saveClipsToStorage(
         status: "completed",
         job_id: jobId,
         completed_at: new Date().toISOString(),
+        file_size_bytes: totalFileSize,
+        files_deleted: false,
     });
+
+    // Update user storage
+    if (totalFileSize > 0) {
+        await updateUserStorage(userId, totalFileSize);
+    }
 
     // Complete job
     await supabaseAdmin

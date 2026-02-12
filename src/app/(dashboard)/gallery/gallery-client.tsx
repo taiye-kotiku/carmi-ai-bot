@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, X, ChevronRight, ChevronLeft, Play } from "lucide-react";
+import { Download, X, ChevronRight, ChevronLeft, Play, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,6 @@ import type { Tables } from "@/types/database";
 
 type Generation = Tables<"generations">;
 
-// Check if URL is a video
 function isVideoUrl(url: string): boolean {
     if (!url) return false;
     const videoExtensions = [".mp4", ".webm", ".mov", ".avi"];
@@ -63,7 +62,6 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
         }
     };
 
-    // Get display type for badge
     const getTypeBadge = (gen: Generation) => {
         if (gen.feature === "video_clips") return "קליפים";
         if (gen.feature === "text_to_video") return "וידאו AI";
@@ -74,7 +72,6 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
         return gen.type;
     };
 
-    // Check if generation contains video
     const hasVideo = (gen: Generation) => {
         return (
             gen.type === "video" ||
@@ -82,6 +79,10 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
             gen.feature === "text_to_video" ||
             isVideoUrl(gen.result_urls?.[0] || "")
         );
+    };
+
+    const isDeleted = (gen: Generation) => {
+        return gen.files_deleted === true;
     };
 
     return (
@@ -113,19 +114,29 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
             {/* Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filteredGenerations.map((gen, index) => {
+                    const deleted = isDeleted(gen);
                     const isVideo = hasVideo(gen);
                     const thumbnailUrl = gen.thumbnail_url || gen.result_urls?.[0];
 
                     return (
                         <Card
                             key={gen.id}
-                            className="overflow-hidden group cursor-pointer"
-                            onClick={() => setSelectedIndex(index)}
+                            className={`overflow-hidden group ${deleted ? "opacity-60" : "cursor-pointer"}`}
+                            onClick={() => !deleted && setSelectedIndex(index)}
                         >
                             <div className="aspect-square relative bg-gray-100">
-                                {isVideo ? (
+                                {deleted ? (
+                                    /* Files deleted placeholder */
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-4">
+                                        <Trash2 className="h-8 w-8 text-gray-300 mb-2" />
+                                        <p className="text-xs text-gray-400 text-center leading-relaxed">
+                                            הקבצים נמחקו
+                                            <br />
+                                            לפינוי אחסון
+                                        </p>
+                                    </div>
+                                ) : isVideo ? (
                                     <>
-                                        {/* Video thumbnail or preview */}
                                         {thumbnailUrl && !isVideoUrl(thumbnailUrl) ? (
                                             <img
                                                 src={thumbnailUrl}
@@ -145,7 +156,6 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                                 }}
                                             />
                                         )}
-                                        {/* Play icon overlay */}
                                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                             <div className="bg-black/50 rounded-full p-3">
                                                 <Play className="h-8 w-8 text-white fill-white" />
@@ -160,19 +170,21 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                     />
                                 )}
 
-                                {/* Hover overlay */}
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                    <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDownload(gen.result_urls?.[0] || "", index, isVideo);
-                                        }}
-                                    >
-                                        <Download className="h-4 w-4" />
-                                    </Button>
-                                </div>
+                                {/* Hover overlay — only for non-deleted */}
+                                {!deleted && (
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                        <Button
+                                            size="icon"
+                                            variant="secondary"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDownload(gen.result_urls?.[0] || "", index, isVideo);
+                                            }}
+                                        >
+                                            <Download className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                )}
 
                                 {/* Type badge */}
                                 <div className="absolute top-2 right-2">
@@ -181,8 +193,17 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                     </Badge>
                                 </div>
 
-                                {/* Clip count for video clips */}
-                                {gen.feature === "video_clips" && gen.result_urls && gen.result_urls.length > 1 && (
+                                {/* Deleted badge */}
+                                {deleted && (
+                                    <div className="absolute top-2 left-2">
+                                        <Badge variant="outline" className="text-xs bg-white/90 text-gray-500 border-gray-300">
+                                            נמחק
+                                        </Badge>
+                                    </div>
+                                )}
+
+                                {/* Clip count */}
+                                {!deleted && gen.feature === "video_clips" && gen.result_urls && gen.result_urls.length > 1 && (
                                     <div className="absolute bottom-2 left-2">
                                         <Badge className="text-xs bg-purple-600">
                                             {gen.result_urls.length} קליפים
@@ -194,17 +215,26 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                 <p className="text-sm text-gray-600 line-clamp-1">
                                     {gen.prompt || gen.source_url || "ללא תיאור"}
                                 </p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                    {formatRelativeTime(gen.created_at)}
-                                </p>
+                                <div className="flex items-center justify-between mt-1">
+                                    <p className="text-xs text-gray-400">
+                                        {formatRelativeTime(gen.created_at)}
+                                    </p>
+                                    {deleted && (
+                                        <p className="text-[10px] text-gray-400">
+                                            {gen.file_size_bytes
+                                                ? `${Math.round((gen.file_size_bytes || 0) / 1024)}KB שוחרר`
+                                                : ""}
+                                        </p>
+                                    )}
+                                </div>
                             </CardContent>
                         </Card>
                     );
                 })}
             </div>
 
-            {/* Lightbox */}
-            {selectedGen && (
+            {/* Lightbox — only for non-deleted */}
+            {selectedGen && !isDeleted(selectedGen) && (
                 <div
                     className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
                     onClick={() => setSelectedIndex(null)}
@@ -218,7 +248,6 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                         <X className="h-6 w-6" />
                     </Button>
 
-                    {/* Navigation */}
                     {selectedIndex! > 0 && (
                         <Button
                             variant="ghost"
@@ -247,15 +276,12 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                         </Button>
                     )}
 
-                    {/* Content */}
                     <div
                         className="max-w-5xl max-h-[90vh] overflow-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {hasVideo(selectedGen) ? (
-                            // Video content
                             selectedGen.result_urls && selectedGen.result_urls.length > 1 ? (
-                                // Multiple clips
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {selectedGen.result_urls.map((url, i) => (
                                         <div key={i} className="relative group">
@@ -279,7 +305,6 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                     ))}
                                 </div>
                             ) : (
-                                // Single video
                                 <video
                                     src={selectedGen.result_urls?.[0]}
                                     controls
@@ -288,7 +313,6 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                 />
                             )
                         ) : selectedGen.result_urls && selectedGen.result_urls.length > 1 ? (
-                            // Multiple images
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                                 {selectedGen.result_urls.map((url, i) => (
                                     <div key={i} className="relative group">
@@ -309,7 +333,6 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                 ))}
                             </div>
                         ) : (
-                            // Single image
                             <img
                                 src={selectedGen.result_urls?.[0]}
                                 alt={selectedGen.prompt || "Generated"}

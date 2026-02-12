@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import { imageToVideo, enhancePrompt } from "@/lib/services/gemini";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 export async function POST(req: Request) {
     try {
@@ -100,19 +101,6 @@ async function processImageToVideo(
         const videoResponse = await fetch(videoUrl);
         const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
 
-        const fileName = `${userId}/${jobId}/video.mp4`;
-
-        await supabaseAdmin.storage
-            .from("content")
-            .upload(fileName, videoBuffer, {
-                contentType: "video/mp4",
-                upsert: true,
-            });
-
-        const { data: urlData } = supabaseAdmin.storage
-            .from("content")
-            .getPublicUrl(fileName);
-
         // Save original image too
         const imageBuffer = Buffer.from(imageBase64, "base64");
         const imageName = `${userId}/${jobId}/source.jpg`;
@@ -126,6 +114,22 @@ async function processImageToVideo(
         const { data: imageUrlData } = supabaseAdmin.storage
             .from("content")
             .getPublicUrl(imageName);
+
+        const fileName = `${userId}/${jobId}/video.mp4`;
+
+        await supabaseAdmin.storage
+            .from("content")
+            .upload(fileName, videoBuffer, {
+                contentType: "video/mp4",
+                upsert: true,
+            });
+
+        const { data: urlData } = supabaseAdmin.storage
+            .from("content")
+            .getPublicUrl(fileName);
+
+        // Calculate total file size (video + source image)
+        const totalFileSize = videoBuffer.length + imageBuffer.length;
 
         // Save generation
         const generationId = nanoid();
@@ -141,7 +145,12 @@ async function processImageToVideo(
             status: "completed",
             job_id: jobId,
             completed_at: new Date().toISOString(),
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
         });
+
+        // Update user storage
+        await updateUserStorage(userId, totalFileSize);
 
         // Complete job
         await supabaseAdmin
@@ -151,11 +160,10 @@ async function processImageToVideo(
                 progress: 100,
                 result: {
                     videoUrl: urlData.publicUrl,
-                    sourceImage: imageUrlData.publicUrl
+                    sourceImage: imageUrlData.publicUrl,
                 },
             })
             .eq("id", jobId);
-
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
 

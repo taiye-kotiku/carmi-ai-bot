@@ -10,6 +10,7 @@ import { generateCarouselContent } from "@/lib/services/carousel-content";
 import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 export async function POST(req: Request) {
     try {
@@ -242,13 +243,17 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
 
         // Upload images to Supabase Storage
         const uploadedUrls: string[] = [];
+        let totalFileSize = 0;
 
         for (let i = 0; i < result.images.length; i++) {
+            const imageBuffer = result.images[i];
+            totalFileSize += imageBuffer.length;
+
             const fileName = `${userId}/${jobId}/slide_${i + 1}.png`;
 
             const { error: uploadError } = await supabaseAdmin.storage
                 .from("content")
-                .upload(fileName, result.images[i], {
+                .upload(fileName, imageBuffer, {
                     contentType: "image/png",
                     upsert: true,
                 });
@@ -280,7 +285,12 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
             job_id: jobId,
             has_branding: !!options.brandLogo,
             completed_at: new Date().toISOString(),
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
         });
+
+        // Update user storage
+        await updateUserStorage(userId, totalFileSize);
 
         // Complete job
         await supabaseAdmin
@@ -308,7 +318,7 @@ async function processCarousel(jobId: string, userId: string, options: ProcessOp
                 .update({
                     status: "failed",
                     error: errorMessage,
-                    progress: 0
+                    progress: 0,
                 })
                 .eq("id", jobId);
 

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 export async function POST(req: Request) {
     try {
@@ -120,6 +121,7 @@ async function processImageGeneration(
         // Upload to Supabase Storage
         const base64Data = imagePart.inlineData.data;
         const buffer = Buffer.from(base64Data, "base64");
+        const totalFileSize = buffer.length;
         const fileName = `${userId}/${jobId}.png`;
 
         await supabaseAdmin.storage
@@ -151,7 +153,12 @@ async function processImageGeneration(
             status: "completed",
             job_id: jobId,
             completed_at: new Date().toISOString(),
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
         });
+
+        // Update user storage
+        await updateUserStorage(userId, totalFileSize);
 
         // Complete job
         await supabaseAdmin

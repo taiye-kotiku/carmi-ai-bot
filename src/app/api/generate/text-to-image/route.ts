@@ -6,6 +6,7 @@ import { generateImage, enhancePrompt } from "@/lib/services/gemini";
 import sharp from "sharp";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 export async function POST(req: Request) {
     try {
@@ -80,7 +81,7 @@ async function processTextToImage(
 
             finalPrompt = await Promise.race([
                 enhancePrompt(prompt, "image"),
-                new Promise<string>((resolve) => setTimeout(() => resolve(prompt), 5000))
+                new Promise<string>((resolve) => setTimeout(() => resolve(prompt), 5000)),
             ]);
         }
 
@@ -94,7 +95,7 @@ async function processTextToImage(
             generateImage(finalPrompt),
             new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error("Image generation timeout after 60 seconds")), 60000)
-            )
+            ),
         ]);
 
         if (images.length === 0) {
@@ -108,6 +109,7 @@ async function processTextToImage(
 
         // Upload images to Supabase Storage (resize to 1080x1080px)
         const uploadedUrls: string[] = [];
+        let totalFileSize = 0;
 
         for (let i = 0; i < images.length; i++) {
             const base64Data = images[i].replace(/^data:image\/\w+;base64,/, "");
@@ -130,6 +132,8 @@ async function processTextToImage(
                 console.warn("Resize failed, using original:", resizeError);
                 resizedBuffer = originalBuffer;
             }
+
+            totalFileSize += resizedBuffer.length;
 
             const fileName = `${userId}/${jobId}/image_${i + 1}.png`;
 
@@ -166,7 +170,12 @@ async function processTextToImage(
             status: "completed",
             job_id: jobId,
             completed_at: new Date().toISOString(),
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
         });
+
+        // Update user storage
+        await updateUserStorage(userId, totalFileSize);
 
         // Complete job
         await supabaseAdmin
@@ -177,12 +186,10 @@ async function processTextToImage(
                 result: { images: uploadedUrls, prompt: finalPrompt },
             })
             .eq("id", jobId);
-
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error("Processing error:", error);
 
-        // Refund credits on failure
         await addCredits(
             userId,
             CREDIT_COSTS.image_generation,

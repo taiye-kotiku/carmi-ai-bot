@@ -1,5 +1,3 @@
-// src/app/(dashboard)/video-slice/page.tsx
-
 "use client";
 
 import { useState } from "react";
@@ -17,6 +15,7 @@ import {
     ChevronUp,
     Smile,
 } from "lucide-react";
+import { useNotifications } from "@/lib/notifications/notification-context";
 
 const VIDEO_TYPES = [
     { value: 2, label: "YouTube" },
@@ -92,6 +91,8 @@ export default function VideoSlicePage() {
     const [clips, setClips] = useState<Clip[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [shareLink, setShareLink] = useState<string | null>(null);
+
+    const { addGenerationNotification } = useNotifications();
 
     const handleSlice = async () => {
         if (!videoUrl.trim()) return;
@@ -273,8 +274,8 @@ export default function VideoSlicePage() {
                                         }
                                         disabled={isProcessing}
                                         className={`py-2 px-3 rounded-lg border text-sm transition-all ${videoType === type.value
-                                                ? "bg-purple-500 border-purple-500 text-white"
-                                                : "bg-white border-gray-300 hover:border-purple-300"
+                                            ? "bg-purple-500 border-purple-500 text-white"
+                                            : "bg-white border-gray-300 hover:border-purple-300"
                                             }`}
                                     >
                                         {type.label}
@@ -317,8 +318,8 @@ export default function VideoSlicePage() {
                                         }
                                         disabled={isProcessing}
                                         className={`py-2 px-3 rounded-lg border text-sm transition-all ${aspectRatio === ratio.value
-                                                ? "bg-purple-500 border-purple-500 text-white"
-                                                : "bg-white border-gray-300 hover:border-purple-300"
+                                            ? "bg-purple-500 border-purple-500 text-white"
+                                            : "bg-white border-gray-300 hover:border-purple-300"
                                             }`}
                                     >
                                         {ratio.label}
@@ -342,8 +343,8 @@ export default function VideoSlicePage() {
                                         }
                                         disabled={isProcessing}
                                         className={`py-2 px-3 rounded-lg border text-sm transition-all ${preferLength.includes(length.value)
-                                                ? "bg-purple-500 border-purple-500 text-white"
-                                                : "bg-white border-gray-300 hover:border-purple-300"
+                                            ? "bg-purple-500 border-purple-500 text-white"
+                                            : "bg-white border-gray-300 hover:border-purple-300"
                                             }`}
                                     >
                                         {length.label}
@@ -378,8 +379,8 @@ export default function VideoSlicePage() {
                             >
                                 <span
                                     className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${emoji
-                                            ? "-translate-x-5"
-                                            : "translate-x-0"
+                                        ? "-translate-x-5"
+                                        : "translate-x-0"
                                         }`}
                                 />
                             </button>

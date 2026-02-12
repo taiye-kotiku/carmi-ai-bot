@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useNotifications } from "@/lib/notifications/notification-context";
 
 const ASPECT_RATIOS = [
     { value: "1:1", label: "ריבועי (1:1)", icon: "⬜" },
@@ -28,6 +29,8 @@ export default function ImageGenerationPage() {
     const [style, setStyle] = useState("realistic");
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<string | null>(null);
+
+    const { addGenerationNotification } = useNotifications();
 
     const handleGenerate = async () => {
         if (!prompt.trim()) {
@@ -63,6 +66,7 @@ export default function ImageGenerationPage() {
                 if (status.status === "completed") {
                     setResult(status.result.url);
                     toast.success("!התמונה נוצרה 🎨");
+                    addGenerationNotification("image");
                     break;
                 }
 
@@ -121,7 +125,6 @@ export default function ImageGenerationPage() {
                 <div className="space-y-6">
                     <Card>
                         <CardContent className="p-6 space-y-6">
-                            {/* Prompt */}
                             <div>
                                 <Label htmlFor="prompt" className="text-base">
                                     תיאור התמונה
@@ -139,7 +142,6 @@ export default function ImageGenerationPage() {
                                 </p>
                             </div>
 
-                            {/* Aspect Ratio */}
                             <div>
                                 <Label className="text-base">יחס תמונה</Label>
                                 <div className="grid grid-cols-2 gap-2 mt-2">
@@ -159,7 +161,6 @@ export default function ImageGenerationPage() {
                                 </div>
                             </div>
 
-                            {/* Style */}
                             <div>
                                 <Label className="text-base">סגנון</Label>
                                 <div className="grid grid-cols-2 gap-2 mt-2">
@@ -179,7 +180,6 @@ export default function ImageGenerationPage() {
                                 </div>
                             </div>
 
-                            {/* Generate Button */}
                             <Button
                                 onClick={handleGenerate}
                                 disabled={loading || !prompt.trim()}

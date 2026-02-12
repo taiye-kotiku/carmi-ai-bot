@@ -6,8 +6,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import sharp from "sharp";
+import { nanoid } from "nanoid";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 const VISION_PROMPT = `Analyze this photograph in EXTREME detail. Extract the following information with precise accuracy:
 1. Subject description: Describe the person's appearance in detail - face shape, hair color/style/texture, eye color, skin tone, clothing colors and style, body type, pose, age range
@@ -189,7 +191,6 @@ export async function POST(req: Request) {
         if (!imagePart?.inlineData) {
             console.error("No image in response:", JSON.stringify(response, null, 2));
 
-            // Refund credits — generation failed
             await addCredits(
                 user.id,
                 CREDIT_COSTS.caricature_generation,
@@ -212,17 +213,60 @@ export async function POST(req: Request) {
             .png({ quality: 100 })
             .toBuffer();
 
-        const resizedBase64 = resizedImageBuffer.toString("base64");
-        const resultDataUrl = `data:image/png;base64,${resizedBase64}`;
+        const totalFileSize = resizedImageBuffer.length;
+
+        // Upload to Supabase Storage instead of returning base64
+        const jobId = nanoid();
+        const fileName = `${user.id}/${jobId}/caricature.png`;
+
+        const { error: uploadError } = await supabaseAdmin.storage
+            .from("content")
+            .upload(fileName, resizedImageBuffer, {
+                contentType: "image/png",
+                upsert: true,
+            });
+
+        let resultUrl: string;
+
+        if (uploadError) {
+            console.warn("Upload to storage failed, returning base64:", uploadError);
+            const resizedBase64 = resizedImageBuffer.toString("base64");
+            resultUrl = `data:image/png;base64,${resizedBase64}`;
+        } else {
+            const { data: urlData } = supabaseAdmin.storage
+                .from("content")
+                .getPublicUrl(fileName);
+            resultUrl = urlData.publicUrl;
+        }
+
+        // Save generation record
+        const generationId = nanoid();
+        await supabaseAdmin.from("generations").insert({
+            id: generationId,
+            user_id: user.id,
+            type: "image",
+            feature: "cartoonize",
+            prompt: caricaturePrompt.substring(0, 500),
+            result_urls: [resultUrl],
+            thumbnail_url: resultUrl,
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
+        });
+
+        // Update user storage (only if uploaded to storage, not base64)
+        if (!uploadError) {
+            await updateUserStorage(user.id, totalFileSize);
+        }
 
         return NextResponse.json({
             success: true,
-            imageUrl: resultDataUrl,
+            imageUrl: resultUrl,
         });
     } catch (error: any) {
         console.error("Cartoonize error:", error);
 
-        // Refund credits on any unexpected failure
         try {
             const supabase = await createClient();
             const { data: { user } } = await supabase.auth.getUser();

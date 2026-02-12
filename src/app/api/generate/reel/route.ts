@@ -7,6 +7,7 @@ import { extractReelFrames } from "@/lib/services/reel-extractor";
 import sharp from "sharp";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 // Define types for better type safety
 interface ExtractedFrame {
@@ -108,6 +109,7 @@ async function processReelConversion(
         const frames: ExtractedFrame[] = extractedFrames;
 
         const uploadedFrames: UploadedFrame[] = [];
+        let totalFileSize = 0;
 
         for (let i = 0; i < frames.length; i++) {
             const frame = frames[i];
@@ -140,6 +142,9 @@ async function processReelConversion(
             } catch (sharpError) {
                 console.warn(`Failed to process frame ${i + 1}:`, sharpError);
             }
+
+            // Track file size
+            totalFileSize += buffer.length;
 
             const fileName = `${userId}/${jobId}/frame_${i + 1}.jpg`;
             const { error: uploadError } = await supabaseAdmin.storage
@@ -184,7 +189,12 @@ async function processReelConversion(
             status: "completed",
             job_id: jobId,
             completed_at: new Date().toISOString(),
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
         });
+
+        // Update user storage
+        await updateUserStorage(userId, totalFileSize);
 
         // Complete job
         await supabaseAdmin

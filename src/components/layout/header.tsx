@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Bell, Menu, Coins } from "lucide-react";
+import { Menu, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import type { Tables } from "@/types/database";
+import { NotificationBell } from "@/components/layout/notification-bell";
 
 type Profile = Tables<"profiles">;
 
@@ -16,7 +17,9 @@ export function Header() {
 
     useEffect(() => {
         async function loadUser() {
-            const { data: { user } } = await supabase.auth.getUser();
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
             if (user) {
                 const { data: profileData } = await supabase
                     .from("profiles")
@@ -59,18 +62,16 @@ export function Header() {
 
             {/* User section */}
             <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon">
-                    <Bell className="h-5 w-5" />
-                </Button>
+                <NotificationBell />
 
-                <div className="flex items-center gap-3">
+                <Link href="/settings" className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
                         {profile?.name?.charAt(0) || profile?.email?.charAt(0) || "U"}
                     </div>
                     <span className="text-sm font-medium hidden md:block">
                         {profile?.name || "משתמש"}
                     </span>
-                </div>
+                </Link>
             </div>
         </header>
     );

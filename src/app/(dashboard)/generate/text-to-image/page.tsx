@@ -5,9 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Download, Sparkles, Image as ImageIcon } from "lucide-react";
+import {
+    Loader2,
+    Download,
+    Sparkles,
+    Image as ImageIcon,
+} from "lucide-react";
 import { ExportFormats } from "@/components/export-formats";
-import { requestNotificationPermission, notifyGenerationComplete } from "@/lib/services/notifications";
+import { useNotifications } from "@/lib/notifications/notification-context";
 
 export default function TextToImagePage() {
     const [prompt, setPrompt] = useState("");
@@ -16,6 +21,8 @@ export default function TextToImagePage() {
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<string[] | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    const { addGenerationNotification } = useNotifications();
 
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
@@ -50,17 +57,13 @@ export default function TextToImagePage() {
                     clearInterval(pollInterval);
                     setResult(job.result.images);
                     setIsGenerating(false);
-                    // Request permission and show notification
-                    requestNotificationPermission().then(() => {
-                        notifyGenerationComplete("image", job.result.images?.length);
-                    });
+                    addGenerationNotification("image", job.result.images?.length);
                 } else if (job.status === "failed") {
                     clearInterval(pollInterval);
                     setError(job.error || "שגיאה ביצירת התמונה");
                     setIsGenerating(false);
                 }
             }, 1000);
-
         } catch (err: any) {
             setError(err.message);
             setIsGenerating(false);
@@ -114,7 +117,10 @@ export default function TextToImagePage() {
                                 className="rounded"
                                 disabled={isGenerating}
                             />
-                            <label htmlFor="enhance" className="text-sm flex items-center gap-1">
+                            <label
+                                htmlFor="enhance"
+                                className="text-sm flex items-center gap-1"
+                            >
                                 <Sparkles className="h-4 w-4 text-yellow-500" />
                                 שפר את התיאור באמצעות AI
                             </label>
@@ -181,8 +187,8 @@ export default function TextToImagePage() {
                                                 הורד מקורי
                                             </Button>
                                         </div>
-                                        <ExportFormats 
-                                            imageUrl={imageUrl} 
+                                        <ExportFormats
+                                            imageUrl={imageUrl}
                                             baseFilename={`generated-image-${index + 1}`}
                                         />
                                     </div>

@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Download, Sparkles, Upload, Video, X } from "lucide-react";
+import { useNotifications } from "@/lib/notifications/notification-context";
 
 export default function ImageToVideoPage() {
     const [image, setImage] = useState<File | null>(null);
@@ -16,6 +17,8 @@ export default function ImageToVideoPage() {
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const { addGenerationNotification } = useNotifications();
 
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -73,13 +76,13 @@ export default function ImageToVideoPage() {
                     clearInterval(pollInterval);
                     setResult(job.result.videoUrl);
                     setIsGenerating(false);
+                    addGenerationNotification("video");
                 } else if (job.status === "failed") {
                     clearInterval(pollInterval);
                     setError(job.error || "שגיאה ביצירת הסרטון");
                     setIsGenerating(false);
                 }
             }, 2000);
-
         } catch (err: any) {
             setError(err.message);
             setIsGenerating(false);

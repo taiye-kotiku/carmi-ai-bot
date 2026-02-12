@@ -9,6 +9,7 @@ import { fal } from "@fal-ai/client";
 import { enhancePrompt } from "@/lib/services/gemini";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -65,7 +66,6 @@ export async function POST(req: Request) {
             .single();
 
         if (charError || !character) {
-            // Refund — character not found
             await addCredits(user.id, CREDIT_COSTS.image_generation, "החזר - דמות לא נמצאה");
             return NextResponse.json(
                 { error: "דמות לא נמצאה" },
@@ -74,7 +74,6 @@ export async function POST(req: Request) {
         }
 
         if (!character.lora_url) {
-            // Refund — character not trained
             await addCredits(user.id, CREDIT_COSTS.image_generation, "החזר - דמות לא מאומנת");
             return NextResponse.json(
                 { error: "הדמות עדיין לא מאומנת" },
@@ -147,6 +146,39 @@ export async function POST(req: Request) {
 
             console.log("Generated", images.length, "images");
 
+            // Download images and upload to our storage to track file size
+            const uploadedUrls: string[] = [];
+            let totalFileSize = 0;
+
+            for (let i = 0; i < images.length; i++) {
+                try {
+                    const imgResponse = await fetch(images[i]);
+                    const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+                    totalFileSize += imgBuffer.length;
+
+                    const fileName = `${user.id}/${nanoid()}/character_${i + 1}.jpg`;
+                    const { error: uploadError } = await supabaseAdmin.storage
+                        .from("content")
+                        .upload(fileName, imgBuffer, {
+                            contentType: "image/jpeg",
+                            upsert: true,
+                        });
+
+                    if (!uploadError) {
+                        const { data: urlData } = supabaseAdmin.storage
+                            .from("content")
+                            .getPublicUrl(fileName);
+                        uploadedUrls.push(urlData.publicUrl);
+                    } else {
+                        // Fallback to fal URL
+                        uploadedUrls.push(images[i]);
+                    }
+                } catch {
+                    // Fallback to fal URL
+                    uploadedUrls.push(images[i]);
+                }
+            }
+
             // Save generation record
             const generationId = nanoid();
             await supabaseAdmin.from("generations").insert({
@@ -155,16 +187,25 @@ export async function POST(req: Request) {
                 type: "image",
                 feature: "character_image",
                 prompt: fullPrompt,
-                result_urls: images,
+                result_urls: uploadedUrls,
+                thumbnail_url: uploadedUrls[0],
                 status: "completed",
                 completed_at: new Date().toISOString(),
+                character_id: character.id,
+                file_size_bytes: totalFileSize,
+                files_deleted: false,
             });
+
+            // Update user storage
+            if (totalFileSize > 0) {
+                await updateUserStorage(user.id, totalFileSize);
+            }
 
             console.log("=== SUCCESS ===");
 
             return NextResponse.json({
                 success: true,
-                images,
+                images: uploadedUrls,
                 seed: result.data.seed,
                 generationId,
             });
@@ -172,7 +213,6 @@ export async function POST(req: Request) {
         } catch (genError: any) {
             console.error("Character image generation error:", genError);
 
-            // Refund credits on failure
             await addCredits(
                 user.id,
                 CREDIT_COSTS.image_generation,

@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
+import { nanoid } from "nanoid";
 
 const apiKey = process.env.GOOGLE_AI_API_KEY!;
 
@@ -76,7 +78,6 @@ export async function POST(request: NextRequest) {
             const errorText = await startResponse.text();
             console.error("Veo start error:", errorText);
 
-            // Refund credits — API call failed
             await addCredits(
                 user.id,
                 CREDIT_COSTS.video_generation,
@@ -97,7 +98,6 @@ export async function POST(request: NextRequest) {
         try {
             googleVideoUrl = await pollForVideo(operation.name);
         } catch (pollError) {
-            // Refund credits — polling/generation failed
             await addCredits(
                 user.id,
                 CREDIT_COSTS.video_generation,
@@ -131,9 +131,10 @@ export async function POST(request: NextRequest) {
         }
 
         const videoBuffer = await videoResponse.arrayBuffer();
-        console.log("Video size:", videoBuffer.byteLength);
+        const totalFileSize = videoBuffer.byteLength;
+        console.log("Video size:", totalFileSize);
 
-        if (videoBuffer.byteLength < 50000) {
+        if (totalFileSize < 50000) {
             await addCredits(
                 user.id,
                 CREDIT_COSTS.video_generation,
@@ -176,6 +177,24 @@ export async function POST(request: NextRequest) {
             .getPublicUrl(fileName);
 
         console.log("Public URL:", publicUrl);
+
+        // Save generation record with file size
+        const generationId = nanoid();
+        await supabaseAdmin.from("generations").insert({
+            id: generationId,
+            user_id: user.id,
+            type: "video",
+            feature: "text_to_video",
+            prompt,
+            result_urls: [publicUrl],
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
+        });
+
+        // Update user storage
+        await updateUserStorage(user.id, totalFileSize);
 
         return NextResponse.json({
             success: true,

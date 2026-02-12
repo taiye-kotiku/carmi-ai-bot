@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Download, Sparkles, Video } from "lucide-react";
+import { useNotifications } from "@/lib/notifications/notification-context";
 
 export default function TextToVideoPage() {
     const [prompt, setPrompt] = useState("");
@@ -15,6 +16,8 @@ export default function TextToVideoPage() {
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    const { addGenerationNotification } = useNotifications();
 
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
@@ -53,6 +56,7 @@ export default function TextToVideoPage() {
             if (data.videoUrl) {
                 setProgress(100);
                 setResult(data.videoUrl);
+                addGenerationNotification("video");
             } else {
                 throw new Error("לא התקבל קישור לוידאו");
             }
@@ -80,7 +84,6 @@ export default function TextToVideoPage() {
             document.body.removeChild(a);
             URL.revokeObjectURL(downloadUrl);
         } catch (err) {
-            // Direct download fallback
             window.open(result, "_blank");
         }
     };
@@ -112,7 +115,6 @@ export default function TextToVideoPage() {
                             disabled={isGenerating}
                         />
 
-                        {/* Duration Selector */}
                         <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700">
                                 משך הסרטון
@@ -123,8 +125,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setDuration(4)}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 4
-                                        ? "bg-blue-500 border-blue-500 text-white"
-                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     4 שניות
@@ -134,8 +136,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setDuration(8)}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 8
-                                        ? "bg-blue-500 border-blue-500 text-white"
-                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     8 שניות
@@ -143,7 +145,6 @@ export default function TextToVideoPage() {
                             </div>
                         </div>
 
-                        {/* Aspect Ratio Selector - Only 16:9 and 9:16 for Veo */}
                         <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700">
                                 יחס תצוגה
@@ -154,8 +155,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setAspectRatio("16:9")}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "16:9"
-                                        ? "bg-blue-500 border-blue-500 text-white"
-                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     16:9 (רוחבי)
@@ -165,8 +166,8 @@ export default function TextToVideoPage() {
                                     onClick={() => setAspectRatio("9:16")}
                                     disabled={isGenerating}
                                     className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "9:16"
-                                        ? "bg-blue-500 border-blue-500 text-white"
-                                        : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
+                                            ? "bg-blue-500 border-blue-500 text-white"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
                                         }`}
                                 >
                                     9:16 (אנכי)

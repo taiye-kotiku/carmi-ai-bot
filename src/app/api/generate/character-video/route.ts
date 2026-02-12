@@ -7,6 +7,7 @@ import { generateCharacterScenes } from "@/lib/services/scene-generator";
 import { after } from "next/server";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { updateUserStorage } from "@/lib/services/storage";
 
 export const maxDuration = 300;
 
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
             style = "storytelling",
             aspect_ratio = "9:16",
             transition_style = "fade",
-            scene_duration = 4
+            scene_duration = 4,
         } = body;
 
         if (!character_id) {
@@ -173,7 +174,7 @@ async function processCharacterVideo(
                     lora_url: options.character.lora_url,
                     lora_scale: options.character.lora_scale,
                 },
-                scenes: scenes.map(desc => ({
+                scenes: scenes.map((desc) => ({
                     description: desc,
                     duration: options.sceneDuration,
                 })),
@@ -185,6 +186,28 @@ async function processCharacterVideo(
             jobId,
             updateProgress
         );
+
+        // Calculate file sizes from result URLs
+        let totalFileSize = 0;
+        const allUrls = [result.videoUrl, ...result.sceneVideoUrls, ...result.imageUrls];
+
+        for (const url of allUrls) {
+            if (!url) continue;
+            try {
+                const headRes = await fetch(url, { method: "HEAD" });
+                const contentLength = headRes.headers.get("content-length");
+                if (contentLength) {
+                    totalFileSize += parseInt(contentLength, 10);
+                }
+            } catch {
+                // Estimate ~2MB per video, ~500KB per image
+                if (url.includes(".mp4") || url.includes("video")) {
+                    totalFileSize += 2 * 1024 * 1024;
+                } else {
+                    totalFileSize += 500 * 1024;
+                }
+            }
+        }
 
         // Save generation record
         const generationId = nanoid();
@@ -200,7 +223,15 @@ async function processCharacterVideo(
             status: "completed",
             job_id: jobId,
             completed_at: new Date().toISOString(),
+            character_id: options.character.id,
+            file_size_bytes: totalFileSize,
+            files_deleted: false,
         });
+
+        // Update user storage
+        if (totalFileSize > 0) {
+            await updateUserStorage(userId, totalFileSize);
+        }
 
         // Complete job
         await supabaseAdmin
@@ -220,12 +251,10 @@ async function processCharacterVideo(
             .eq("id", jobId);
 
         console.log(`[CharacterVideo] Job ${jobId} completed successfully`);
-
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error(`[CharacterVideo] Job ${jobId} failed:`, error);
 
-        // Refund credits on failure
         await addCredits(
             userId,
             CREDIT_COSTS.video_generation,

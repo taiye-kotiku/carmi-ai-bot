@@ -40,10 +40,20 @@ export function Header() {
         loadUser();
     }, [supabase]);
 
+    const openMobileMenu = () => {
+        // Dispatch a custom event that MobileNav listens for
+        window.dispatchEvent(new CustomEvent("toggle-mobile-menu"));
+    };
+
     return (
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-white px-6">
             {/* Mobile menu button */}
-            <Button variant="ghost" size="icon" className="lg:hidden">
+            <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                onClick={openMobileMenu}
+            >
                 <Menu className="h-5 w-5" />
             </Button>
 

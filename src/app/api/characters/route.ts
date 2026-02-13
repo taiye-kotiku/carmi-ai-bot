@@ -1,7 +1,12 @@
-// src/app/api/characters/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { fal } from "@fal-ai/client";
+import JSZip from "jszip";
+import { deductCredits, addCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
+
+fal.config({ credentials: process.env.FAL_KEY });
 
 // GET /api/characters
 export async function GET() {
@@ -9,9 +14,7 @@ export async function GET() {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const { data: characters, error } = await supabaseAdmin
             .from("characters")
@@ -19,14 +22,10 @@ export async function GET() {
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
-        if (error) {
-            console.error("[Characters] List error:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
-        }
+        if (error) throw error;
 
         return NextResponse.json({ characters: characters || [] });
     } catch (error: any) {
-        console.error("[Characters] Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
@@ -37,59 +36,71 @@ export async function POST(request: NextRequest) {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const body = await request.json();
         const { name, description } = body;
-
-        // Accept BOTH field names for compatibility
         const imageUrls = body.reference_images || body.image_urls || [];
 
-        console.log("[Characters] POST:", { name, imageCount: imageUrls?.length });
+        if (!name?.trim()) return NextResponse.json({ error: "Character name is required" }, { status: 400 });
+        if (imageUrls.length < 4) return NextResponse.json({ error: "At least 4 images required." }, { status: 400 });
 
-        // Validation
-        if (!name || typeof name !== "string" || !name.trim()) {
-            return NextResponse.json(
-                { error: "Character name is required" },
-                { status: 400 }
-            );
+        // 1. Deduct Credits
+        try {
+            await deductCredits(user.id, "character_training");
+        } catch (err: any) {
+            return NextResponse.json({ error: err.message, code: "INSUFFICIENT_CREDITS" }, { status: 402 });
         }
 
-        if (!Array.isArray(imageUrls) || imageUrls.length < 5) {
-            return NextResponse.json(
-                { error: `At least 5 reference images are required. Got ${imageUrls?.length ?? 0}.` },
-                { status: 400 }
-            );
-        }
-
+        // 2. Create DB Record
         const { data: character, error } = await supabaseAdmin
             .from("characters")
             .insert({
                 user_id: user.id,
                 name: name.trim(),
-                description: description?.trim() || null,
+                description: description?.trim(),
                 image_urls: imageUrls,
-                status: "pending",
+                status: "training", // Set directly to training
                 trigger_word: "ohwx",
             })
             .select()
             .single();
 
-        if (error) {
-            console.error("[Characters] Create error:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+        if (error) throw error;
+
+        // 3. Start Training via Fal.ai
+        try {
+            const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/fal/training?characterId=${character.id}&secret=${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
+
+            const result = await fal.queue.submit("fal-ai/flux-lora-fast-training", {
+                input: {
+                    images_data_url: imageUrls.map((url: string) => ({ url })),
+                    trigger_word: "ohwx",
+                    is_style: false
+                },
+                webhookUrl: webhookUrl
+            });
+
+            // Update with Request ID
+            await supabaseAdmin
+                .from("characters")
+                .update({ job_id: result.request_id })
+                .eq("id", character.id);
+
+            return NextResponse.json({ character }, { status: 201 });
+
+        } catch (trainError: any) {
+            console.error("Training failed to start:", trainError);
+            // Refund
+            await addCredits(user.id, CREDIT_COSTS.character_training, "Refund - Training failed to start");
+            // Mark failed
+            await supabaseAdmin.from("characters").update({ status: "failed" }).eq("id", character.id);
+
+            return NextResponse.json({ error: "Training failed to start" }, { status: 500 });
         }
 
-        console.log("[Characters] Created:", character.id);
-        return NextResponse.json({ character }, { status: 201 });
-
     } catch (error: any) {
-        console.error("[Characters] Error:", error);
-        return NextResponse.json(
-            { error: error.message || "Failed to create character" },
-            { status: 500 }
-        );
+        console.error("Create character error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

@@ -852,7 +852,7 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
 
         const visionResult = await visionModel.generateContent([
             { inlineData: { data: params.imageBase64, mimeType: params.mimeType } },
-            `Describe this person in detail: physical features (hair, eyes, skin, face shape), clothing, and expression. Keep it concise.`,
+            `Carefully analyze the provided image and describe the person in precise visual detail: hair (color, length, texture, style, hairline, facial hair), eyes (color, shape, size, spacing, eyelids, brows, lashes), skin (tone, undertone, texture, blemishes, marks), facial structure (face shape, forehead, cheekbones, jawline, chin, nose shape, lips, symmetry), expression (emotion, eye focus, mouth position), clothing (type, fit, fabric, color, patterns, accessories, logos), posture and body language, visible background elements, lighting (direction, intensity, shadows), estimated age range, and overall impression. Keep the description objective, specific, and concise`,
         ]);
 
         const description = visionResult.response.text();

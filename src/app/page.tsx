@@ -12,36 +12,11 @@ import {
   ArrowLeft,
   Play,
   User,
-  Menu,
-  X
+  PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-const galleryImages = [
-  {
-    src: "/examples/astronaut.png",
-    label: "תמונה מפרומפט",
-    prompt: "אסטרונאוט צועד על מאדים בשקיעה כתומה, סגנון קולנועי",
-    color: "indigo" as const,
-  },
-  {
-    src: "/examples/caricature-example.png",
-    label: "קריקטורה / דמות",
-    prompt: "קריקטורה מעוצבת בסגנון קומיקס מתמונת פנים אמיתית",
-    color: "pink" as const,
-  },
-];
-
-const carouselSlides = [
-  "/examples/carousel/1.png",
-  "/examples/carousel/2.png",
-  "/examples/carousel/3.png",
-  "/examples/carousel/4.png",
-  "/examples/carousel/5.png",
-  "/examples/carousel/6.png",
-];
 
 const colorMap: Record<string, { badge: string; border: string }> = {
   indigo: {
@@ -60,21 +35,21 @@ const colorMap: Record<string, { badge: string; border: string }> = {
     badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
     border: "group-hover:border-emerald-500/50",
   },
+  cyan: {
+    badge: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
+    border: "group-hover:border-cyan-500/50",
+  },
+  purple: {
+    badge: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+    border: "group-hover:border-purple-500/50",
+  },
 };
-
-// Helper function to check if URL is a video
-function isVideoUrl(url: string): boolean {
-  if (!url) return false;
-  const videoExtensions = [".mp4", ".webm", ".mov", ".avi"];
-  const lowerUrl = url.toLowerCase();
-  return videoExtensions.some((ext) => lowerUrl.includes(ext));
-}
 
 export default async function HomePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Define static carousel items with uploaded images
+  // ─── Static carousel examples ─────────────────────────────────────
   const legalCarouselSlides = [
     "/examples/carousels/legal-1.png",
     "/examples/carousels/legal-2.png",
@@ -91,143 +66,81 @@ export default async function HomePage() {
     "/examples/carousels/south-america-5.png",
   ];
 
-  // Create static carousel items
-  const carouselItems = [
-    {
-      id: "legal-carousel",
-      type: "carousel" as const,
-      prompt: "ליווי משפטי ברכישת נכס נדל\"ן",
-      thumbnail_url: legalCarouselSlides[0],
-      result_urls: legalCarouselSlides,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: "south-america-carousel",
-      type: "carousel" as const,
-      prompt: "החופשה שלי בדרום אמריקה",
-      thumbnail_url: southAmericaCarouselSlides[0],
-      result_urls: southAmericaCarouselSlides,
-      created_at: new Date().toISOString(),
-    },
-  ];
-
-  // Fetch one video (astronaut video) and some images
-  const { data: videoItems } = await supabase
-    .from("generations")
-    .select("id, type, prompt, thumbnail_url, result_urls, created_at")
-    .eq("status", "completed")
-    .eq("type", "video")
-    .ilike("prompt", "%אסטרונאוט%")
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  const { data: imageItems } = await supabase
-    .from("generations")
-    .select("id, type, prompt, thumbnail_url, result_urls, created_at")
-    .eq("status", "completed")
-    .eq("type", "image")
-    .order("created_at", { ascending: false })
-    .limit(4);
-
-  // Combine all items
-  const galleryItems = [
-    ...(carouselItems || []),
-    ...(videoItems || []),
-    ...(imageItems || []),
-  ];
-
-  // Prepare gallery items for display
+  // ─── Curated display items ────────────────────────────────────────
   const displayItems: Array<{
     id: string;
     src: string;
     type: "image" | "video" | "carousel";
     prompt?: string;
     label: string;
-    color: "indigo" | "pink" | "amber" | "emerald";
+    color: keyof typeof colorMap;
     slides?: string[];
-  }> = [];
-
-  if (galleryItems && galleryItems.length > 0) {
-    galleryItems.forEach((item) => {
-      if (item.type === "carousel" && item.result_urls && Array.isArray(item.result_urls)) {
-        // Carousel - use all slides
-        displayItems.push({
-          id: item.id,
-          src: item.thumbnail_url || item.result_urls[0],
-          type: "carousel",
-          prompt: item.prompt || undefined,
-          label: "קרוסלה",
-          color: "emerald",
-          slides: item.result_urls, // Show all slides, not just 6
-        });
-      } else if (item.type === "video" && item.result_urls && item.result_urls[0]) {
-        // Video - only include astronaut videos
-        const prompt = item.prompt?.toLowerCase() || "";
-        if (prompt.includes("אסטרונאוט") || prompt.includes("astronaut") || prompt.includes("מאדים")) {
-          displayItems.push({
-            id: item.id,
-            src: item.result_urls[0],
-            type: "video",
-            prompt: item.prompt || undefined,
-            label: "וידאו",
-            color: "amber",
-          });
-        }
-      } else if (item.type === "image" && item.thumbnail_url) {
-        // Image
-        displayItems.push({
-          id: item.id,
-          src: item.thumbnail_url,
-          type: "image",
-          prompt: item.prompt || undefined,
-          label: "תמונה",
-          color: Math.random() > 0.5 ? "indigo" : "pink",
-        });
-      }
-    });
-  }
-
-  // Always include astronaut video if not already in displayItems
-  const hasAstronautVideo = displayItems.some(item => 
-    item.type === "video" && (
-      item.prompt?.toLowerCase().includes("אסטרונאוט") ||
-      item.prompt?.toLowerCase().includes("astronaut") ||
-      item.prompt?.toLowerCase().includes("מאדים")
-    )
-  );
-
-  if (!hasAstronautVideo) {
-    displayItems.push({
+  }> = [
+    // 1. Carousels
+    {
+      id: "legal-carousel",
+      src: legalCarouselSlides[0],
+      type: "carousel",
+      prompt: "ליווי משפטי ברכישת נכס נדל\"ן",
+      label: "קרוסלה",
+      color: "emerald",
+      slides: legalCarouselSlides,
+    },
+    {
+      id: "south-america-carousel",
+      src: southAmericaCarouselSlides[0],
+      type: "carousel",
+      prompt: "החופשה שלי בדרום אמריקה",
+      label: "קרוסלה",
+      color: "emerald",
+      slides: southAmericaCarouselSlides,
+    },
+    // 2. קריקטורה
+    {
+      id: "caricature-example",
+      src: "/examples/caricature.png",
+      type: "image",
+      prompt: "קריקטורה מעוצבת בסגנון קומיקס מתמונת פנים אמיתית",
+      label: "קריקטורה",
+      color: "pink",
+    },
+    // 3. תמונות נבחרות מוידאו
+    {
+      id: "video-to-images-example",
+      src: "/examples/video-to-images.png",
+      type: "image",
+      prompt: "העלה וידאו וקבל מיידית 10 תמונות נבחרות",
+      label: "תמונות נבחרות מוידאו",
+      color: "indigo",
+    },
+    // 4. אימון דמות
+    {
+      id: "character-ai-example",
+      src: "/examples/character-ai.png",
+      type: "image",
+      prompt: "אמן את ה-AI להכיר את הפנים שלך — צור תוכן בכיכובך בכל סגנון",
+      label: "אימון דמות",
+      color: "cyan",
+    },
+    // 5. עריכת תמונה
+    {
+      id: "image-edit-example",
+      src: "/examples/image-edit.png",
+      type: "image",
+      prompt: "העלה תמונה ותאר מה לשנות — הבינה המלאכותית תערוך אותה",
+      label: "עריכת תמונה",
+      color: "purple",
+    },
+    // 6. וידאו
+    {
       id: "static-video",
       src: "/examples/astronaut-video.mp4",
-      type: "video" as const,
+      type: "video",
       prompt: "אסטרונאוט צועד על פני מאדים, צילום קולנועי, תנועה איטית",
       label: "וידאו",
-      color: "amber" as const,
-    });
-  }
-
-  // Fallback to static examples if no gallery items
-  const finalDisplayItems = displayItems.length > 0 
-    ? displayItems
-    : [
-        ...galleryImages.map((img, idx) => ({
-          id: `static-img-${idx}`,
-          src: img.src,
-          type: "image" as const,
-          prompt: img.prompt,
-          label: img.label,
-          color: img.color,
-        })),
-        {
-          id: "static-video",
-          src: "/examples/astronaut-video.mp4",
-          type: "video" as const,
-          prompt: "אסטרונאוט צועד על פני מאדים, צילום קולנועי, תנועה איטית",
-          label: "וידאו",
-          color: "amber" as const,
-        },
-      ];
+      color: "amber",
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30" dir="rtl">
@@ -349,25 +262,24 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-[300px]">
             {/* Large Card: Text to Image */}
             <div className="md:col-span-2 row-span-1 md:row-span-2 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-indigo-500/50 transition-all duration-500">
-              {/* Background Image */}
               <div className="absolute inset-0 z-0">
                 <Image
                   src="/examples/advanced-image-generator.png"
                   alt="מחולל תמונות מתקדם"
                   fill
-                  className="object-cover opacity-30 group-hover:opacity-40 transition-opacity duration-500"
+                  className="object-cover opacity-50 group-hover:opacity-65 transition-opacity duration-500"
                   sizes="(max-width: 768px) 100vw, 66vw"
                 />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-950/90 z-10" />
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950 opacity-100 group-hover:scale-105 transition-transform duration-700" />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/95 z-10" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-900/30 via-slate-950/60 to-slate-950/80 opacity-100 group-hover:scale-105 transition-transform duration-700" />
 
               <div className="relative z-20 p-8 h-full flex flex-col justify-end">
                 <div className="h-12 w-12 rounded-xl bg-indigo-500/20 flex items-center justify-center mb-4 backdrop-blur-md">
                   <Sparkles className="h-6 w-6 text-indigo-400" />
                 </div>
                 <h3 className="text-2xl font-bold mb-2">מחולל תמונות מתקדם</h3>
-                <p className="text-slate-400 mb-6 max-w-lg">
+                <p className="text-slate-300 mb-6 max-w-lg">
                   כתוב מה אתה מדמיין – וקבל תמונה פוטוריאליסטית תוך שניות.
                   המנוע שלנו מבין ניואנסים בעברית ויודע ליצור הכל: מתמונות מוצר ועד אומנות פנטזיה.
                 </p>
@@ -377,32 +289,77 @@ export default async function HomePage() {
               </div>
             </div>
 
-            {/* Card: Reel Converter */}
+            {/* Card: Video to Images */}
             <div className="group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-pink-500/50 transition-all duration-300">
-              <div className="absolute top-0 right-0 p-8">
+              <div className="absolute inset-0 z-0">
+                <Image
+                  src="/examples/video-to-images.png"
+                  alt="תמונות נבחרות מוידאו"
+                  fill
+                  className="object-contain opacity-50 group-hover:opacity-70 transition-opacity duration-500"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950/85 z-10" />
+              <div className="absolute top-0 right-0 p-8 z-20">
                 <div className="h-12 w-12 rounded-xl bg-pink-500/20 flex items-center justify-center backdrop-blur-md">
                   <Film className="h-6 w-6 text-pink-400" />
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
-                <h3 className="text-xl font-bold mb-2"> תמונות נבחרות מוידאו</h3>
-                <p className="text-slate-400 text-sm">
-                  העלה וידאו וקבל  מיידית 10 תמונות נבחרות.
+              <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
+                <h3 className="text-xl font-bold mb-2">תמונות נבחרות מוידאו</h3>
+                <p className="text-slate-300 text-sm">
+                  העלה וידאו וקבל מיידית 10 תמונות נבחרות.
                 </p>
               </div>
             </div>
 
             {/* Card: Character Training */}
             <div className="group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="absolute top-0 right-0 p-8">
+              <div className="absolute inset-0 z-0">
+                <Image
+                  src="/examples/character-ai.png"
+                  alt="אימון דמות"
+                  fill
+                  className="object-contain opacity-50 group-hover:opacity-70 transition-opacity duration-500"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950/85 z-10" />
+              <div className="absolute top-0 right-0 p-8 z-20">
                 <div className="h-12 w-12 rounded-xl bg-cyan-500/20 flex items-center justify-center backdrop-blur-md">
                   <User className="h-6 w-6 text-cyan-400" />
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
-                <h3 className="text-xl font-bold mb-2">אימון דמות </h3>
-                <p className="text-slate-400 text-sm">
+              <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
+                <h3 className="text-xl font-bold mb-2">אימון דמות</h3>
+                <p className="text-slate-300 text-sm">
                   אמן את ה-AI להכיר את הפנים שלך. צור תוכן בכיכובך בכל סגנון.
+                </p>
+              </div>
+            </div>
+
+            {/* Card: Image Editing */}
+            <div className="md:col-span-1 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-purple-500/50 transition-all duration-300">
+              <div className="absolute inset-0 z-0">
+                <Image
+                  src="/examples/image-edit.png"
+                  alt="עריכת תמונה"
+                  fill
+                  className="object-contain opacity-50 group-hover:opacity-70 transition-opacity duration-500"
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950/85 z-10" />
+              <div className="absolute top-0 right-0 p-8 z-20">
+                <div className="h-12 w-12 rounded-xl bg-purple-500/20 flex items-center justify-center backdrop-blur-md">
+                  <PenLine className="h-6 w-6 text-purple-400" />
+                </div>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
+                <h3 className="text-xl font-bold mb-2">עריכת תמונה</h3>
+                <p className="text-slate-300 text-sm">
+                  העלה תמונה ותאר מה לשנות — הבינה המלאכותית תערוך אותה.
                 </p>
               </div>
             </div>
@@ -416,7 +373,7 @@ export default async function HomePage() {
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
                 <h3 className="text-xl font-bold mb-2">טקסט לוידאו</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-300 text-sm">
                   הנפש תמונות או צור סרטונים מאפס. הקסם קורה בתנועה.
                 </p>
               </div>
@@ -429,7 +386,7 @@ export default async function HomePage() {
                   <Images className="h-6 w-6 text-emerald-400" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">קרוסלות ממותגות</h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-300 text-sm">
                   יצירת קרוסלות מידע (Educational) או סיפוריות, כולל המיתוג והלוגו שלך באופן אוטומטי.
                 </p>
               </div>
@@ -441,7 +398,6 @@ export default async function HomePage() {
 
       {/* Gallery / Examples Section */}
       <section id="gallery" className="py-20 relative overflow-hidden">
-        {/* Section Background Glow */}
         <div className="absolute top-0 left-[50%] translate-x-[-50%] w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
 
         <div className="container mx-auto px-4 relative z-10">
@@ -456,21 +412,19 @@ export default async function HomePage() {
             </p>
           </div>
 
-          {/* Gallery Grid - TryTadam Style - 25% larger items */}
+          {/* Gallery Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {finalDisplayItems.map((item, index) => {
+            {displayItems.map((item) => {
               const colors = colorMap[item.color];
-              const isVideo = item.type === "video" || isVideoUrl(item.src);
+              const isVideo = item.type === "video";
               const isCarousel = item.type === "carousel" && item.slides && item.slides.length > 0;
 
               if (isCarousel && item.slides) {
-                // Carousel display
                 return (
                   <div
                     key={item.id}
                     className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-emerald-500/50 bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-emerald-500/5 p-5 md:p-7"
                   >
-                    {/* Header */}
                     <div className="flex items-center gap-2 mb-4">
                       <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center backdrop-blur-md">
                         <Images className="h-4 w-4 text-emerald-400" />
@@ -481,12 +435,11 @@ export default async function HomePage() {
                       </div>
                     </div>
 
-                    {/* Carousel Preview Grid - Show all slides */}
-                    <div className="grid grid-cols-3 gap-2 mb-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                    <div className="grid grid-cols-2 gap-3 mb-4 max-h-[620px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                       {item.slides.map((slide, slideIndex) => (
                         <div
                           key={slideIndex}
-                          className="relative aspect-square rounded-lg overflow-hidden border-2 border-white/20 hover:border-emerald-500/70 transition-all duration-300 shadow-lg hover:shadow-emerald-500/20"
+                          className="relative aspect-[4/5] rounded-lg overflow-hidden border-2 border-white/20 hover:border-emerald-500/70 transition-all duration-300 shadow-lg hover:shadow-emerald-500/20"
                         >
                           <Image
                             src={slide}
@@ -496,14 +449,13 @@ export default async function HomePage() {
                             sizes="(max-width: 640px) 33vw, 25vw"
                             quality={90}
                           />
-                          {/* Slide number badge */}
                           <div className="absolute top-1 left-1 h-6 w-6 rounded-full bg-slate-950/90 backdrop-blur-md flex items-center justify-center border-2 border-emerald-500/50 shadow-lg">
                             <span className="text-[11px] font-bold text-emerald-300">{slideIndex + 1}</span>
                           </div>
                         </div>
                       ))}
                     </div>
-                    {/* Show prompt as title */}
+
                     {item.prompt && (
                       <div className="mb-2 px-2">
                         <p className="text-base font-bold text-white line-clamp-2 bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
@@ -512,7 +464,6 @@ export default async function HomePage() {
                       </div>
                     )}
 
-                    {/* Prompt on hover */}
                     {item.prompt && (
                       <div className="absolute bottom-0 left-0 right-0 p-4 z-10 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent">
                         <div className="flex items-start gap-2">
@@ -527,7 +478,7 @@ export default async function HomePage() {
                 );
               }
 
-              // Image or Video display - 25% larger
+              // Image or Video display
               return (
                 <div
                   key={item.id}
@@ -554,7 +505,6 @@ export default async function HomePage() {
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
 
-                    {/* Category Badge */}
                     <div className="absolute top-4 right-4 z-10">
                       <span className={`text-xs font-medium px-3 py-1 rounded-full border backdrop-blur-md ${colors.badge}`}>
                         {isVideo && <Video className="h-3 w-3 inline ml-1" />}
@@ -562,7 +512,6 @@ export default async function HomePage() {
                       </span>
                     </div>
 
-                    {/* Prompt on hover */}
                     {item.prompt && (
                       <div className="absolute bottom-0 left-0 right-0 p-5 z-10 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500">
                         <div className="flex items-start gap-2">
@@ -579,7 +528,6 @@ export default async function HomePage() {
             })}
           </div>
 
-          {/* CTA under gallery */}
           <div className="text-center mt-14">
             <p className="text-slate-500 mb-6 text-sm">
               זו רק ההתחלה. המערכת מסוגלת ליצור כל מה שתדמיינו.

@@ -50,6 +50,7 @@ const CATEGORIES = [
     { value: "all", label: "הכל" },
     { value: "gradient", label: "גרדיאנט" },
     { value: "dark", label: "כהה" },
+    { value: "pastel", label: "פסטל" },
     { value: "tech", label: "טכנולוגי" },
     { value: "office", label: "משרדי" },
     { value: "abstract", label: "בניינים" },

@@ -7,6 +7,7 @@ export const CREDIT_COSTS = {
     caricature_generation: 3,
     character_training: 50,
     video_clips: 25,
+    video_to_images: 5,
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;
@@ -18,6 +19,7 @@ export const CREDIT_ACTION_LABELS: Record<CreditAction, string> = {
     caricature_generation: "יצירת קריקטורה",
     character_training: "אימון דמות",
     video_clips: "חיתוך וידאו",
+    video_to_images: "תמונות נבחרות מוידאו",
 };
 
 export const PLANS = {

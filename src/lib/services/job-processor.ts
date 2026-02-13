@@ -861,10 +861,33 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
         await updateProgress(job.id, 50);
 
         // STEP 2: GENERATION (Use the model that works for Image Generation)
-        // We construct a text-to-image prompt based on the description
-        const caricaturePrompt = `A 3D Pixar-style digital caricature of: ${description}. 
-    Additional details: ${params.subjectDescription || ""} ${params.settingEnvironment || ""} ${params.hobbyProfession || ""}
-    Style: Vibrant, expressive, cute, oversized head, small body, high quality 3D render, 8k resolution.`;
+        // System prompt: professional avatar style with likeness preservation
+        const env = params.settingEnvironment?.trim() || "Modern Office";
+        const profession = params.hobbyProfession?.trim() || "";
+        const extraDesc = params.subjectDescription?.trim() || "";
+
+        const caricaturePrompt = `Create a professional avatar/caricature based on this person description: ${description}
+${extraDesc ? `Additional subject details: ${extraDesc}.` : ""}
+
+VISUAL STYLE & ART DIRECTION:
+- Style: Modern 3D digital illustration (Pixar/Disney style) or high-end 2D vector art with soft, professional shading.
+- Facial Fidelity: Identify and exaggerate key facial features (eyes, jawline, smile, hair texture) just enough to create a "likeness" without losing the person's identity. The person must be instantly recognizable.
+- Lighting: Warm, cinematic lighting that complements the environment.
+
+CHARACTER & PROFESSION INTEGRATION:
+${profession ? `- Attire: Dress the character in professional clothing appropriate for: ${profession}.
+- Props: Include 1-2 subtle items related to the profession (e.g., leather-bound book or scales for a lawyer; laptop for a tech lead).
+` : "- Attire: Professional, smart-casual clothing."}
+- Expression: Friendly, confident, and approachable.
+
+ENVIRONMENT (BACKGROUND):
+- Setting: Render "${env}" with a slight depth-of-field (bokeh) effect. Background feels detailed and premium but keeps focus on the character.
+- Atmosphere: Clean, organized, vibrant colors.
+
+TECHNICAL CONSTRAINTS:
+- Avoid uncanny valley or messy AI artifacts.
+- Ensure skin tone and hair color match the input description accurately.
+- Final output: A polished, centered portrait that looks like a custom-made professional avatar.`;
 
         // Use the exact same endpoint/model as your working Image Generation
         // Note: We use REST fetch to be 100% sure of the endpoint

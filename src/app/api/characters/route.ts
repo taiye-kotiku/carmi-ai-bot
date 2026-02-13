@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
                     images_data_url: zipUrl,
                     trigger_word: "ohwx",
                     is_style: false,
-                    steps: 500
+                    steps: 700
                 },
                 webhookUrl,
             });

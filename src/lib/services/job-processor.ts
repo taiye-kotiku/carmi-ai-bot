@@ -90,16 +90,64 @@ async function processTextToVideo(job: any, userId: string, jobData: any) {
 // ─────────────────────────────────────────────
 // IMAGE TO VIDEO (start Veo then poll)
 // ─────────────────────────────────────────────
+async function enhanceImageToVideoPrompt(
+    imageBase64: string,
+    mimeType: string,
+    userPrompt: string
+): Promise<string> {
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const systemInstruction = `Objective: Act as a professional Cinematographer and AI Prompt Engineer. Your task is to take a short user description and an uploaded image to create a highly detailed, technical prompt for the Veo 3.1 video generation model.
+
+Instructions:
+
+Analyze the Image: Identify the subject's key features (facial structure, hair, clothing) and the setting to ensure visual consistency.
+
+Expand the Motion: Take the user's short action (e.g., "drinking coffee") and describe it with physics-based realism (e.g., "steam swirling in slow motion," "subtle facial muscle movements").
+
+Apply Cinematic Standards: Always include specific camera movements (Dolly, Pan, Orbit) and professional lighting (Golden Hour, Rim Lighting, Bokeh).
+
+Incorporate Audio: Veo 3.1 generates native audio. Explicitly describe sound effects, ambient noise, or dialogue matching the scene.
+
+Output Structure:
+Your final output should be a single, flowing paragraph (or labeled sections) following this formula:
+[Cinematography] + [Subject Details] + [Dynamic Action] + [Environmental Context] + [Style/Ambiance] + [Audio Keywords]
+
+Return ONLY the enhanced prompt, no preamble.`;
+
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        systemInstruction,
+    });
+
+    const userDesc = userPrompt?.trim() || "Animate this image with subtle movement, cinematic quality";
+    const result = await model.generateContent([
+        { inlineData: { data: imageBase64, mimeType } },
+        { text: `User's short description: ${userDesc}` },
+    ]);
+
+    const text = result.response.text()?.trim();
+    return text || userDesc;
+}
+
 async function processImageToVideo(job: any, userId: string, jobData: any) {
     const operationName = jobData?.operationName;
 
     // Phase 1: Start Veo if not started
     if (!operationName && jobData?.imageBase64) {
-        const { enhancePrompt } = await import("@/lib/services/gemini");
+        const mimeType = jobData.mimeType || "image/png";
 
-        let finalPrompt = jobData.prompt || "Animate this image with subtle movement, cinematic quality";
-        if (jobData.prompt) {
-            try { finalPrompt = await enhancePrompt(jobData.prompt, "video"); } catch { }
+        let finalPrompt: string;
+        try {
+            finalPrompt = await enhanceImageToVideoPrompt(
+                jobData.imageBase64,
+                mimeType,
+                jobData.prompt || ""
+            );
+        } catch (err) {
+            console.error("[ImageToVideo] Prompt enhancement failed:", err);
+            finalPrompt = jobData.prompt || "Animate this image with subtle movement, cinematic quality";
         }
 
         // Download image and start Veo
@@ -861,33 +909,20 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
         await updateProgress(job.id, 50);
 
         // STEP 2: GENERATION (Use the model that works for Image Generation)
-        // System prompt: professional avatar style with likeness preservation
         const env = params.settingEnvironment?.trim() || "Modern Office";
-        const profession = params.hobbyProfession?.trim() || "";
+        const profession = params.hobbyProfession?.trim() || "general professional";
         const extraDesc = params.subjectDescription?.trim() || "";
 
         const caricaturePrompt = `Create a professional avatar/caricature based on this person description: ${description}
 ${extraDesc ? `Additional subject details: ${extraDesc}.` : ""}
 
-VISUAL STYLE & ART DIRECTION:
-- Style: Modern 3D digital illustration (Pixar/Disney style) or high-end 2D vector art with soft, professional shading.
-- Facial Fidelity: Identify and exaggerate key facial features (eyes, jawline, smile, hair texture) just enough to create a "likeness" without losing the person's identity. The person must be instantly recognizable.
-- Lighting: Warm, cinematic lighting that complements the environment.
+Character Fidelity: Replicate the subject's exact facial structure, hair color/texture, and unique expressions. The cartoon version must be instantly recognizable as the person in the photo.
 
-CHARACTER & PROFESSION INTEGRATION:
-${profession ? `- Attire: Dress the character in professional clothing appropriate for: ${profession}.
-- Props: Include 1-2 subtle items related to the profession (e.g., leather-bound book or scales for a lawyer; laptop for a tech lead).
-` : "- Attire: Professional, smart-casual clothing."}
-- Expression: Friendly, confident, and approachable.
+Professional Integration: Dress the character in professional attire and include 1-2 subtle props related to their specific ${profession}.
 
-ENVIRONMENT (BACKGROUND):
-- Setting: Render "${env}" with a slight depth-of-field (bokeh) effect. Background feels detailed and premium but keeps focus on the character.
-- Atmosphere: Clean, organized, vibrant colors.
+Environment: Render a vibrant ${env} with soft cinematic lighting and a slight depth-of-field blur to keep the focus on the figure.
 
-TECHNICAL CONSTRAINTS:
-- Avoid uncanny valley or messy AI artifacts.
-- Ensure skin tone and hair color match the input description accurately.
-- Final output: A polished, centered portrait that looks like a custom-made professional avatar.`;
+Art Style: Clean 3D rendering, expressive features, and a friendly, confident persona. Avoid "uncanny" realism; aim for a polished, professional avatar.`;
 
         // Use the exact same endpoint/model as your working Image Generation
         // Note: We use REST fetch to be 100% sure of the endpoint

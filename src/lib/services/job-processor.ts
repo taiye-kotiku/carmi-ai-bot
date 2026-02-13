@@ -150,28 +150,45 @@ async function processImageToVideo(job: any, userId: string, jobData: any) {
             finalPrompt = jobData.prompt || "Animate this image with subtle movement, cinematic quality";
         }
 
-        // Download image and start Veo
+        // Start Veo (veo-3.1-fast-generate-preview has explicit image-to-video support per Gemini docs)
+        const veoModel = "veo-3.1-fast-generate-preview";
         const startResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${veoModel}:predictLongRunning?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     instances: [{
                         prompt: finalPrompt,
-                        image: { bytesBase64Encoded: jobData.imageBase64 },
+                        image: {
+                            bytesBase64Encoded: jobData.imageBase64,
+                            mimeType: mimeType,
+                        },
                     }],
-                    parameters: { sampleCount: 1 },
+                    parameters: {
+                        aspectRatio: "16:9",
+                        durationSeconds: 4,
+                    },
                 }),
             }
         );
 
+        const responseBody = await startResponse.text();
         if (!startResponse.ok) {
-            await failJob(job.id, userId, CREDIT_COSTS.video_generation, "Veo start failed", "החזר - יצירת וידאו מתמונה נכשלה");
-            return { status: "failed", progress: 0, result: null, error: "Video start failed" };
+            console.error("[ImageToVideo] Veo API error:", startResponse.status, responseBody);
+            const errMsg = (() => {
+                try {
+                    const j = JSON.parse(responseBody);
+                    return j.error?.message || j.message || responseBody.slice(0, 200);
+                } catch {
+                    return responseBody.slice(0, 200);
+                }
+            })();
+            await failJob(job.id, userId, CREDIT_COSTS.video_generation, errMsg, "החזר - יצירת וידאו מתמונה נכשלה");
+            return { status: "failed", progress: 0, result: null, error: errMsg };
         }
 
-        const operation = await startResponse.json();
+        const operation = JSON.parse(responseBody);
         // Save operation name, remove heavy base64 data
         await supabaseAdmin.from("jobs").update({
             progress: 20,

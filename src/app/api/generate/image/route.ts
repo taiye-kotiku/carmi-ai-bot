@@ -2,9 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
-import { deductCredits, addCredits } from "@/lib/services/credits";
-import { CREDIT_COSTS } from "@/lib/config/credits";
-import { updateUserStorage } from "@/lib/services/storage";
+import { deductCredits } from "@/lib/services/credits";
 
 export async function POST(req: Request) {
     try {
@@ -39,27 +37,29 @@ export async function POST(req: Request) {
             );
         }
 
-        // Create job
+        // Create job — store all parameters so polling endpoint can process
         const jobId = nanoid();
         const isEdit = !!imageBase64;
         await supabaseAdmin.from("jobs").insert({
             id: jobId,
             user_id: user.id,
             type: isEdit ? "edit_image" : "generate_image",
-            status: "pending",
-            progress: 0,
+            status: "processing",
+            progress: 10,
+            result: {
+                params: {
+                    prompt,
+                    aspectRatio,
+                    style,
+                    imageBase64: imageBase64 || null,
+                    imageMimeType: imageMimeType || null,
+                },
+            },
         });
 
-        // Start background processing
-        processImageGeneration(
-            jobId,
-            user.id,
-            prompt,
-            aspectRatio,
-            style,
-            imageBase64 || null,
-            imageMimeType || null
-        );
+        // Do the actual generation here (Gemini is fast enough ~3-8s)
+        // But wrap in try/catch so we can return jobId even if it fails
+        generateImage(jobId, user.id, prompt, aspectRatio, style, imageBase64, imageMimeType);
 
         return NextResponse.json({ jobId });
     } catch (error) {
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     }
 }
 
-async function processImageGeneration(
+async function generateImage(
     jobId: string,
     userId: string,
     prompt: string,
@@ -80,17 +80,13 @@ async function processImageGeneration(
     imageBase64: string | null,
     imageMimeType: string | null
 ) {
-    try {
-        // Update to processing
-        await supabaseAdmin
-            .from("jobs")
-            .update({ status: "processing", progress: 20 })
-            .eq("id", jobId);
+    const { addCredits } = await import("@/lib/services/credits");
+    const { CREDIT_COSTS } = await import("@/lib/config/credits");
+    const { updateUserStorage } = await import("@/lib/services/storage");
 
-        // Build the request parts
+    try {
         const parts: any[] = [];
 
-        // If editing, add the source image first
         if (imageBase64 && imageMimeType) {
             parts.push({
                 inlineData: {
@@ -98,38 +94,24 @@ async function processImageGeneration(
                     data: imageBase64,
                 },
             });
-            // Build edit prompt
-            const editPrompt = buildEditPrompt(prompt, style);
-            parts.push({ text: editPrompt });
+            parts.push({ text: buildEditPrompt(prompt, style) });
         } else {
-            // Text-to-image: enhanced prompt
-            const enhancedPrompt = buildEnhancedPrompt(prompt, style, aspectRatio);
-            parts.push({ text: enhancedPrompt });
+            parts.push({ text: buildEnhancedPrompt(prompt, style, aspectRatio) });
         }
 
-        // Call Google Gemini API
         const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${process.env.GOOGLE_AI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    contents: [
-                        {
-                            parts,
-                        },
-                    ],
+                    contents: [{ parts }],
                     generationConfig: {
                         responseModalities: ["Text", "Image"],
                     },
                 }),
             }
         );
-
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 60 })
-            .eq("id", jobId);
 
         if (!response.ok) {
             const errBody = await response.text();
@@ -139,7 +121,6 @@ async function processImageGeneration(
 
         const data = await response.json();
 
-        // Extract image from response
         const imagePart = data.candidates?.[0]?.content?.parts?.find(
             (p: any) => p.inlineData?.mimeType?.startsWith("image/")
         );
@@ -148,7 +129,6 @@ async function processImageGeneration(
             throw new Error("No image generated");
         }
 
-        // Upload to Supabase Storage
         const base64Data = imagePart.inlineData.data;
         const buffer = Buffer.from(base64Data, "base64");
         const totalFileSize = buffer.length;
@@ -165,19 +145,12 @@ async function processImageGeneration(
             .from("content")
             .getPublicUrl(fileName);
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({ progress: 80 })
-            .eq("id", jobId);
-
-        // Save generation record
         const generationId = nanoid();
-        const isEdit = !!imageBase64;
         await supabaseAdmin.from("generations").insert({
             id: generationId,
             user_id: userId,
             type: "image",
-            feature: isEdit ? "edit_image" : "generate_image",
+            feature: imageBase64 ? "edit_image" : "generate_image",
             prompt,
             result_urls: [urlData.publicUrl],
             thumbnail_url: urlData.publicUrl,
@@ -188,10 +161,8 @@ async function processImageGeneration(
             files_deleted: false,
         });
 
-        // Update user storage
         await updateUserStorage(userId, totalFileSize);
 
-        // Complete job
         await supabaseAdmin
             .from("jobs")
             .update({
@@ -203,7 +174,6 @@ async function processImageGeneration(
     } catch (error: any) {
         console.error("Image processing error:", error);
 
-        // Refund credits on failure
         await addCredits(
             userId,
             CREDIT_COSTS.image_generation,
@@ -228,29 +198,22 @@ function buildEditPrompt(prompt: string, style: string): string {
         cartoon: "cartoon style, animated, colorful",
         minimal: "minimalist, clean, modern",
     };
-
     const styleHint = stylePrompts[style] || "";
     return `Edit this image: ${prompt}. ${styleHint ? `Style: ${styleHint}.` : ""} Keep the overall composition and produce a high-quality result.`;
 }
 
-function buildEnhancedPrompt(
-    prompt: string,
-    style: string,
-    aspectRatio: string
-): string {
+function buildEnhancedPrompt(prompt: string, style: string, aspectRatio: string): string {
     const stylePrompts: Record<string, string> = {
         realistic: "photorealistic, highly detailed, professional photography",
         artistic: "artistic, creative, painterly, beautiful colors",
         cartoon: "cartoon style, animated, colorful, fun",
         minimal: "minimalist, clean, simple, modern design",
     };
-
     const ratioHints: Record<string, string> = {
         "1:1": "square composition",
         "16:9": "wide landscape composition",
         "9:16": "vertical portrait composition",
         "4:3": "classic 4:3 composition",
     };
-
     return `Create an image: ${prompt}. Style: ${stylePrompts[style] || ""}. ${ratioHints[aspectRatio] || ""}. High quality, professional.`;
 }

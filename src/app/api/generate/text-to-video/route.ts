@@ -1,12 +1,10 @@
 export const runtime = "nodejs";
-export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
-import { updateUserStorage } from "@/lib/services/storage";
 import { nanoid } from "nanoid";
 
 const apiKey = process.env.GOOGLE_AI_API_KEY!;
@@ -42,7 +40,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Deduct credits upfront (atomic check + deduction)
+        // Deduct credits upfront
         try {
             await deductCredits(user.id, "video_generation");
         } catch (err) {
@@ -55,9 +53,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log("Veo request:", { prompt, aspectRatio, duration });
-
-        // Start video generation
+        // Start video generation (this is fast — just kicks off the job)
         const startResponse = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
             {
@@ -91,119 +87,29 @@ export async function POST(request: NextRequest) {
         }
 
         const operation = await startResponse.json();
-        console.log("Operation:", operation.name);
+        console.log("Veo operation started:", operation.name);
 
-        // Poll for completion
-        let googleVideoUrl: string;
-        try {
-            googleVideoUrl = await pollForVideo(operation.name);
-        } catch (pollError) {
-            await addCredits(
-                user.id,
-                CREDIT_COSTS.video_generation,
-                "החזר - יצירת וידאו נכשלה"
-            );
-            throw pollError;
-        }
-
-        console.log("Google URL:", googleVideoUrl);
-
-        // Download video with API key authentication
-        const downloadUrl = googleVideoUrl.includes("?")
-            ? `${googleVideoUrl}&key=${apiKey}`
-            : `${googleVideoUrl}?key=${apiKey}`;
-
-        const videoResponse = await fetch(downloadUrl);
-
-        if (!videoResponse.ok) {
-            console.error("Download failed:", videoResponse.status);
-
-            await addCredits(
-                user.id,
-                CREDIT_COSTS.video_generation,
-                "החזר - הורדת וידאו נכשלה"
-            );
-
-            return NextResponse.json(
-                { error: "הורדת הוידאו נכשלה" },
-                { status: 500 }
-            );
-        }
-
-        const videoBuffer = await videoResponse.arrayBuffer();
-        const totalFileSize = videoBuffer.byteLength;
-        console.log("Video size:", totalFileSize);
-
-        if (totalFileSize < 50000) {
-            await addCredits(
-                user.id,
-                CREDIT_COSTS.video_generation,
-                "החזר - וידאו לא תקין"
-            );
-
-            return NextResponse.json(
-                { error: "הוידאו שנוצר לא תקין" },
-                { status: 500 }
-            );
-        }
-
-        // Upload to Supabase Storage
-        const fileName = `videos/${user.id}/${Date.now()}.mp4`;
-
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from("generations")
-            .upload(fileName, videoBuffer, {
-                contentType: "video/mp4",
-                upsert: true,
-            });
-
-        if (uploadError) {
-            console.error("Upload error:", uploadError);
-
-            await addCredits(
-                user.id,
-                CREDIT_COSTS.video_generation,
-                "החזר - העלאת וידאו נכשלה"
-            );
-
-            return NextResponse.json(
-                { error: "העלאת הוידאו נכשלה" },
-                { status: 500 }
-            );
-        }
-
-        const { data: { publicUrl } } = supabaseAdmin.storage
-            .from("generations")
-            .getPublicUrl(fileName);
-
-        console.log("Public URL:", publicUrl);
-
-        // Save generation record with file size
-        const generationId = nanoid();
-        await supabaseAdmin.from("generations").insert({
-            id: generationId,
+        // Create job with the operation name stored in result
+        const jobId = nanoid();
+        await supabaseAdmin.from("jobs").insert({
+            id: jobId,
             user_id: user.id,
-            type: "video",
-            feature: "text_to_video",
-            prompt,
-            result_urls: [publicUrl],
-            status: "completed",
-            completed_at: new Date().toISOString(),
-            file_size_bytes: totalFileSize,
-            files_deleted: false,
+            type: "text_to_video",
+            status: "processing",
+            progress: 10,
+            result: {
+                operationName: operation.name,
+                prompt,
+                aspectRatio,
+                duration,
+            },
         });
 
-        // Update user storage
-        await updateUserStorage(user.id, totalFileSize);
-
-        return NextResponse.json({
-            success: true,
-            videoUrl: publicUrl,
-        });
+        // Return immediately — client will poll /api/jobs/[id]
+        return NextResponse.json({ jobId });
     } catch (error: any) {
-        console.error("Video error:", error);
+        console.error("Video start error:", error);
 
-        // Last-resort refund attempt
         try {
             const supabase = await createClient();
             const { data: { user } } = await supabase.auth.getUser();
@@ -223,37 +129,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-}
-
-async function pollForVideo(operationName: string): Promise<string> {
-    for (let i = 0; i < 120; i++) {
-        await new Promise((r) => setTimeout(r, 5000));
-
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
-        );
-
-        if (!response.ok) continue;
-
-        const data = await response.json();
-        console.log(`Poll ${i}: done=${data.done}`);
-
-        if (data.done) {
-            if (data.error) {
-                throw new Error(data.error.message || "Generation failed");
-            }
-
-            const videoUri =
-                data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
-                data.response?.generatedSamples?.[0]?.video?.uri ||
-                data.response?.videos?.[0]?.uri;
-
-            if (videoUri) return videoUri;
-
-            console.error("Response structure:", JSON.stringify(data).slice(0, 1000));
-            throw new Error("No video URL in response");
-        }
-    }
-
-    throw new Error("Timeout - video generation took too long");
 }

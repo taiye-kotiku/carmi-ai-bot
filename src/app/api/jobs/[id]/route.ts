@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { processJob } from "@/lib/services/job-processor";
 
 export async function GET(
     req: Request,
@@ -27,11 +28,24 @@ export async function GET(
             return NextResponse.json({ error: "Job not found" }, { status: 404 });
         }
 
+        // If job is still processing, try to advance it
+        if (job.status === "processing") {
+            const result = await processJob(job, user.id);
+            return NextResponse.json({
+                id: job.id,
+                status: result.status,
+                progress: result.progress,
+                result: result.status === "completed" ? result.result : null,
+                error: result.error,
+            });
+        }
+
+        // Return current status for completed/failed jobs
         return NextResponse.json({
             id: job.id,
             status: job.status,
             progress: job.progress,
-            result: job.result,
+            result: job.status === "completed" ? job.result : null,
             error: job.error,
         });
     } catch (error) {

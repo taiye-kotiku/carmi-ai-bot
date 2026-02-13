@@ -817,6 +817,132 @@ async function processReel(job: any, userId: string, jobData: any) {
     }
 }
 
+
+// ─────────────────────────────────────────────
+// CARTOONIZE
+// ─────────────────────────────────────────────
+async function processCartoonize(job: any, userId: string, jobData: any) {
+    if (job.status !== "processing") return currentStatus(job);
+    const params = jobData?.params;
+    if (!params?.imageBase64) return currentStatus(job);
+
+    try {
+        const { GoogleGenerativeAI } = await import("@google/generative-ai");
+        const sharp = (await import("sharp")).default;
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+
+        await updateProgress(job.id, 15);
+
+        // Step 1: Analyze image with Gemini Vision
+        const visionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        const VISION_PROMPT = `Analyze this photograph in EXTREME detail. Extract the following information with precise accuracy:
+1. Subject description: Describe the person's appearance in detail - face shape, hair color/style/texture, eye color, skin tone, clothing colors and style, body type, pose, age range
+2. Facial features: Identify EVERY distinctive facial feature - exact eye shape and color, nose shape and size, mouth shape, lip thickness, eyebrow shape and thickness, cheekbones, jawline, face shape (round/oval/square/heart), any unique features like dimples, freckles, facial hair
+3. Expression: Describe the person's exact expression - smile type, eye expression, overall mood
+4. Setting/environment: Describe the background and surroundings
+5. Hobby/profession clues: Identify any props, clothing, or context that suggests their interests or profession
+6. Key props: List any notable objects or accessories visible
+CRITICAL: Be extremely specific about facial features, proportions, and unique characteristics.`;
+
+        const visionResult = await visionModel.generateContent([
+            { inlineData: { data: params.imageBase64, mimeType: params.mimeType } },
+            VISION_PROMPT,
+        ]);
+
+        const imageDescription = visionResult.response.text();
+
+        await updateProgress(job.id, 35);
+
+        // Step 2: Extract info and build prompt
+        const extractInfo = (desc: string) => {
+            const get = (pattern: RegExp, fallback: string) => {
+                const match = desc.match(pattern);
+                return match?.[1]?.trim() || fallback;
+            };
+            return {
+                subjectDescription: get(/subject description[:\-]?\s*(.+?)(?=\n|$)/i, desc.split('\n')[0] || "the person"),
+                facialFeature: get(/facial features[:\-]?\s*(.+?)(?=\n|$)/i, "distinctive eyes and facial structure"),
+                expression: get(/expression[:\-]?\s*(.+?)(?=\n|$)/i, "their natural expression"),
+                setting: get(/setting[:\-]?\s*(.+?)(?=\n|$)/i, "a clean, modern environment"),
+                hobby: get(/hobby[:\-]?\s*(.+?)(?=\n|$)/i, "their interests"),
+                prop1: get(/props[:\-]?\s*(.+?)(?=,|\n|$)/i, "their accessories"),
+                prop2: "their personal items",
+            };
+        };
+
+        const info = extractInfo(imageDescription);
+
+        const caricaturePrompt = `A professional digital caricature of ${params.subjectDescription || info.subjectDescription}.
+CRITICAL IDENTITY PRESERVATION: The caricature MUST look like the exact same person. Preserve ALL distinctive facial features: ${info.facialFeature}. Maintain the exact same expression: ${info.expression}. Keep the same hair color, style, and texture. Preserve eye color, shape, and spacing.
+Art style: Highly expressive, oversized head on a smaller dynamic body. Exaggerate ${info.facialFeature} while maintaining perfect likeness. Place in ${params.settingEnvironment || info.setting} reflecting passion for ${params.hobbyProfession || info.hobby}. Include props like ${info.prop1}. 3D Pixar-inspired aesthetic, vibrant colors, cinematic lighting, clean high-contrast background.
+Technical: Square 1080x1080, high quality professional digital art, exaggerated caricature proportions, no text or watermarks.`;
+
+        await updateProgress(job.id, 50);
+
+        // Step 3: Generate caricature image
+        const imageModel = genAI.getGenerativeModel({
+            model: "gemini-3-pro-image-preview",
+            generationConfig: { responseModalities: ["IMAGE"] } as any,
+        });
+
+        const imageResult = await imageModel.generateContent([
+            { inlineData: { data: params.imageBase64, mimeType: params.mimeType } },
+            caricaturePrompt,
+        ]);
+
+        const imagePart = imageResult.response.candidates?.[0]?.content?.parts?.find(
+            (p: any) => p.inlineData?.mimeType?.startsWith("image/")
+        );
+
+        if (!imagePart?.inlineData) {
+            throw new Error("לא נוצרה תמונת קריקטורה. נסה תמונה אחרת.");
+        }
+
+        await updateProgress(job.id, 80);
+
+        // Step 4: Resize to 1080x1080
+        const generatedBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+        const resizedBuffer = await sharp(generatedBuffer)
+            .resize(1080, 1080, { fit: "cover", position: "center" })
+            .png({ quality: 100 })
+            .toBuffer();
+
+        // Step 5: Upload
+        const fileName = `${userId}/${job.id}/caricature.png`;
+        const { error: uploadError } = await supabaseAdmin.storage
+            .from("content")
+            .upload(fileName, resizedBuffer, { contentType: "image/png", upsert: true });
+
+        if (uploadError) throw new Error("Upload failed: " + uploadError.message);
+
+        const { data: urlData } = supabaseAdmin.storage.from("content").getPublicUrl(fileName);
+        const resultUrl = urlData.publicUrl;
+
+        // Save generation record
+        await supabaseAdmin.from("generations").insert({
+            id: nanoid(), user_id: userId, type: "image", feature: "cartoonize",
+            prompt: caricaturePrompt.substring(0, 500), result_urls: [resultUrl],
+            thumbnail_url: resultUrl, status: "completed",
+            completed_at: new Date().toISOString(), file_size_bytes: resizedBuffer.length,
+            files_deleted: false, job_id: job.id,
+        });
+
+        await updateUserStorage(userId, resizedBuffer.length);
+        await completeJob(job.id, { imageUrl: resultUrl });
+
+        return { status: "completed", progress: 100, result: { imageUrl: resultUrl }, error: null };
+    } catch (error: any) {
+        console.error("[Cartoonize] Error:", error);
+        const creditCost = CREDIT_COSTS.caricature_generation ?? CREDIT_COSTS.image_generation ?? 3;
+        await failJob(job.id, userId, creditCost, error.message, "החזר - יצירת קריקטורה נכשלה");
+        return { status: "failed", progress: 0, result: null, error: error.message };
+    }
+}
+
+
+
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────

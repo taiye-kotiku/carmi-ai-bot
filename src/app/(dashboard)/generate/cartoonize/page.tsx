@@ -23,8 +23,10 @@ export default function CartoonizePage() {
     const [subjectDescription, setSubjectDescription] = useState("");
     const [settingEnvironment, setSettingEnvironment] = useState("");
     const [hobbyProfession, setHobbyProfession] = useState("");
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const pollRef = useRef<NodeJS.Timeout | null>(null);
+    const isCompletedRef = useRef(false);
 
     const { addGenerationNotification } = useNotifications();
 
@@ -37,6 +39,9 @@ export default function CartoonizePage() {
 
     const pollJob = useCallback(
         (jobId: string) => {
+            // Safety clear
+            if (pollRef.current) clearInterval(pollRef.current);
+
             pollRef.current = setInterval(async () => {
                 try {
                     const res = await fetch(`/api/jobs/${jobId}`);
@@ -47,7 +52,12 @@ export default function CartoonizePage() {
                     }
 
                     if (data.status === "completed") {
+                        // Prevent duplicate handling
+                        if (isCompletedRef.current) return;
+                        isCompletedRef.current = true;
+
                         stopPolling();
+
                         const imageUrl = data.result?.imageUrl || data.result?.url;
                         if (imageUrl) {
                             setResultUrl(imageUrl);
@@ -60,12 +70,16 @@ export default function CartoonizePage() {
                         }
                         setIsGenerating(false);
                     } else if (data.status === "failed") {
+                        if (isCompletedRef.current) return;
+                        isCompletedRef.current = true;
+
                         stopPolling();
                         setError(data.error || "יצירת הקריקטורה נכשלה");
                         toast.error(data.error || "יצירת הקריקטורה נכשלה");
                         setIsGenerating(false);
                         setProgress(0);
                     } else {
+                        // Processing state
                         if (data.progress < 20) {
                             setStatusText("מנתח את התמונה...");
                         } else if (data.progress < 50) {
@@ -104,11 +118,13 @@ export default function CartoonizePage() {
 
     const handleGenerate = async () => {
         if (!selectedFile) return;
+
         setIsGenerating(true);
         setError(null);
         setResultUrl(null);
         setProgress(5);
         setStatusText("מעלה תמונה...");
+        isCompletedRef.current = false; // Reset completion flag
 
         try {
             const formData = new FormData();

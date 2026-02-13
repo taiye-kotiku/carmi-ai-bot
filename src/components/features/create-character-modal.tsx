@@ -201,7 +201,7 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                         <Label className="text-base font-semibold">
                             תמונות אימון <span className="text-destructive">*</span>
                             <span className="text-muted-foreground font-normal text-sm block mt-0.5">
-                                מינימום 5 תמונות, מומלץ 10-20
+                                מינימום 10 תמונות, מומלץ 10-20
                             </span>
                         </Label>
 
@@ -249,7 +249,7 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                                     }`}
                             >
                                 {uploadedUrls.length >= 5 ? "✅" : "⚠️"} {uploadedUrls.length}
-                                /5 תמונות (מינימום)
+                                /20 תמונות (מינימום)
                             </div>
                             {uploadedUrls.length >= 10 && uploadedUrls.length < 20 && (
                                 <span className="text-xs text-green-600">👍 כמות טובה</span>
@@ -327,7 +327,7 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                                     יוצר דמות...
                                 </span>
                             ) : (
-                                "✨ צור דמות"
+                                "✨ צור דמות (50 קרדיטים)"
                             )}
                         </Button>
                         <Button

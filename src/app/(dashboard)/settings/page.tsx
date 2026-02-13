@@ -35,6 +35,7 @@ import {
     Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CREDIT_COSTS } from "@/lib/config/credits"; // Import costs
 
 type StorageInfo = {
     used_bytes: number;
@@ -63,9 +64,15 @@ export default function SettingsPage() {
     const [storage, setStorage] = useState<StorageInfo | null>(null);
     const [storageLoading, setStorageLoading] = useState(true);
     const [showBuyDialog, setShowBuyDialog] = useState(false);
-    const [buyAmount, setBuyAmount] = useState(50);
+    const [buyAmount, setBuyAmount] = useState(50); // Default to 50MB
     const [isBuying, setIsBuying] = useState(false);
     const [buyError, setBuyError] = useState("");
+
+    const BASE_MB = 50;
+    const BASE_COST = CREDIT_COSTS.storage_expansion || 15;
+
+    // Helper to calculate cost dynamically
+    const calculateCost = (mb: number) => (mb / BASE_MB) * BASE_COST;
 
     useEffect(() => {
         async function load() {
@@ -131,7 +138,7 @@ export default function SettingsPage() {
                 body: JSON.stringify({ amount_mb: buyAmount }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            if (!res.ok) throw new Error(data.error || "רכישת האחסון נכשלה");
             setShowBuyDialog(false);
             await loadStorage();
         } catch (error: any) {
@@ -360,7 +367,7 @@ export default function SettingsPage() {
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <span className="text-green-500 mt-0.5">•</span>
-                                        50 קרדיטים = 50MB אחסון נוסף
+                                        {BASE_COST} קרדיטים = {BASE_MB}MB אחסון נוסף
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <span className="text-gray-400 mt-0.5">•</span>
@@ -556,7 +563,7 @@ export default function SettingsPage() {
                                             </div>
                                             <div className="text-xs text-gray-500 flex items-center justify-center gap-1 mt-1">
                                                 <Coins className="h-3 w-3" />
-                                                {amount} קרדיטים
+                                                {calculateCost(amount)} קרדיטים
                                             </div>
                                         </button>
                                     ))}
@@ -570,7 +577,7 @@ export default function SettingsPage() {
                                     <div className="flex justify-between mt-1">
                                         <span>עלות:</span>
                                         <span className="font-semibold text-blue-600">
-                                            {buyAmount} קרדיטים
+                                            {calculateCost(buyAmount)} קרדיטים
                                         </span>
                                     </div>
                                     {storage && (

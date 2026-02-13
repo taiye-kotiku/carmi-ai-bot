@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 const STORAGE_LIMIT_BYTES = 104857600; // 100MB
 const WARNING_THRESHOLD_BYTES = 83886080; // 80MB
 const AUTO_DELETE_DAYS = 3;
 
+// Base unit cost
+const BASE_MB = 50;
+const BASE_COST = CREDIT_COSTS.storage_expansion || 15;
+
+// ... GET method remains the same ...
 export async function GET() {
     try {
         const supabase = await createClient();
@@ -68,7 +74,7 @@ export async function GET() {
                 ? "⚠️ האחסון שלך מלא!"
                 : "⚠️ האחסון שלך כמעט מלא";
             const warningBody = isOverLimit
-                ? `השתמשת ב-${formatBytes(usedBytes)} מתוך ${formatBytes(limitBytes)}. יצירות ישנות יימחקו אוטומטית בעוד ${AUTO_DELETE_DAYS} ימים אם לא תפנה מקום.`
+                ? `השתמשת ב-${formatBytes(usedBytes)} מתוך ${formatBytes(limitBytes)}. יצירות ישנות יימחקו אוטומטית בעוד ${AUTO_DELETE_DAYS} ימים אלא אם תפנה מקום.`
                 : `השתמשת ב-${formatBytes(usedBytes)} מתוך ${formatBytes(limitBytes)}. שקול לרכוש אחסון נוסף.`;
 
             await admin.from("notifications").insert({
@@ -123,14 +129,15 @@ export async function POST(request: Request) {
 
         const { amount_mb } = await request.json();
 
-        if (!amount_mb || amount_mb < 50) {
+        if (!amount_mb || amount_mb < 50 || amount_mb % 50 !== 0) {
             return NextResponse.json(
-                { error: "מינימום 50MB לרכישה" },
+                { error: "כמות לא תקינה. המינימום הוא 50MB ובכפולות של 50." },
                 { status: 400 }
             );
         }
 
-        const creditsCost = amount_mb; // 50 credits = 50MB
+        // Calculate cost: (amount / 50) * 15
+        const creditsCost = (amount_mb / BASE_MB) * BASE_COST;
         const additionalBytes = amount_mb * 1048576;
 
         const admin = createSupabaseAdmin(
@@ -153,16 +160,23 @@ export async function POST(request: Request) {
         }
 
         // Deduct credits
-        const { data: newBalance } = await admin.rpc("deduct_credits", {
+        const { data: newBalance, error: deductError } = await admin.rpc("deduct_credits", {
             p_user_id: user.id,
             p_cost: creditsCost,
         });
+
+        if (deductError) {
+            return NextResponse.json(
+                { error: "שגיאה בניכוי קרדיטים" },
+                { status: 500 }
+            );
+        }
 
         // Log transaction
         await admin.from("credit_transactions").insert({
             user_id: user.id,
             amount: -creditsCost,
-            balance_after: newBalance || credits.credits - creditsCost,
+            balance_after: newBalance,
             credit_type: "deduction",
             cost_type: "storage_purchase",
             reason: `רכישת ${amount_mb}MB אחסון נוסף`,
@@ -202,7 +216,7 @@ export async function POST(request: Request) {
             new_limit_bytes: newLimit,
             new_limit_mb: Math.round(newLimit / 1048576),
             credits_spent: creditsCost,
-            credits_remaining: newBalance || credits.credits - creditsCost,
+            credits_remaining: newBalance,
         });
     } catch (error: any) {
         console.error("Storage purchase error:", error);

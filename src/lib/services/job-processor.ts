@@ -1043,16 +1043,64 @@ async function saveState(jobId: string, jobData: any, state: any) {
 }
 
 function extractVideoUri(pollData: any): string | null {
-    return (
-        pollData.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
-        pollData.response?.generatedSamples?.[0]?.video?.uri ||
-        pollData.response?.videos?.[0]?.uri ||
-        null
+    const resp = pollData.response || pollData.result || {};
+    const genResp = resp.generateVideoResponse || resp;
+
+    // Path 1: generateVideoResponse.generatedSamples (Gemini API)
+    const samples =
+        genResp.generatedSamples ||
+        genResp.videos ||
+        resp.generatedSamples ||
+        resp.videos ||
+        [];
+
+    if (samples.length > 0) {
+        const s = samples[0];
+        const uri =
+            s.video?.uri ||
+            s.uri ||
+            s.videoUri ||
+            s.video?.videoUri ||
+            null;
+        if (uri) return uri;
+
+        // Base64 encoded video
+        const enc = s.video?.encodedVideo || s.encodedVideo || s.video;
+        if (enc?.bytesBase64Encoded) {
+            const mime = enc.mimeType || "video/mp4";
+            return `data:${mime};base64,${enc.bytesBase64Encoded}`;
+        }
+    }
+
+    // Path 2: predictions (Vertex AI / predictLongRunning)
+    const preds = resp.predictions || [];
+    if (preds.length > 0) {
+        const p = preds[0];
+        const uri = p.videoUri || p.uri || p.video?.uri || (typeof p === "string" ? p : null);
+        if (uri) return uri;
+    }
+
+    // Path 3: top-level videos
+    const videos = resp.videos || [];
+    if (videos.length > 0) {
+        const v = videos[0];
+        const uri = v.uri || v.videoUri || v.video?.uri || (typeof v === "string" ? v : null);
+        if (uri) return uri;
+    }
+
+    // Debug: log structure when nothing found
+    console.warn(
+        "[extractVideoUri] No video found. Response keys:",
+        Object.keys(resp).join(", "),
+        "| Full (truncated):",
+        JSON.stringify(pollData).substring(0, 800)
     );
+    return null;
 }
 
 async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, feature: string, prompt: string) {
-    const dlUrl = videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`;
+    const isDataUrl = videoUri.startsWith("data:");
+    const dlUrl = isDataUrl ? videoUri : (videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`);
     const vidRes = await fetch(dlUrl);
     if (!vidRes.ok) {
         await failJob(job.id, userId, CREDIT_COSTS.video_generation, "Download failed", "החזר - הורדת וידאו נכשלה");

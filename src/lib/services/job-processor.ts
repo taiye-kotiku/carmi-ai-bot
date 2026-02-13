@@ -821,18 +821,15 @@ async function processReel(job: any, userId: string, jobData: any) {
 
 
 // ─────────────────────────────────────────────
-// CARTOONIZE (Google Ecosystem: Gemini Vision + Imagen 3)
+// CARTOONIZE (Gemini Vision → Working Image Model)
 // ─────────────────────────────────────────────
 async function processCartoonize(job: any, userId: string, jobData: any) {
-    // 1. Check status
     if (job.status !== "processing") return currentStatus(job);
 
-    // 2. Race condition lock
     if (jobData.generationStarted) {
         return { status: "processing", progress: job.progress, result: null, error: null };
     }
 
-    // Lock the job
     const { error: lockError } = await supabaseAdmin.from("jobs").update({
         result: { ...jobData, generationStarted: true }
     }).eq("id", job.id).select();
@@ -849,72 +846,57 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
 
         await updateProgress(job.id, 20);
 
-        // STEP 1: Analyze the face with Gemini 2.0 Flash
-        // (Gemini is great at seeing, but we need Imagen to draw)
+        // STEP 1: VISION (Analyze with Flash 2.0 - it can see but not draw)
+        // IMPORTANT: Do NOT send responseModalities: ["IMAGE"] here.
         const visionModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-        const VISION_PROMPT = `Analyze this photo for a caricature artist.
-    Describe the subject in one concise paragraph. Focus on:
-    1. Gender, age, hair (color/style), eye color, skin tone.
-    2. Distinctive facial features (what stands out?).
-    3. Expression and mood.
-    4. Clothing and accessories.
-    
-    Then, describe the background/setting briefly.`;
 
         const visionResult = await visionModel.generateContent([
             { inlineData: { data: params.imageBase64, mimeType: params.mimeType } },
-            VISION_PROMPT,
+            `Describe this person in detail: physical features (hair, eyes, skin, face shape), clothing, and expression. Keep it concise.`,
         ]);
 
         const description = visionResult.response.text();
-        console.log("[Cartoonize] Analysis:", description);
+        console.log("[Cartoonize] Description:", description);
 
         await updateProgress(job.id, 50);
 
-        // STEP 2: Generate Cartoon with Imagen 3
-        // We use the REST endpoint for Imagen 3 as it's the standard for image gen
-        const caricaturePrompt = `A 3D Pixar-style digital caricature of: ${description}.
+        // STEP 2: GENERATION (Use the model that works for Image Generation)
+        // We construct a text-to-image prompt based on the description
+        const caricaturePrompt = `A 3D Pixar-style digital caricature of: ${description}. 
     Additional details: ${params.subjectDescription || ""} ${params.settingEnvironment || ""} ${params.hobbyProfession || ""}
-    Style: Vibrant, expressive, cute, oversized head, small body, high quality 3D render, 8k resolution, cinematic lighting.`;
+    Style: Vibrant, expressive, cute, oversized head, small body, high quality 3D render, 8k resolution.`;
 
-        // Call Imagen 3 via REST
-        const imagenResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`,
+        // Use the exact same endpoint/model as your working Image Generation
+        // Note: We use REST fetch to be 100% sure of the endpoint
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    instances: [{ prompt: caricaturePrompt }],
-                    parameters: {
-                        sampleCount: 1,
-                        aspectRatio: "1:1",
-                        outputOptions: { mimeType: "image/jpeg" } // Request JPEG
-                    }
-                })
+                    contents: [{ parts: [{ text: caricaturePrompt }] }],
+                    generationConfig: { responseModalities: ["Text", "Image"] }, // This model REQUIRES this
+                }),
             }
         );
 
-        if (!imagenResponse.ok) {
-            const errText = await imagenResponse.text();
-            throw new Error(`Imagen API error: ${errText}`);
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`Image Gen API Error: ${err}`);
         }
 
-        const imagenData = await imagenResponse.json();
+        const data = await response.json();
+        const imagePart = data.candidates?.[0]?.content?.parts?.find(
+            (p: any) => p.inlineData?.mimeType?.startsWith("image/")
+        );
 
-        // Extract image (Base64)
-        const base64Image = imagenData.predictions?.[0]?.bytesBase64Encoded;
+        if (!imagePart) throw new Error("No image generated");
 
-        if (!base64Image) {
-            throw new Error("No image generated by Google Imagen");
-        }
+        const generatedBuffer = Buffer.from(imagePart.inlineData.data, "base64");
 
         await updateProgress(job.id, 80);
 
-        // STEP 3: Process & Upload
-        const generatedBuffer = Buffer.from(base64Image, "base64");
-
-        // Resize to standard size
+        // STEP 3: Upload
         const resizedBuffer = await sharp(generatedBuffer)
             .resize(1080, 1080, { fit: "cover", position: "center" })
             .png()
@@ -922,16 +904,13 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
 
         const fileName = `${userId}/${job.id}/caricature.png`;
 
-        const { error: uploadError } = await supabaseAdmin.storage
+        await supabaseAdmin.storage
             .from("content")
             .upload(fileName, resizedBuffer, { contentType: "image/png", upsert: true });
-
-        if (uploadError) throw new Error("Upload failed: " + uploadError.message);
 
         const { data: urlData } = supabaseAdmin.storage.from("content").getPublicUrl(fileName);
         const resultUrl = urlData.publicUrl;
 
-        // Save generation record
         await supabaseAdmin.from("generations").insert({
             id: nanoid(), user_id: userId, type: "image", feature: "cartoonize",
             prompt: caricaturePrompt.substring(0, 500), result_urls: [resultUrl],
@@ -951,7 +930,6 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
         return { status: "failed", progress: 0, result: null, error: error.message };
     }
 }
-
 
 
 // ─────────────────────────────────────────────

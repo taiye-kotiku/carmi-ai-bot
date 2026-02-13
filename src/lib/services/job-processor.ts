@@ -821,96 +821,107 @@ async function processReel(job: any, userId: string, jobData: any) {
 
 
 // ─────────────────────────────────────────────
-// CARTOONIZE
+// CARTOONIZE (Google Ecosystem: Gemini Vision + Imagen 3)
 // ─────────────────────────────────────────────
 async function processCartoonize(job: any, userId: string, jobData: any) {
-    // 1. Check if job is already done
+    // 1. Check status
     if (job.status !== "processing") return currentStatus(job);
 
-    // 2. Check for race condition / re-entry
-    // If we have a 'generationStarted' flag, it means a previous poll started the work.
-    // We should NOT restart it.
+    // 2. Race condition lock
     if (jobData.generationStarted) {
-        // Just return current status and let the existing process finish
-        // (Or if it crashed, we might need a timeout reset, but for now let's prevent duplicates)
         return { status: "processing", progress: job.progress, result: null, error: null };
     }
 
-    // 3. LOCK THE JOB: Set generationStarted = true
-    // This must happen BEFORE we do any heavy lifting
+    // Lock the job
     const { error: lockError } = await supabaseAdmin.from("jobs").update({
         result: { ...jobData, generationStarted: true }
-    }).eq("id", job.id).select(); // select ensures we wait for write
+    }).eq("id", job.id).select();
 
-    if (lockError) {
-        // If lock fails, another request might have modified it
-        return { status: "processing", progress: job.progress, result: null, error: null };
-    }
+    if (lockError) return { status: "processing", progress: job.progress, result: null, error: null };
 
-    // Now we own the job execution
     const params = jobData?.params;
     if (!params?.imageBase64) return currentStatus(job);
 
     try {
         const { GoogleGenerativeAI } = await import("@google/generative-ai");
         const sharp = (await import("sharp")).default;
-
         const genAI = new GoogleGenerativeAI(apiKey);
 
-        await updateProgress(job.id, 15);
+        await updateProgress(job.id, 20);
 
-        // Step 1: Analyze image with Gemini Vision
-        const visionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // STEP 1: Analyze the face with Gemini 2.0 Flash
+        // (Gemini is great at seeing, but we need Imagen to draw)
+        const visionModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-        const VISION_PROMPT = `Analyze this photograph in EXTREME detail... (truncated for brevity)`;
-        // ... (Keep your prompt here) ...
+        const VISION_PROMPT = `Analyze this photo for a caricature artist.
+    Describe the subject in one concise paragraph. Focus on:
+    1. Gender, age, hair (color/style), eye color, skin tone.
+    2. Distinctive facial features (what stands out?).
+    3. Expression and mood.
+    4. Clothing and accessories.
+    
+    Then, describe the background/setting briefly.`;
 
         const visionResult = await visionModel.generateContent([
             { inlineData: { data: params.imageBase64, mimeType: params.mimeType } },
-            `Analyze this photograph in EXTREME detail. Extract: 1. Subject description 2. Facial features 3. Expression 4. Setting 5. Hobby 6. Props`,
+            VISION_PROMPT,
         ]);
 
-        const imageDescription = visionResult.response.text();
-
-        await updateProgress(job.id, 35);
-
-        // Step 2: Build prompt
-        const caricaturePrompt = `A professional 3D Pixar-style digital caricature. Based on: ${imageDescription.substring(0, 500)}. 
-    Additional: ${params.subjectDescription || ""} ${params.settingEnvironment || ""} ${params.hobbyProfession || ""}
-    CRITICAL: Maintain facial likeness. High quality 8k.`;
+        const description = visionResult.response.text();
+        console.log("[Cartoonize] Analysis:", description);
 
         await updateProgress(job.id, 50);
 
-        // Step 3: Generate caricature
-        const imageModel = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash-exp-image-generation",
-            generationConfig: { responseModalities: ["IMAGE"] } as any,
-        });
+        // STEP 2: Generate Cartoon with Imagen 3
+        // We use the REST endpoint for Imagen 3 as it's the standard for image gen
+        const caricaturePrompt = `A 3D Pixar-style digital caricature of: ${description}.
+    Additional details: ${params.subjectDescription || ""} ${params.settingEnvironment || ""} ${params.hobbyProfession || ""}
+    Style: Vibrant, expressive, cute, oversized head, small body, high quality 3D render, 8k resolution, cinematic lighting.`;
 
-        const imageResult = await imageModel.generateContent([
-            { inlineData: { data: params.imageBase64, mimeType: params.mimeType } },
-            caricaturePrompt,
-        ]);
-
-        const imagePart = imageResult.response.candidates?.[0]?.content?.parts?.find(
-            (p: any) => p.inlineData?.mimeType?.startsWith("image/")
+        // Call Imagen 3 via REST
+        const imagenResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    instances: [{ prompt: caricaturePrompt }],
+                    parameters: {
+                        sampleCount: 1,
+                        aspectRatio: "1:1",
+                        outputOptions: { mimeType: "image/jpeg" } // Request JPEG
+                    }
+                })
+            }
         );
 
-        if (!imagePart?.inlineData) {
-            throw new Error("No image generated by AI");
+        if (!imagenResponse.ok) {
+            const errText = await imagenResponse.text();
+            throw new Error(`Imagen API error: ${errText}`);
+        }
+
+        const imagenData = await imagenResponse.json();
+
+        // Extract image (Base64)
+        const base64Image = imagenData.predictions?.[0]?.bytesBase64Encoded;
+
+        if (!base64Image) {
+            throw new Error("No image generated by Google Imagen");
         }
 
         await updateProgress(job.id, 80);
 
-        // Step 4: Resize
-        const generatedBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+        // STEP 3: Process & Upload
+        const generatedBuffer = Buffer.from(base64Image, "base64");
+
+        // Resize to standard size
         const resizedBuffer = await sharp(generatedBuffer)
-            .resize(1080, 1080, { fit: "cover" })
+            .resize(1080, 1080, { fit: "cover", position: "center" })
             .png()
             .toBuffer();
 
-        // Step 5: Upload
         const fileName = `${userId}/${job.id}/caricature.png`;
+
         const { error: uploadError } = await supabaseAdmin.storage
             .from("content")
             .upload(fileName, resizedBuffer, { contentType: "image/png", upsert: true });
@@ -920,7 +931,7 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
         const { data: urlData } = supabaseAdmin.storage.from("content").getPublicUrl(fileName);
         const resultUrl = urlData.publicUrl;
 
-        // Save generation
+        // Save generation record
         await supabaseAdmin.from("generations").insert({
             id: nanoid(), user_id: userId, type: "image", feature: "cartoonize",
             prompt: caricaturePrompt.substring(0, 500), result_urls: [resultUrl],
@@ -936,7 +947,6 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
 
     } catch (error: any) {
         console.error("[Cartoonize] Error:", error);
-        // If we fail, we MUST unlock it (or mark as failed) so user isn't stuck
         await failJob(job.id, userId, CREDIT_COSTS.caricature_generation || 3, error.message, "החזר - יצירת קריקטורה נכשלה");
         return { status: "failed", progress: 0, result: null, error: error.message };
     }

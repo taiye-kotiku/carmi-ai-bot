@@ -11,11 +11,13 @@ fal.config({ credentials: process.env.FAL_KEY });
 export const runtime = "nodejs";
 export const maxDuration = 10; // Vercel Hobby max
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
-    const { id: characterId } = await params;
+export async function POST(request: NextRequest) {
+    const body = await request.json();
+    const characterId = body.characterId;
+
+    if (!characterId) {
+        return NextResponse.json({ error: "Character ID is required" }, { status: 400 });
+    }
 
     try {
         const supabase = await createClient();

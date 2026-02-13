@@ -1,5 +1,6 @@
 // src/lib/services/fal.ts
 import { fal } from "@fal-ai/client";
+import JSZip from "jszip";
 
 // Configure fal client
 fal.config({
@@ -98,4 +99,25 @@ export async function imageToVideo(options: {
     return {
         videoUrl: result.data?.video?.url,
     };
+}
+
+// Create ZIP of images for training
+export async function createImagesZip(urls: string[]): Promise<Blob> {
+    const zip = new JSZip();
+
+    await Promise.all(
+        urls.map(async (url, index) => {
+            try {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                // Add to zip with generic names image_0.jpg, image_1.jpg, etc.
+                // Model usually doesn't care about names, but extensions help.
+                zip.file(`image_${index}.jpg`, arrayBuffer);
+            } catch (error) {
+                console.error(`Failed to fetch image for ZIP: ${url}`, error);
+            }
+        })
+    );
+
+    return await zip.generateAsync({ type: "blob" });
 }

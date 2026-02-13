@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fal } from "@fal-ai/client";
 import JSZip from "jszip";
 import { deductCredits, addCredits } from "@/lib/services/credits";
+import { createImagesZip } from "@/lib/services/fal";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 
 fal.config({ credentials: process.env.FAL_KEY });
@@ -72,9 +73,11 @@ export async function POST(request: NextRequest) {
         try {
             const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/fal/training?characterId=${character.id}&secret=${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
 
+            const imagesZip = await createImagesZip(imageUrls);
+
             const result = await fal.queue.submit("fal-ai/flux-lora-fast-training", {
                 input: {
-                    images_data_url: imageUrls.map((url: string) => ({ url })),
+                    images_data_url: imagesZip,
                     trigger_word: "ohwx",
                     is_style: false
                 },

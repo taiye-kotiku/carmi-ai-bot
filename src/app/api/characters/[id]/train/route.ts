@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fal } from "@fal-ai/client";
-import JSZip from "jszip";
 import { deductCredits, addCredits } from "@/lib/services/credits";
+import { createImagesZip } from "@/lib/services/fal";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 
 fal.config({ credentials: process.env.FAL_KEY });
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
 
 export async function POST(
     request: NextRequest,
@@ -21,49 +20,33 @@ export async function POST(
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         // Get character
-        const { data: character, error: charError } = await supabaseAdmin
+        const { data: character } = await supabaseAdmin
             .from("characters")
             .select("*")
             .eq("id", characterId)
             .eq("user_id", user.id)
             .single();
 
-        if (charError || !character) {
-            return NextResponse.json({ error: "Character not found" }, { status: 404 });
-        }
+        if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
 
-        if (character.status === "training") {
-            return NextResponse.json({ error: "Already training" }, { status: 400 });
-        }
-
-        if (character.status === "ready" && character.lora_url) {
-            return NextResponse.json({ error: "Already trained" }, { status: 400 });
+        // If already training/ready, ignore
+        if (character.status === "training" || character.status === "ready") {
+            return NextResponse.json({ message: "Already training or ready" });
         }
 
         const imageUrls = character.image_urls || [];
         if (imageUrls.length < 4) {
-            return NextResponse.json(
-                { error: `Need at least 4 images. Got ${imageUrls.length}` },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "At least 4 images required" }, { status: 400 });
         }
 
-        // Deduct credits upfront (atomic check + deduction)
+        // Deduct credits
         try {
             await deductCredits(user.id, "character_training");
-        } catch (err) {
-            return NextResponse.json(
-                {
-                    error: (err as Error).message,
-                    code: "INSUFFICIENT_CREDITS",
-                },
-                { status: 402 }
-            );
+        } catch (err: any) {
+            return NextResponse.json({ error: err.message, code: "INSUFFICIENT_CREDITS" }, { status: 402 });
         }
 
         // Update status
@@ -77,111 +60,47 @@ export async function POST(
             .eq("id", characterId);
 
         console.log(`[Train] Starting FAL training for ${characterId}`);
-        console.log(`[Train] Images: ${imageUrls.length}`);
-
-        const triggerWord = "ohwx";
 
         try {
-            // Create ZIP archive with images
-            console.log("[Train] Creating ZIP archive...");
-            const zip = new JSZip();
+            // DIRECT URL METHOD (No ZIP needed - much faster)
+            const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/fal/training?characterId=${characterId}&secret=${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
 
-            for (let i = 0; i < imageUrls.length; i++) {
-                try {
-                    const response = await fetch(imageUrls[i]);
-                    if (!response.ok) continue;
+            // Note: Use fal.queue directly
+            const imagesZip = await createImagesZip(imageUrls);
 
-                    const buffer = await response.arrayBuffer();
-                    const ext = imageUrls[i].split('.').pop()?.toLowerCase() || 'jpg';
-                    zip.file(`image_${i.toString().padStart(3, '0')}.${ext}`, buffer);
-
-                    console.log(`[Train] Added image ${i + 1}/${imageUrls.length}`);
-                } catch (e) {
-                    console.error(`[Train] Failed to fetch image ${i}:`, e);
-                }
-            }
-
-            // Generate ZIP
-            const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-            console.log(`[Train] ZIP created: ${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB`);
-
-            // Upload ZIP to Supabase
-            const zipFileName = `${characterId}/training_images.zip`;
-            const { error: uploadError } = await supabaseAdmin.storage
-                .from("training")
-                .upload(zipFileName, zipBuffer, {
-                    contentType: "application/zip",
-                    upsert: true,
-                });
-
-            if (uploadError) {
-                await supabaseAdmin.storage.createBucket("training", { public: true });
-                await supabaseAdmin.storage
-                    .from("training")
-                    .upload(zipFileName, zipBuffer, {
-                        contentType: "application/zip",
-                        upsert: true,
-                    });
-            }
-
-            const { data: { publicUrl: zipUrl } } = supabaseAdmin.storage
-                .from("training")
-                .getPublicUrl(zipFileName);
-
-            console.log(`[Train] ZIP uploaded: ${zipUrl}`);
-
-            // Start FAL training
-            const { request_id } = await fal.queue.submit("fal-ai/flux-lora-fast-training", {
+            const result = await fal.queue.submit("fal-ai/flux-lora-fast-training", {
                 input: {
-                    images_data_url: zipUrl,
-                    trigger_word: triggerWord,
-                    steps: 1000,
-                    create_masks: true,
-                    is_style: false,
+                    // Send ZIP blob directly
+                    images_data_url: imagesZip,
+                    trigger_word: "ohwx",
+                    is_style: false
                 },
-                webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/fal/training`,
+                webhookUrl
             });
 
-            console.log(`[Train] FAL request_id: ${request_id}`);
+            console.log(`[Train] FAL request_id: ${result.request_id}`);
 
             // Save request ID
             await supabaseAdmin
                 .from("characters")
                 .update({
-                    job_id: request_id,
-                    trigger_word: triggerWord,
+                    job_id: result.request_id,
+                    trigger_word: "ohwx",
                 })
                 .eq("id", characterId);
 
             return NextResponse.json({
                 success: true,
-                message: "Training started with FAL",
-                requestId: request_id,
+                requestId: result.request_id,
             });
 
         } catch (falError: any) {
             console.error("[Train] FAL error:", falError);
 
-            // Refund credits on failure
-            await addCredits(
-                user.id,
-                CREDIT_COSTS.character_training,
-                "החזר - אימון דמות נכשל",
-                characterId
-            );
+            await addCredits(user.id, CREDIT_COSTS.character_training, "Refund - Training failed");
+            await supabaseAdmin.from("characters").update({ status: "failed", error_message: falError.message }).eq("id", characterId);
 
-            await supabaseAdmin
-                .from("characters")
-                .update({
-                    status: "failed",
-                    error_message: falError.message,
-                })
-                .eq("id", characterId);
-
-            return NextResponse.json(
-                { error: falError.message || "FAL training failed" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: falError.message }, { status: 500 });
         }
 
     } catch (error: any) {

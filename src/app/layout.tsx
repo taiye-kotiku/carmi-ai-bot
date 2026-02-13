@@ -12,8 +12,17 @@ const heebo = Heebo({
 });
 
 export const metadata: Metadata = {
-  title: "קוסם | פלטפורמה מבוססת AI ליצירת תוכן",
-  description: "צור תמונות, סרטונים, קרוסלות",
+  title: "kossem | פלטפורמה מבוססת AI ליצירת תוכן",
+  description: "צור תמונות, סרטונים, קרוסלות ותוכן ויזואלי מדהים עם בינה מלאכותית - kossem.co.il",
+  metadataBase: new URL("https://kossem.co.il"),
+  openGraph: {
+    title: "kossem | פלטפורמה מבוססת AI ליצירת תוכן",
+    description: "צור תמונות, סרטונים, קרוסלות ותוכן ויזואלי מדהים עם בינה מלאכותית",
+    url: "https://kossem.co.il",
+    siteName: "kossem",
+    locale: "he_IL",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

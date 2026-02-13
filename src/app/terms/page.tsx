@@ -327,8 +327,8 @@ export default function TermsPage() {
               <div className="mt-4 p-6 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
                 <p>
                   📧 אימייל:{" "}
-                  <a href="mailto:support@kosem.ai" className="text-primary underline hover:no-underline">
-                    support@kosem.ai
+                  <a href="mailto:support@kossem.co.il" className="text-primary underline hover:no-underline">
+                    support@kossem.co.il
                   </a>
                 </p>
                 <p>

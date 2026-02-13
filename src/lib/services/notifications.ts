@@ -1,10 +1,30 @@
+// src/lib/services/notifications.ts
 // Push notification service for generation completion
+
+/**
+ * Check if notifications are supported
+ */
+function isNotificationSupported(): boolean {
+    if (typeof window === "undefined") return false;
+    if (!("Notification" in window)) return false;
+    return true;
+}
+
+/**
+ * Check if we're on mobile
+ */
+function isMobile(): boolean {
+    if (typeof navigator === "undefined") return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+    );
+}
 
 /**
  * Request notification permission
  */
 export async function requestNotificationPermission(): Promise<boolean> {
-    if (!("Notification" in window)) {
+    if (!isNotificationSupported()) {
         console.log("This browser does not support notifications");
         return false;
     }
@@ -22,28 +42,64 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 /**
- * Show a notification
+ * Show a notification - handles both desktop and mobile
  */
-export function showNotification(title: string, options?: NotificationOptions): void {
-    if (!("Notification" in window) || Notification.permission !== "granted") {
+export function showNotification(
+    title: string,
+    options?: NotificationOptions
+): void {
+    if (!isNotificationSupported() || Notification.permission !== "granted") {
         return;
     }
 
-    const notification = new Notification(title, {
+    const notificationOptions: NotificationOptions = {
         icon: "/favicon.ico",
         badge: "/favicon.ico",
         ...options,
-    });
-
-    notification.onclick = () => {
-        window.focus();
-        notification.close();
     };
 
-    // Auto-close after 5 seconds
-    setTimeout(() => {
-        notification.close();
-    }, 5000);
+    // On mobile, use Service Worker notifications
+    if (isMobile() || "serviceWorker" in navigator) {
+        try {
+            navigator.serviceWorker?.ready
+                .then((registration) => {
+                    registration.showNotification(title, notificationOptions);
+                })
+                .catch(() => {
+                    // Service Worker not available, try fallback
+                    tryDesktopNotification(title, notificationOptions);
+                });
+        } catch {
+            // Silent fail on mobile if SW not available
+            console.log("Service Worker notification not available");
+        }
+    } else {
+        tryDesktopNotification(title, notificationOptions);
+    }
+}
+
+/**
+ * Desktop notification fallback
+ */
+function tryDesktopNotification(
+    title: string,
+    options: NotificationOptions
+): void {
+    try {
+        const notification = new Notification(title, options);
+
+        notification.onclick = () => {
+            window.focus();
+            notification.close();
+        };
+
+        setTimeout(() => {
+            notification.close();
+        }, 5000);
+    } catch (error) {
+        // Notification constructor failed (mobile browser)
+        console.log("Desktop notification not supported:", error);
+    }
 }
 
 /**
@@ -62,9 +118,12 @@ export function notifyGenerationComplete(
     };
 
     const typeName = typeNames[type];
-    const countText = count && count > 1 ? ` (${count} ${typeName === "תמונה" ? "תמונות" : typeName})` : "";
-    
-    showNotification(`היצירה הושלמה! 🎉`, {
+    const countText =
+        count && count > 1
+            ? ` (${count} ${typeName === "תמונה" ? "תמונות" : typeName})`
+            : "";
+
+    showNotification("היצירה הושלמה! 🎉", {
         body: `ה${typeName} שלך מוכן${countText}`,
         tag: `generation-${Date.now()}`,
     });
@@ -75,19 +134,27 @@ export function notifyGenerationComplete(
  */
 export function initNotifications(): void {
     if (typeof window === "undefined") return;
-    
-    // Request permission on user interaction
+    if (!isNotificationSupported()) return;
+
+    // Only request permission after user interaction
     const handleUserInteraction = () => {
         requestNotificationPermission().then((granted) => {
             if (granted) {
                 console.log("Notification permission granted");
             }
         });
-        // Remove listeners after first interaction
         document.removeEventListener("click", handleUserInteraction);
         document.removeEventListener("touchstart", handleUserInteraction);
     };
 
+    // If already granted, don't add listeners
+    if (Notification.permission === "granted") {
+        console.log("Notification permission already granted");
+        return;
+    }
+
     document.addEventListener("click", handleUserInteraction, { once: true });
-    document.addEventListener("touchstart", handleUserInteraction, { once: true });
+    document.addEventListener("touchstart", handleUserInteraction, {
+        once: true,
+    });
 }

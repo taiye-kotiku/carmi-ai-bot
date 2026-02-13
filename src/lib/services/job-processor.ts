@@ -40,6 +40,8 @@ export async function processJob(job: any, userId: string): Promise<{
                 return await processReel(job, userId, jobData);
             case "video_clips":
                 return await processVideoClipsStep(job, userId, jobData);
+            case "cartoonize":
+                return await processCartoonize(job, userId, jobData);
             default:
                 return currentStatus(job);
         }

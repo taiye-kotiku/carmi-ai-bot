@@ -4,22 +4,51 @@ import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Loader2, Download, Sparkles, Video } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Download, Image as ImageIcon, Sparkles, Upload, X } from "lucide-react";
+import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
+import { ExportFormats } from "@/components/export-formats";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
-export default function TextToVideoPage() {
+export default function TextToImagePage() {
     const [prompt, setPrompt] = useState("");
-    const [duration, setDuration] = useState<4 | 8>(8);
-    const [aspectRatio, setAspectRatio] = useState("16:9");
+    const [style, setStyle] = useState("realistic");
+    const [aspectRatio, setAspectRatio] = useState("1:1");
+    const [uploadedImage, setUploadedImage] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
     const [isGenerating, setIsGenerating] = useState(false);
     const [progress, setProgress] = useState(0);
     const [statusText, setStatusText] = useState("");
     const [result, setResult] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const pollRef = useRef<NodeJS.Timeout | null>(null);
 
     const { addGenerationNotification } = useNotifications();
+
+    // Styles configuration
+    const styles = [
+        { value: "realistic", label: "פוטוריאליסטי (מציאותי)" },
+        { value: "artistic", label: "אמנותי (ציור)" },
+        { value: "cartoon", label: "קריקטורה / אנימציה" },
+        { value: "minimal", label: "מינימליסטי (נקי)" },
+    ];
+
+    const aspectRatios = [
+        { value: "1:1", label: "1:1 (ריבוע - אינסטגרם)" },
+        { value: "16:9", label: "16:9 (רוחבי - יוטיוב)" },
+        { value: "9:16", label: "9:16 (סטורי / רילס)" },
+        { value: "4:3", label: "4:3 (רגיל)" },
+    ];
 
     const stopPolling = useCallback(() => {
         if (pollRef.current) {
@@ -28,106 +57,117 @@ export default function TextToVideoPage() {
         }
     }, []);
 
-    const pollJob = useCallback(
-        (jobId: string) => {
-            pollRef.current = setInterval(async () => {
-                try {
-                    const res = await fetch(`/api/jobs/${jobId}`);
-                    const data = await res.json();
+    const pollJob = useCallback((jobId: string) => {
+        pollRef.current = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/jobs/${jobId}`);
+                const data = await res.json();
 
-                    if (data.progress) {
-                        setProgress(data.progress);
-                    }
-
-                    if (data.status === "completed") {
-                        stopPolling();
-                        const videoUrl = data.result?.videoUrl;
-                        if (videoUrl) {
-                            setResult(videoUrl);
-                            setProgress(100);
-                            setStatusText("הסרטון מוכן!");
-                            addGenerationNotification("video");
-                        } else {
-                            setError("לא התקבל קישור לוידאו");
-                        }
-                        setIsGenerating(false);
-                    } else if (data.status === "failed") {
-                        stopPolling();
-                        setError(data.error || "יצירת הסרטון נכשלה");
-                        setIsGenerating(false);
-                        setProgress(0);
-                    } else {
-                        // Still processing
-                        if (data.progress < 30) {
-                            setStatusText("מתחיל ליצור סרטון...");
-                        } else if (data.progress < 60) {
-                            setStatusText("הסרטון בעיבוד...");
-                        } else if (data.progress < 80) {
-                            setStatusText("כמעט מוכן...");
-                        } else {
-                            setStatusText("מוריד ושומר...");
-                        }
-                    }
-                } catch (err) {
-                    console.error("Poll error:", err);
+                if (data.progress) {
+                    setProgress(data.progress);
                 }
-            }, 3000);
-        },
-        [stopPolling, addGenerationNotification]
-    );
+
+                if (data.status === "completed") {
+                    stopPolling();
+                    const imageUrl = data.result?.url || data.result?.imageUrl;
+                    if (imageUrl) {
+                        setResult(imageUrl);
+                        setProgress(100);
+                        setStatusText("התמונה מוכנה!");
+                        toast.success("התמונה נוצרה בהצלחה!");
+                        addGenerationNotification("image");
+                    } else {
+                        toast.error("לא התקבלה תמונה בתוצאה");
+                    }
+                    setIsGenerating(false);
+                } else if (data.status === "failed") {
+                    stopPolling();
+                    toast.error(data.error || "יצירת התמונה נכשלה");
+                    setIsGenerating(false);
+                    setProgress(0);
+                } else {
+                    // Update status text based on progress
+                    if (data.progress < 30) setStatusText("מתחיל יצירה...");
+                    else if (data.progress < 60) setStatusText("מעבד תמונה...");
+                    else if (data.progress < 90) setStatusText("משפר איכות...");
+                    else setStatusText("שומר לקובץ...");
+                }
+            } catch (err) {
+                console.error("Poll error:", err);
+            }
+        }, 2000); // Check every 2 seconds
+    }, [stopPolling, addGenerationNotification]);
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("הקובץ גדול מדי (מקסימום 5MB)");
+                return;
+            }
+            setUploadedImage(file);
+            setPreviewUrl(URL.createObjectURL(file));
+        }
+    };
+
+    const clearImage = () => {
+        setUploadedImage(null);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
 
     const handleGenerate = async () => {
-        if (!prompt.trim()) return;
+        if (!prompt.trim()) {
+            toast.error("נא להזין תיאור לתמונה");
+            return;
+        }
 
         setIsGenerating(true);
         setProgress(5);
-        setError(null);
         setResult(null);
         setStatusText("שולח בקשה...");
 
         try {
-            const response = await fetch("/api/generate/text-to-video", {
+            // Prepare payload
+            let body: any = {
+                prompt,
+                style,
+                aspectRatio,
+            };
+
+            // Convert image to base64 if exists (for image-to-image editing)
+            if (uploadedImage) {
+                const buffer = await uploadedImage.arrayBuffer();
+                const base64 = Buffer.from(buffer).toString("base64");
+                body.imageBase64 = base64;
+                body.imageMimeType = uploadedImage.type;
+            }
+
+            const response = await fetch("/api/generate/image", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt, duration, aspectRatio }),
+                body: JSON.stringify(body),
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "שגיאה ביצירת הסרטון");
+                throw new Error(data.error || "שגיאה ביצירת התמונה");
             }
 
             if (data.jobId) {
                 setProgress(10);
-                setStatusText("הסרטון בתהליך יצירה...");
+                setStatusText("הבקשה התקבלה...");
                 pollJob(data.jobId);
             } else {
                 throw new Error("לא התקבל מזהה עבודה");
             }
+
         } catch (err: any) {
             console.error("Generate error:", err);
-            setError(err.message);
+            toast.error(err.message);
             setIsGenerating(false);
-        }
-    };
-
-    const handleDownload = async () => {
-        if (!result) return;
-
-        try {
-            const response = await fetch(result);
-            const blob = await response.blob();
-            const downloadUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = downloadUrl;
-            a.download = `video-${Date.now()}.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(downloadUrl);
-        } catch (err) {
-            window.open(result, "_blank");
         }
     };
 
@@ -136,152 +176,170 @@ export default function TextToVideoPage() {
             <div className="max-w-4xl mx-auto">
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
-                        <Video className="h-8 w-8 text-blue-500" />
-                        יצירת סרטון מטקסט
+                        <ImageIcon className="h-8 w-8 text-purple-500" />
+                        יצירת תמונה (Text to Image)
                     </h1>
                     <p className="text-gray-600">
-                        תאר את הסרטון שברצונך ליצור ו-AI ייצור אותו עבורך
+                        כתוב תיאור, בחר סגנון וצור תמונות מרהיבות בעזרת AI
                     </p>
                 </div>
 
-                <Card className="mb-6">
-                    <CardHeader>
-                        <CardTitle>תיאור הסרטון</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <Textarea
-                            placeholder="תאר את הסרטון שברצונך ליצור... לדוגמה: גלים שוברים על חוף סלעי בשקיעה, מבט מלמעלה"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            rows={4}
-                            className="text-right"
-                            disabled={isGenerating}
-                        />
+                <div className="grid lg:grid-cols-2 gap-8">
+                    {/* Controls */}
+                    <div className="space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>הגדרות יצירה</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>תיאור התמונה (Prompt)</Label>
+                                    <Textarea
+                                        placeholder="לדוגמה: חתול ג'ינג'י חמוד עם משקפי שמש יושב על חוף הים בשקיעה..."
+                                        value={prompt}
+                                        onChange={(e) => setPrompt(e.target.value)}
+                                        rows={4}
+                                        disabled={isGenerating}
+                                    />
+                                </div>
 
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">
-                                משך הסרטון
-                            </label>
-                            <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setDuration(4)}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 4
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    4 שניות
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setDuration(8)}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 8
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    8 שניות
-                                </button>
-                            </div>
-                        </div>
+                                <div className="space-y-2">
+                                    <Label>תמונת מקור (אופציונלי - לעריכה)</Label>
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={handleImageUpload}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={isGenerating}
+                                            className="w-full"
+                                        >
+                                            <Upload className="ml-2 h-4 w-4" />
+                                            העלה תמונה
+                                        </Button>
+                                    </div>
+                                    {previewUrl && (
+                                        <div className="relative w-24 h-24 mt-2">
+                                            <img
+                                                src={previewUrl}
+                                                alt="Preview"
+                                                className="w-full h-full object-cover rounded-md border"
+                                            />
+                                            <button
+                                                onClick={clearImage}
+                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"
+                                                disabled={isGenerating}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
 
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">
-                                יחס תצוגה
-                            </label>
-                            <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setAspectRatio("16:9")}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "16:9"
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    16:9 (רוחבי)
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setAspectRatio("9:16")}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "9:16"
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    9:16 (אנכי)
-                                </button>
-                            </div>
-                        </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>סגנון</Label>
+                                        <Select value={style} onValueChange={setStyle} disabled={isGenerating}>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {styles.map((s) => (
+                                                    <SelectItem key={s.value} value={s.value}>
+                                                        {s.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
-                        <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-                            💡 יצירת סרטון עולה 25 קרדיטים ואורכת כ-2-3 דקות
-                        </div>
+                                    <div className="space-y-2">
+                                        <Label>יחס גובה-רוחב</Label>
+                                        <Select value={aspectRatio} onValueChange={setAspectRatio} disabled={isGenerating}>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {aspectRatios.map((r) => (
+                                                    <SelectItem key={r.value} value={r.value}>
+                                                        {r.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
 
-                        <Button
-                            onClick={handleGenerate}
-                            disabled={!prompt.trim() || isGenerating}
-                            className="w-full"
-                            size="lg"
-                        >
-                            {isGenerating ? (
-                                <>
-                                    <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-                                    יוצר סרטון...
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="ml-2 h-5 w-5" />
-                                    צור סרטון (25 קרדיטים)
-                                </>
-                            )}
-                        </Button>
+                                <div className="pt-2">
+                                    <Button
+                                        onClick={handleGenerate}
+                                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                                        size="lg"
+                                        disabled={isGenerating || !prompt.trim()}
+                                    >
+                                        {isGenerating ? (
+                                            <>
+                                                <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                                                מייצר...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sparkles className="ml-2 h-5 w-5" />
+                                                צור תמונה ({CREDIT_COSTS.image_generation} קרדיטים)
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
 
-                        {isGenerating && (
-                            <div className="space-y-2">
-                                <Progress value={progress} />
-                                <p className="text-sm text-center text-gray-500">
-                                    {progress}% הושלם - {statusText}
-                                </p>
-                            </div>
-                        )}
-
-                        {error && (
-                            <div className="bg-red-50 text-red-600 p-4 rounded-lg">
-                                {error}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {result && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>הסרטון שלך מוכן! 🎬</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <video
-                                src={result}
-                                controls
-                                className="w-full rounded-lg shadow-lg"
-                                autoPlay
-                                loop
-                            />
-                            <Button
-                                onClick={handleDownload}
-                                variant="secondary"
-                                className="w-full"
-                            >
-                                <Download className="ml-2 h-5 w-5" />
-                                הורד סרטון
-                            </Button>
-                        </CardContent>
-                    </Card>
-                )}
+                    {/* Result Preview */}
+                    <div className="space-y-6">
+                        <Card className="h-full min-h-[400px] flex flex-col">
+                            <CardHeader>
+                                <CardTitle>תוצאה</CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50/50">
+                                {isGenerating ? (
+                                    <div className="text-center space-y-4">
+                                        <div className="relative w-20 h-20 mx-auto">
+                                            <Loader2 className="w-20 h-20 animate-spin text-purple-500/30" />
+                                            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-purple-600">
+                                                {Math.round(progress)}%
+                                            </div>
+                                        </div>
+                                        <p className="text-sm text-gray-500 font-medium animate-pulse">
+                                            {statusText}
+                                        </p>
+                                    </div>
+                                ) : result ? (
+                                    <div className="w-full space-y-4">
+                                        <div className="relative rounded-lg overflow-hidden border border-gray-200 shadow-sm group">
+                                            <img
+                                                src={result}
+                                                alt="Generated Result"
+                                                className="w-full h-auto object-contain max-h-[500px]"
+                                            />
+                                        </div>
+                                        <ExportFormats imageUrl={result} baseFilename="generated-image" />
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-gray-400">
+                                        <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                                        <p>התמונה שתיצור תופיע כאן</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
             </div>
         </div>
     );

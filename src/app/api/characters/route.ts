@@ -79,7 +79,8 @@ export async function POST(request: NextRequest) {
                 input: {
                     images_data_url: imagesZip,
                     trigger_word: "ohwx",
-                    is_style: false
+                    is_style: false,
+                    steps: 500
                 },
                 webhookUrl: webhookUrl
             });

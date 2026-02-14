@@ -11,6 +11,31 @@ fal.config({ credentials: process.env.FAL_KEY });
 export const runtime = "nodejs";
 export const maxDuration = 10; // Vercel Hobby max
 
+export async function GET(request: NextRequest) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+        // Fetch all characters for this specific user
+        const { data, error } = await supabaseAdmin
+            .from("characters")
+            .select("*")
+            .eq("user_id", user.id); // Only get their own characters
+
+        if (error) throw error;
+
+        return NextResponse.json(data);
+
+    } catch (error: any) {
+        console.error("Fetch error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function POST(request: NextRequest) {
     const body = await request.json();
     const characterId = body.characterId;

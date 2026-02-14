@@ -19,7 +19,7 @@ export const CREDIT_ACTION_LABELS: Record<CreditAction, string> = {
     video_generation: "יצירת וידאו",
     caricature_generation: "יצירת קריקטורה",
     character_training: "אימון דמות",
-    video_clips: "חיתוך וידאו",
+    video_clips: "יצירת רילז וירליים מוידאו",
     video_to_images: "תמונות נבחרות מוידאו",
     storage_expansion: "הרחבת אחסון (50MB)", // NEW
 };

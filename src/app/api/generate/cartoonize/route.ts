@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error("Cartoonize error:", error);
         return NextResponse.json(
-            { error: error.message || "שגיאה בהמרה לקריקטורה" },
+            { error: error.message || "שגיאה ביצירת קריקטורה" },
             { status: 500 }
         );
     }

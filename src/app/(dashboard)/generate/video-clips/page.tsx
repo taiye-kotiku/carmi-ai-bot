@@ -232,7 +232,7 @@ export default function VideoSlicePage() {
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
                         <Scissors className="h-8 w-8 text-purple-500" />
-                        חיתוך וידאו לקליפים
+                        יצירת רילז וירליים מוידאו
                     </h1>
                     <p className="text-gray-600">
                         הכנס קישור לוידאו ארוך ו-AI יחתוך אותו לקליפים קצרים

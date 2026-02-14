@@ -23,6 +23,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 import type { CarouselTemplate } from "@/lib/carousel/templates";
@@ -57,7 +64,7 @@ const CATEGORIES = [
     { value: "nature", label: "טבע" },
 ];
 
-const SLIDE_COUNTS = [3, 4, 5, 6, 7, 8];
+const SLIDE_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 const FONT_FAMILIES = [
     { value: "Assistant-Bold", label: "הדגשה חזקה מאוד (כותרות גדולות)", file: "Assistant-Bold.ttf" },
@@ -578,7 +585,18 @@ export default function CarouselGenerationPage() {
                                 <>
                                     <div><Label>נושא הקרוסלה</Label><Textarea value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="לדוגמה: 5 טיפים לחיסכון, ליווי משפטי בהתחדשות עירונית..." rows={3} className="mt-2" /></div>
                                     <div><Label>סגנון תוכן</Label><div className="grid grid-cols-2 gap-2 mt-2">{STYLES.map((s) => (<button key={s.value} onClick={() => setStyle(s.value)} className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${style === s.value ? "border-purple-500 bg-purple-50" : "border-gray-200"}`}><span>{s.icon}</span><span>{s.label}</span></button>))}</div></div>
-                                    <div><Label>מספר שקופיות</Label><div className="flex gap-2 mt-2">{SLIDE_COUNTS.map((c) => (<button key={c} onClick={() => setSlideCount(c)} className={`w-10 h-10 rounded-lg border text-sm font-medium ${slideCount === c ? "border-purple-500 bg-purple-50" : "border-gray-200"}`}>{c}</button>))}</div></div>
+                                    <div><Label>מספר שקופיות</Label>
+                                        <Select value={String(slideCount)} onValueChange={(v) => setSlideCount(Number(v))}>
+                                            <SelectTrigger className="mt-2 w-full max-w-[200px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {SLIDE_COUNTS.map((c) => (
+                                                    <SelectItem key={c} value={String(c)}>{c}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </>
                             )}
 
@@ -590,7 +608,18 @@ export default function CarouselGenerationPage() {
                                         <Textarea value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} placeholder="למשל: צור קרוסלה על ליווי משפטי בהתחדשות עירונית, 5 שקופיות" rows={2} className="flex-1" />
                                         <Button onClick={handleChatGenerate} disabled={chatLoading || !chatMessage.trim()}>{chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button>
                                     </div>
-                                    <div className="mt-2"><Label>מספר שקופיות</Label><div className="flex gap-2 mt-1">{SLIDE_COUNTS.map((c) => (<button key={c} onClick={() => setSlideCount(c)} className={`w-8 h-8 rounded border text-xs ${slideCount === c ? "border-purple-500 bg-purple-50" : "border-gray-200"}`}>{c}</button>))}</div></div>
+                                    <div className="mt-2"><Label>מספר שקופיות</Label>
+                                        <Select value={String(slideCount)} onValueChange={(v) => setSlideCount(Number(v))}>
+                                            <SelectTrigger className="mt-1 w-full max-w-[180px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {SLIDE_COUNTS.map((c) => (
+                                                    <SelectItem key={c} value={String(c)}>{c}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                     {customSlides.length > 0 && (<p className="text-sm text-green-600 mt-2">נוצרו {customSlides.length} שקופיות – ניתן לערוך למטה</p>)}
                                 </div>
                             )}

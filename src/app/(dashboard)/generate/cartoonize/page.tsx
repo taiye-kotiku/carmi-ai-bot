@@ -187,7 +187,7 @@ export default function CartoonizePage() {
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
                         <Palette className="h-8 w-8 text-purple-500" />
-                        המרה לקריקטורה
+                        יצירת קריקטורה
                     </h1>
                     <p className="text-gray-600">
                         העלה תמונה ודמותך תהפוך לקריקטורה בסגנון איור דיגיטלי

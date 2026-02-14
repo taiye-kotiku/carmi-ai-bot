@@ -39,9 +39,9 @@ const navigation: NavItem[] = [
     { type: "link", name: "יצירת תמונה", href: "/generate/image", icon: Image },
     { type: "link", name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
     { type: "link", name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
-    { type: "link", name: "המרה לקריקטורה", href: "/generate/cartoonize", icon: Palette },
+    { type: "link", name: "יצירת קריקטורה", href: "/generate/cartoonize", icon: Palette },
     { type: "link", name: "וידאו לתמונות", href: "/generate/video-to-images", icon: Film },
-    { type: "link", name: "חיתוך סרטון", href: "/generate/video-clips", icon: Scissors },
+    { type: "link", name: "יצירת רילז וירליים מוידאו", href: "/generate/video-clips", icon: Scissors },
     { type: "link", name: "יצירת קרוסלה", href: "/generate/carousel", icon: LayoutGrid },
 
     { type: "divider", label: "דמויות" },

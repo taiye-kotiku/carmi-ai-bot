@@ -141,6 +141,7 @@ export default function SettingsPage() {
             if (!res.ok) throw new Error(data.error || "רכישת האחסון נכשלה");
             setShowBuyDialog(false);
             await loadStorage();
+            router.refresh(); // Refresh credits display
         } catch (error: any) {
             setBuyError(error.message);
         }

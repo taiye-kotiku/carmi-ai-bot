@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { deductCredits } from "@/lib/services/credits";
 
 const STORAGE_LIMIT_BYTES = 104857600; // 100MB
 const WARNING_THRESHOLD_BYTES = 83886080; // 80MB
@@ -159,28 +160,17 @@ export async function POST(request: Request) {
             );
         }
 
-        // Deduct credits
-        const { data: newBalance, error: deductError } = await admin.rpc("deduct_credits", {
-            p_user_id: user.id,
-            p_cost: creditsCost,
-        });
-
-        if (deductError) {
+        // Deduct credits via credits service (atomic + transaction log)
+        let newBalance: number;
+        try {
+            const result = await deductCredits(user.id, "storage_expansion", creditsCost);
+            newBalance = result.newBalance;
+        } catch (err) {
             return NextResponse.json(
-                { error: "שגיאה בניכוי קרדיטים" },
-                { status: 500 }
+                { error: (err as Error).message || "שגיאה בניכוי קרדיטים" },
+                { status: 402 }
             );
         }
-
-        // Log transaction
-        await admin.from("credit_transactions").insert({
-            user_id: user.id,
-            amount: -creditsCost,
-            balance_after: newBalance,
-            credit_type: "deduction",
-            cost_type: "storage_purchase",
-            reason: `רכישת ${amount_mb}MB אחסון נוסף`,
-        });
 
         // Increase storage limit
         const { data: storage } = await admin
@@ -191,16 +181,30 @@ export async function POST(request: Request) {
 
         const currentLimit = storage?.limit_bytes || STORAGE_LIMIT_BYTES;
         const newLimit = currentLimit + additionalBytes;
+        const usedBytes = storage?.used_bytes ?? 0;
 
-        await admin
+        // Update storage limit (upsert preserves/creates record)
+        const { error: upsertError } = await admin
             .from("user_storage")
-            .upsert({
-                user_id: user.id,
-                limit_bytes: newLimit,
-                warning_sent_at: null,
-                auto_delete_after: null,
-                updated_at: new Date().toISOString(),
-            });
+            .upsert(
+                {
+                    user_id: user.id,
+                    used_bytes: usedBytes,
+                    limit_bytes: newLimit,
+                    warning_sent_at: null,
+                    auto_delete_after: null,
+                    updated_at: new Date().toISOString(),
+                },
+                { onConflict: "user_id" }
+            );
+
+        if (upsertError) {
+            console.error("Storage update error:", upsertError);
+            return NextResponse.json(
+                { error: "שגיאה בעדכון האחסון" },
+                { status: 500 }
+            );
+        }
 
         // Send confirmation notification
         await admin.from("notifications").insert({

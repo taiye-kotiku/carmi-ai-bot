@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { CAROUSEL_TEMPLATES } from "@/lib/carousel/templates";
 import { deductCredits } from "@/lib/services/credits";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export async function POST(req: Request) {
     try {
@@ -63,14 +64,16 @@ export async function POST(req: Request) {
             );
         }
 
-        // Deduct credits
-        try {
-            await deductCredits(user.id, "carousel_generation");
-        } catch (err) {
-            return NextResponse.json(
-                { error: (err as Error).message, code: "INSUFFICIENT_CREDITS" },
-                { status: 402 }
-            );
+        // Deduct credits (carousel is free when carousel_generation cost is 0)
+        if (CREDIT_COSTS.carousel_generation > 0) {
+            try {
+                await deductCredits(user.id, "carousel_generation");
+            } catch (err) {
+                return NextResponse.json(
+                    { error: (err as Error).message, code: "INSUFFICIENT_CREDITS" },
+                    { status: 402 }
+                );
+            }
         }
 
         // Get brand logo if needed

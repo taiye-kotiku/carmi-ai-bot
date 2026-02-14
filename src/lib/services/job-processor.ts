@@ -238,7 +238,10 @@ async function processImage(job: any, userId: string, jobData: any) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ parts }],
-                    generationConfig: { responseModalities: ["Text", "Image"] },
+                    generationConfig: {
+                        responseModalities: ["Text", "Image"],
+                        imageSize: "1K",
+                    },
                 }),
             }
         );
@@ -957,7 +960,10 @@ Art Style: Clean 3D rendering, expressive features, and a friendly, confident pe
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: caricaturePrompt }] }],
-                    generationConfig: { responseModalities: ["Text", "Image"] }, // This model REQUIRES this
+                    generationConfig: {
+                        responseModalities: ["Text", "Image"],
+                        imageSize: "1K",
+                    },
                 }),
             }
         );

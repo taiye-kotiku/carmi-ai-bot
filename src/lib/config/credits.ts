@@ -1,14 +1,14 @@
 // src/lib/config/credits.ts
 
 export const CREDIT_COSTS = {
-    image_generation: 3,
-    carousel_generation: 3,
+    image_generation: 5,
+    carousel_generation: 0, // חינם
     video_generation: 25,
-    caricature_generation: 3,
+    caricature_generation: 5,
     character_training: 50,
     video_clips: 25,
-    video_to_images: 5,
-    storage_expansion: 15, // NEW: 15 credits for extra storage
+    video_to_images: 3,
+    storage_expansion: 15,
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;

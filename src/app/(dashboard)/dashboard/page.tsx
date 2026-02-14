@@ -240,7 +240,7 @@ function CreditDisplay({ credits }: { credits: any }) {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
                 {capabilities.map((cap) => {
-                    const possible = Math.floor(totalCredits / cap.cost);
+                    const possible = cap.cost === 0 ? null : Math.floor(totalCredits / cap.cost);
                     return (
                         <div
                             key={cap.label}
@@ -248,7 +248,7 @@ function CreditDisplay({ credits }: { credits: any }) {
                         >
                             <span className="text-lg">{cap.icon}</span>
                             <div className="text-sm font-semibold text-gray-900">
-                                {possible}
+                                {possible === null ? "חינם" : possible}
                             </div>
                             <div className="text-xs text-gray-500">{cap.label}</div>
                         </div>

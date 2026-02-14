@@ -13,6 +13,7 @@ import {
   Play,
   User,
   PenLine,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -70,11 +71,12 @@ export default async function HomePage() {
   const displayItems: Array<{
     id: string;
     src: string;
-    type: "image" | "video" | "carousel";
+    type: "image" | "video" | "carousel" | "image_edit";
     prompt?: string;
     label: string;
     color: keyof typeof colorMap;
     slides?: string[];
+    images?: string[];
   }> = [
     // 1. Carousels
     {
@@ -122,19 +124,20 @@ export default async function HomePage() {
       label: "אימון דמות",
       color: "cyan",
     },
-    // 5. עריכת תמונה
+    // 5. עריכת תמונה (3 images)
     {
       id: "image-edit-example",
-      src: "/examples/image-edit.png",
-      type: "image",
+      src: "/examples/image-edit-1.png",
+      type: "image_edit",
       prompt: "העלה תמונה ותאר מה לשנות — הבינה המלאכותית תערוך אותה",
       label: "עריכת תמונה",
       color: "purple",
+      images: ["/examples/image-edit-1.png", "/examples/image-edit-2.png", "/examples/image-edit-3.png"],
     },
     // 6. וידאו
     {
       id: "static-video",
-      src: "/examples/astronaut-video.mp4",
+      src: "/examples/video.mp4",
       type: "video",
       prompt: "אסטרונאוט צועד על פני מאדים, צילום קולנועי, תנועה איטית",
       label: "וידאו",
@@ -165,6 +168,7 @@ export default async function HomePage() {
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-400">
+            <Link href="#benefits" className="hover:text-white transition-colors">יתרונות</Link>
             <Link href="#features" className="hover:text-white transition-colors">יכולות</Link>
             <Link href="#pricing" className="hover:text-white transition-colors">מחירים</Link>
             <Link href="#gallery" className="hover:text-white transition-colors">דוגמאות</Link>
@@ -235,15 +239,75 @@ export default async function HomePage() {
           <div className="mt-16 pt-8 border-t border-white/5 flex flex-wrap justify-center gap-8 md:gap-16 text-slate-400">
             <div className="flex items-center gap-2">
               <Check className="text-emerald-500 h-5 w-5" />
-              <span>ללא כרטיס אשראי</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Check className="text-emerald-500 h-5 w-5" />
               <span>10 תמונות מתנה</span>
             </div>
             <div className="flex items-center gap-2">
               <Check className="text-emerald-500 h-5 w-5" />
               <span>תמיכה מלאה בעברית</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Benefits Section */}
+      <section id="benefits" className="py-20 relative overflow-hidden">
+        <div className="absolute top-1/2 left-0 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] -translate-y-1/2" />
+        <div className="absolute top-1/2 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-[100px] -translate-y-1/2" />
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">למה קוסם AI?</h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              כל מה שצריך כדי להפוך את התוכן שלך להצלחה מסחררת
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="group p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-indigo-500/30 transition-all duration-300">
+              <div className="h-12 w-12 rounded-xl bg-indigo-500/20 flex items-center justify-center mb-4 group-hover:bg-indigo-500/30 transition-colors">
+                <Zap className="h-6 w-6 text-indigo-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">CTR יותר גבוה</h3>
+              <p className="text-slate-400">שיפור משמעותי באחוזי הקליקים על המודעות שלך</p>
+            </div>
+
+            <div className="group p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-emerald-500/30 transition-all duration-300">
+              <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center mb-4 group-hover:bg-emerald-500/30 transition-colors">
+                <Sparkles className="h-6 w-6 text-emerald-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">קליקים יותר זולים</h3>
+              <p className="text-slate-400">הורדת עלויות הפרסום והשגת תוצאות טובות יותר</p>
+            </div>
+
+            <div className="group p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-purple-500/30 transition-all duration-300">
+              <div className="h-12 w-12 rounded-xl bg-purple-500/20 flex items-center justify-center mb-4 group-hover:bg-purple-500/30 transition-colors">
+                <PenLine className="h-6 w-6 text-purple-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">בלי להישמע כמו רובוט</h3>
+              <p className="text-slate-400">טקסטים טבעיים ואותנטיים שמדברים אל הקהל שלך</p>
+            </div>
+
+            <div className="group p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-amber-500/30 transition-all duration-300">
+              <div className="h-12 w-12 rounded-xl bg-amber-500/20 flex items-center justify-center mb-4 group-hover:bg-amber-500/30 transition-colors">
+                <Wand2 className="h-6 w-6 text-amber-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">יצירת מודעות שסולקות</h3>
+              <p className="text-slate-400">הקוסם תיצור לכם מודעות מותאמות לעסק שלכם בחינם! ואתם תהנו מרווח נקי</p>
+            </div>
+
+            <div className="group p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-cyan-500/30 transition-all duration-300">
+              <div className="h-12 w-12 rounded-xl bg-cyan-500/20 flex items-center justify-center mb-4 group-hover:bg-cyan-500/30 transition-colors">
+                <Images className="h-6 w-6 text-cyan-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">כל הפיצ׳רים המתקדמים</h3>
+              <p className="text-slate-400">גישה מלאה ל-AI הכי חכם בישראל, כולל כל הטמפלטים והסגנונות</p>
+            </div>
+
+            <div className="group p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-pink-500/30 transition-all duration-300">
+              <div className="h-12 w-12 rounded-xl bg-pink-500/20 flex items-center justify-center mb-4 group-hover:bg-pink-500/30 transition-colors">
+                <Check className="h-6 w-6 text-pink-400" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">התחלה מיידית</h3>
+              <p className="text-slate-400">רק כתובת מייל ואתם בפנים. ביטול בלחיצה אחת בכל רגע.</p>
             </div>
           </div>
         </div>
@@ -341,14 +405,16 @@ export default async function HomePage() {
 
             {/* Card: Image Editing */}
             <div className="md:col-span-1 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-purple-500/50 transition-all duration-300">
-              <div className="absolute inset-0 z-0">
-                <Image
-                  src="/examples/image-edit.png"
-                  alt="עריכת תמונה"
-                  fill
-                  className="object-contain opacity-50 group-hover:opacity-70 transition-opacity duration-500"
-                  sizes="(max-width: 768px) 100vw, 33vw"
-                />
+              <div className="absolute inset-0 z-0 flex">
+                <div className="flex-1 relative">
+                  <Image src="/examples/image-edit-1.png" alt="עריכת תמונה 1" fill className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500" sizes="33vw" />
+                </div>
+                <div className="flex-1 relative">
+                  <Image src="/examples/image-edit-2.png" alt="עריכת תמונה 2" fill className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500" sizes="33vw" />
+                </div>
+                <div className="flex-1 relative">
+                  <Image src="/examples/image-edit-3.png" alt="עריכת תמונה 3" fill className="object-cover opacity-50 group-hover:opacity-70 transition-opacity duration-500" sizes="33vw" />
+                </div>
               </div>
               <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 to-slate-950/85 z-10" />
               <div className="absolute top-0 right-0 p-8 z-20">
@@ -366,12 +432,23 @@ export default async function HomePage() {
 
             {/* Card: Video Generation */}
             <div className="md:col-span-1 group relative overflow-hidden rounded-3xl bg-slate-900/50 border border-white/10 hover:border-amber-500/50 transition-all duration-300">
-              <div className="absolute top-0 right-0 p-8">
+              <div className="absolute inset-0 z-0">
+                <video
+                  src="/examples/video.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity duration-500"
+                />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent z-10" />
+              <div className="absolute top-0 right-0 p-8 z-20">
                 <div className="h-12 w-12 rounded-xl bg-amber-500/20 flex items-center justify-center backdrop-blur-md">
                   <Video className="h-6 w-6 text-amber-400" />
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-950 to-transparent">
+              <div className="absolute bottom-0 left-0 right-0 p-8 z-20">
                 <h3 className="text-xl font-bold mb-2">טקסט לוידאו</h3>
                 <p className="text-slate-300 text-sm">
                   הנפש תמונות או צור סרטונים מאפס. הקסם קורה בתנועה.
@@ -418,6 +495,46 @@ export default async function HomePage() {
               const colors = colorMap[item.color];
               const isVideo = item.type === "video";
               const isCarousel = item.type === "carousel" && item.slides && item.slides.length > 0;
+              const isImageEdit = item.type === "image_edit" && item.images && item.images.length > 0;
+
+              if (isImageEdit && item.images) {
+                return (
+                  <div
+                    key={item.id}
+                    className={`group relative rounded-2xl overflow-hidden border-2 border-white/20 ${colors.border} bg-slate-900/50 transition-all duration-500 hover:shadow-2xl hover:shadow-purple-500/5`}
+                  >
+                    <div className="grid grid-cols-3 gap-1 p-2 bg-slate-800/50">
+                      {item.images.map((img, idx) => (
+                        <div key={idx} className="relative aspect-square overflow-hidden rounded-lg">
+                          <Image
+                            src={img}
+                            alt={`עריכת תמונה ${idx + 1}`}
+                            fill
+                            className="object-cover transition-transform duration-700 group-hover:scale-105"
+                            sizes="(max-width: 640px) 33vw, 15vw"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-500 pointer-events-none" />
+                    <div className="absolute top-4 right-4 z-10">
+                      <span className={`text-xs font-medium px-3 py-1 rounded-full border backdrop-blur-md ${colors.badge}`}>
+                        {item.label}
+                      </span>
+                    </div>
+                    {item.prompt && (
+                      <div className="absolute bottom-0 left-0 right-0 p-5 z-10 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500">
+                        <div className="flex items-start gap-2">
+                          <Sparkles className="h-4 w-4 text-indigo-400 mt-0.5 shrink-0" />
+                          <p className="text-sm text-slate-200 leading-relaxed line-clamp-2">
+                            &quot;{item.prompt}&quot;
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               if (isCarousel && item.slides) {
                 return (
@@ -538,6 +655,36 @@ export default async function HomePage() {
                 צור את התמונה הראשונה שלך
               </Link>
             </Button>
+          </div>
+
+          {/* משתמשים מרוצים */}
+          <div className="mt-24 text-center">
+            <h3 className="text-2xl md:text-3xl font-bold mb-2">משתמשים מרוצים מהתכנים באתר</h3>
+            <div className="flex justify-center gap-1 mb-8">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Star key={i} className="h-8 w-8 fill-amber-400 text-amber-400" />
+              ))}
+            </div>
+            <div className="flex flex-wrap justify-center gap-6 md:gap-10">
+              <div className="flex flex-col items-center">
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
+                  <Image src="/examples/image-edit-1.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                </div>
+                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
+                  <Image src="/examples/image-edit-2.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                </div>
+                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
+                  <Image src="/examples/image-edit-3.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                </div>
+                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>

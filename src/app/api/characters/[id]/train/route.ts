@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fal } from "@fal-ai/client";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import JSZip from "jszip";
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -30,51 +31,80 @@ export async function POST(
 
         if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
 
-        const imageUrls = character.image_urls || [];
+        const imageUrls: string[] = character.image_urls || [];
         if (imageUrls.length < 4) {
             return NextResponse.json({ error: "Not enough images to train" }, { status: 400 });
         }
 
+        // Deduct credits first
         try {
             await deductCredits(user.id, "character_training");
         } catch (err: any) {
             return NextResponse.json({ error: err.message, code: "INSUFFICIENT_CREDITS" }, { status: 402 });
         }
 
-        const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/fal/training?characterId=${characterId}&secret=${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
+        try {
+            // Step 1: Download all images in parallel and create zip
+            console.log(`[Train] Downloading ${imageUrls.length} images for ${characterId}...`);
+            const zip = new JSZip();
 
-        console.log(`[Train] Starting Fal training for ${characterId} with ${imageUrls.length} images`);
+            const downloads = await Promise.all(
+                imageUrls.map(async (url: string, i: number) => {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error(`Failed to download image ${i}: ${res.status}`);
+                    return { index: i, buffer: await res.arrayBuffer() };
+                })
+            );
 
-        // fal API accepts this format at runtime, TypeScript types are just outdated
-        const result = await fal.queue.submit("fal-ai/flux-lora-fast-training", {
-            input: {
-                images_data_url: imageUrls.map((url: string) => url),
-                trigger_phrase: "ohwx",
-                is_style: false,
-            } as any,
-            webhookUrl,
-        });
+            downloads.forEach(({ index, buffer }) => {
+                zip.file(`image_${index}.jpg`, buffer);
+            });
 
-        await supabaseAdmin
-            .from("characters")
-            .update({
-                status: "training",
-                job_id: result.request_id,
-                error_message: null
-            })
-            .eq("id", characterId);
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            console.log(`[Train] Zip created, size: ${zipBlob.size} bytes`);
 
-        return NextResponse.json({ success: true, requestId: result.request_id });
+            // Step 2: Upload zip to fal storage
+            console.log(`[Train] Uploading zip to fal storage...`);
+            const zipFile = new File([zipBlob], "training_images.zip", { type: "application/zip" });
+            const zipUrl = await fal.storage.upload(zipFile);
+            console.log(`[Train] Zip uploaded: ${zipUrl}`);
+
+            // Step 3: Submit training job
+            const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/fal/training?characterId=${characterId}&secret=${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
+
+            const result = await fal.queue.submit("fal-ai/flux-lora-fast-training", {
+                input: {
+                    images_data_url: zipUrl,
+                    trigger_word: "ohwx",
+                    is_style: false,
+                    steps: 500
+                },
+                webhookUrl,
+            });
+
+            console.log(`[Train] Training submitted! Request ID: ${result.request_id}`);
+
+            // Step 4: Update DB
+            await supabaseAdmin
+                .from("characters")
+                .update({
+                    status: "training",
+                    job_id: result.request_id,
+                    error_message: null
+                })
+                .eq("id", characterId);
+
+            return NextResponse.json({ success: true, requestId: result.request_id });
+
+        } catch (innerError: any) {
+            // Refund credits if anything failed after deduction
+            console.error("[Train] Failed after credit deduction:", innerError);
+            await addCredits(user.id, CREDIT_COSTS.character_training, "Refund - Training failed");
+            throw innerError;
+        }
 
     } catch (error: any) {
-        console.error("Train error:", error);
-
-        try {
-            const supabase = await createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) await addCredits(user.id, CREDIT_COSTS.character_training, "Refund - Training failed");
-        } catch (e) { console.error("Refund failed", e); }
-
+        console.error("[Train] Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

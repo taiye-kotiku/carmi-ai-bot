@@ -35,21 +35,24 @@ export default function CharactersPage() {
     const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
     const fetchCharacters = async () => {
+        setLoading(true);
         try {
-            const res = await fetch("/api/characters");
+            const res = await fetch(`/api/characters?t=${Date.now()}`); // cache buster
             const data = await res.json();
 
-            if (data.characters) {
-                setCharacters(data.characters);
-                const isTraining = data.characters.some((c: Character) => c.status === "training");
-                if (isTraining) {
-                    startPolling();
-                } else {
-                    stopPolling();
-                }
+            // Handle array OR {characters: [...]}
+            const charactersArray = Array.isArray(data) ? data : data.characters;
+
+            if (charactersArray) {
+                setCharacters(charactersArray);
+
+                const hasTraining = charactersArray.some(c => c.status === "training");
+                if (hasTraining) startPolling();
+                else stopPolling();
             }
         } catch (error) {
             console.error("Failed to load characters", error);
+            toast.error("לא ניתן לטעון את הדמויות");
         } finally {
             setLoading(false);
         }
@@ -84,20 +87,26 @@ export default function CharactersPage() {
         }
     };
 
+    // ---------- handleResumeTraining ----------
     const handleResumeTraining = async (charId: string) => {
         setRestartingId(charId);
         try {
             // Optimistic update
-            setCharacters(prev => prev.map(c =>
-                c.id === charId ? { ...c, status: "training" } : c
-            ));
+            setCharacters(prev =>
+                prev.map(c =>
+                    c.id === charId ? { ...c, status: "training" } : c
+                )
+            );
 
             const res = await fetch(`/api/characters/${charId}/train`, { method: "POST" });
+
             if (!res.ok) {
-                const data = await res.json();
-                toast.error(data.error || "התחלת האימון נכשלה");
+                const err = await res.json();
+                toast.error(err.error || "התחלת האימון נכשלה");
                 fetchCharacters(); // Revert
             } else {
+                // ✅ IMMEDIATELY REFETCH to update UI
+                await fetchCharacters();
                 toast.success("האימון התחיל! זה ייקח מספר דקות.");
                 startPolling();
             }

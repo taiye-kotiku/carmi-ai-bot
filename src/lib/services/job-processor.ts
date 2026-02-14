@@ -217,7 +217,14 @@ async function processImage(job: any, userId: string, jobData: any) {
 
     try {
         const parts: any[] = [];
-        if (params.imageBase64 && params.imageMimeType) {
+        if (params.imageBase64 && params.imageBase642 && params.imageMimeType && params.imageMimeType2 && params.style === "combine_images") {
+            // Combine 2 images: person (image 1) + character (image 2)
+            parts.push({ text: "Image 1 (person):" });
+            parts.push({ inlineData: { mimeType: params.imageMimeType, data: params.imageBase64 } });
+            parts.push({ text: "Image 2 (character):" });
+            parts.push({ inlineData: { mimeType: params.imageMimeType2, data: params.imageBase642 } });
+            parts.push({ text: buildCombineImagesPrompt(params.prompt) });
+        } else if (params.imageBase64 && params.imageMimeType) {
             parts.push({ inlineData: { mimeType: params.imageMimeType, data: params.imageBase64 } });
             parts.push({ text: buildEditPrompt(params.prompt, params.style) });
         } else {
@@ -225,7 +232,7 @@ async function processImage(job: any, userId: string, jobData: any) {
         }
 
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -944,7 +951,7 @@ Art Style: Clean 3D rendering, expressive features, and a friendly, confident pe
         // Use the exact same endpoint/model as your working Image Generation
         // Note: We use REST fetch to be 100% sure of the endpoint
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1129,13 +1136,39 @@ async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, 
     return { status: "completed", progress: 100, result: { videoUrl: publicUrl }, error: null };
 }
 
+function buildCombineImagesPrompt(prompt: string): string {
+    return `Combine the person from Image 1 with the character from Image 2 into a single, highly detailed, photorealistic image. Both individuals must appear naturally in the same scene. Preserve accurate facial likeness for both the person and the character. Scene/context: "${prompt}". Use professional lighting, cinematic composition, consistent environment. Both figures should be naturally integrated—same setting, consistent lighting, believable interaction or placement. 8K quality, sharp focus, lifelike skin texture and materials.`;
+}
+
 function buildEditPrompt(prompt: string, style: string): string {
-    const s: Record<string, string> = { realistic: "photorealistic, highly detailed", artistic: "artistic, creative, painterly", cartoon: "cartoon style, animated, colorful", minimal: "minimalist, clean, modern" };
-    return `Edit this image: ${prompt}. ${s[style] ? `Style: ${s[style]}.` : ""} Keep the overall composition and produce a high-quality result.`;
+    if (style === "celebrity") {
+        return `Combine the person shown in this uploaded image with the celebrity or scenario described: "${prompt}". Create a highly detailed, photorealistic image featuring BOTH characters naturally in the same scene. Preserve accurate facial likeness for both the person in the uploaded image and the celebrity. Use professional lighting, cinematic composition, and photorealistic quality. Both individuals should appear naturally integrated—same setting, consistent lighting, believable interaction or placement. 8K quality, sharp focus, lifelike skin texture and materials.`;
+    }
+    const s: Record<string, string> = {
+        realistic: "Edit this image with photorealistic, highly detailed quality. Use professional photography techniques: sharp focus, natural lighting, authentic skin texture, lifelike materials and reflections. The result should be indistinguishable from a high-end professional photograph. 8K quality, cinematic depth of field. Keep the overall composition and enhance realism.",
+        artistic: "Edit this image with an artistic, painterly style. Emphasize creative interpretation: bold brushstrokes, rich color palette, expressive lighting, artistic composition. Blend realism with creative flair. Think fine art, gallery-worthy aesthetic. Evocative and visually striking. Preserve the subject while applying the artistic treatment.",
+        cartoon: "Edit this image in a cartoon or animated style. Use clean lines, vibrant colors, expressive character design. Style reminiscent of high-quality animation or illustration. Fun, dynamic, and visually engaging. Suitable for comics or animated content. Maintain recognizability while applying the cartoon aesthetic.",
+        minimal: "Edit this image with a minimalist, clean approach. Use simple shapes, limited color palette, ample negative space. Modern, uncluttered composition. Less is more—focus on essential elements. Sophisticated, designer aesthetic. Simplify while preserving the core subject.",
+    };
+    return `${s[style] || s.realistic} User instruction: ${prompt}`;
 }
 
 function buildEnhancedPrompt(prompt: string, style: string, aspectRatio: string): string {
-    const s: Record<string, string> = { realistic: "photorealistic, highly detailed, professional photography", artistic: "artistic, creative, painterly, beautiful colors", cartoon: "cartoon style, animated, colorful, fun", minimal: "minimalist, clean, simple, modern design" };
-    const r: Record<string, string> = { "1:1": "square composition", "16:9": "wide landscape composition", "9:16": "vertical portrait composition", "4:3": "classic 4:3 composition" };
-    return `Create an image: ${prompt}. Style: ${s[style] || ""}. ${r[aspectRatio] || ""}. High quality, professional.`;
+    const r: Record<string, string> = {
+        "1:1": "square composition, balanced framing",
+        "16:9": "wide landscape composition, cinematic widescreen",
+        "9:16": "vertical portrait composition, mobile/story format",
+        "4:3": "classic 4:3 composition, traditional framing",
+    };
+    const aspect = r[aspectRatio] || r["1:1"];
+
+    const s: Record<string, string> = {
+        realistic: "Create a photorealistic, highly detailed image. Use professional photography techniques: sharp focus, natural lighting, authentic skin texture, lifelike materials and reflections. The result should be indistinguishable from a high-end professional photograph. 8K quality, cinematic depth of field.",
+        artistic: "Create an artistic, painterly image. Emphasize creative interpretation: bold brushstrokes, rich color palette, expressive lighting, artistic composition. Blend realism with creative flair. Think fine art, gallery-worthy aesthetic. Evocative and visually striking.",
+        cartoon: "Create a cartoon or animated style image. Use clean lines, vibrant colors, expressive character design. Style reminiscent of high-quality animation or illustration. Fun, dynamic, and visually engaging. Suitable for comics or animated content.",
+        minimal: "Create a minimalist, clean image. Use simple shapes, limited color palette, ample negative space. Modern, uncluttered composition. Less is more—focus on essential elements. Sophisticated, designer aesthetic.",
+        celebrity: "Create a highly detailed, photorealistic image featuring the celebrity and scenario described. Maintain accurate likeness of the celebrity. Professional lighting, cinematic composition. 8K quality, sharp focus, lifelike skin texture.",
+    };
+    const styleText = s[style] || s.realistic;
+    return `${styleText} Composition: ${aspect}. Subject and scene: ${prompt}`;
 }

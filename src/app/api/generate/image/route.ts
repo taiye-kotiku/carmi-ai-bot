@@ -15,7 +15,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { prompt, aspectRatio, style, imageBase64, imageMimeType } = await req.json();
+        const { prompt, aspectRatio, style, imageBase64, imageMimeType, imageBase642, imageMimeType2 } = await req.json();
 
         if (!prompt?.trim()) {
             return NextResponse.json(
@@ -53,6 +53,8 @@ export async function POST(req: Request) {
                     style,
                     imageBase64: imageBase64 || null,
                     imageMimeType: imageMimeType || null,
+                    imageBase642: imageBase642 || null,
+                    imageMimeType2: imageMimeType2 || null,
                 },
             },
         });

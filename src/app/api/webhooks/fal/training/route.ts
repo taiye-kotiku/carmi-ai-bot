@@ -6,7 +6,6 @@ export async function POST(request: NextRequest) {
     const characterId = searchParams.get("characterId");
     const secret = searchParams.get("secret");
 
-    // Simple security check
     if (secret !== process.env.SUPABASE_SERVICE_ROLE_KEY) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -17,37 +16,59 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        console.log("Fal Webhook:", body);
+        console.log("[Webhook] Fal training webhook received:", JSON.stringify(body).substring(0, 500));
+        console.log("[Webhook] Status:", body.status);
+        console.log("[Webhook] Character:", characterId);
 
-        if (body.status === "COMPLETED") {
-            // Get the LoRA URL
-            // Result format depends on the model. For flux-lora-fast-training:
-            // payload: { diffusers_lora_file: { url: "..." }, config_file: ... }
-            const loraUrl = body.payload?.diffusers_lora_file?.url;
+        // fal.ai webhooks use "OK" for success, "ERROR" for failure
+        if (body.status === "OK") {
+            const loraUrl =
+                body.payload?.diffusers_lora_file?.url ||
+                body.payload?.lora_file?.url ||
+                body.payload?.weights?.url ||
+                body.payload?.output?.diffusers_lora_file?.url;
+
+            console.log("[Webhook] LoRA URL found:", loraUrl);
 
             if (loraUrl) {
                 await supabaseAdmin
                     .from("characters")
                     .update({
-                        status: "ready",
+                        status: "trained",
                         lora_url: loraUrl,
-                        trained_at: new Date().toISOString()
+                        trained_at: new Date().toISOString(),
+                        error_message: null
                     })
                     .eq("id", characterId);
+
+                console.log("[Webhook] Character updated to trained!");
             } else {
-                console.error("No LoRA URL in payload", body);
-                await supabaseAdmin.from("characters").update({ status: "failed" }).eq("id", characterId);
+                console.error("[Webhook] No LoRA URL found in payload:", JSON.stringify(body.payload));
+                await supabaseAdmin
+                    .from("characters")
+                    .update({
+                        status: "failed",
+                        error_message: "Training completed but no LoRA URL returned"
+                    })
+                    .eq("id", characterId);
             }
-        } else if (body.status === "FAILED") {
+        } else if (body.status === "ERROR") {
+            console.error("[Webhook] Training failed:", body.error);
             await supabaseAdmin
                 .from("characters")
-                .update({ status: "failed", error_message: body.error || "Training failed" })
+                .update({
+                    status: "failed",
+                    error_message: body.error || "Training failed"
+                })
                 .eq("id", characterId);
+        } else {
+            // Log unexpected status for debugging
+            console.warn("[Webhook] Unexpected status:", body.status);
         }
 
         return NextResponse.json({ received: true });
     } catch (error) {
-        console.error("Webhook processing error:", error);
+        console.error("[Webhook] Processing error:", error);
         return NextResponse.json({ error: "Internal Error" }, { status: 500 });
     }
 }

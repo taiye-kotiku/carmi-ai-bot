@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
             characterId,
             prompt,
             aspectRatio = "1:1",
-            loraScale = 1.0,
+            loraScale = 1.2,
             numInferenceSteps = 28,
             guidanceScale = 3.5,
         } = body;

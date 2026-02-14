@@ -38,6 +38,7 @@ export async function POST(req: Request) {
         // Convert image to base64
         const arrayBuffer = await image.arrayBuffer();
         const base64Image = Buffer.from(arrayBuffer).toString("base64");
+        const mimeType = image.type?.startsWith("image/") ? image.type : "image/png";
 
         // Create job — store params for the polling endpoint to process
         const jobId = nanoid();
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
             progress: 5,
             result: {
                 imageBase64: base64Image,
+                mimeType,
                 prompt: prompt || "",
             },
         });

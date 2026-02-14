@@ -90,40 +90,105 @@ async function processTextToVideo(job: any, userId: string, jobData: any) {
 // ─────────────────────────────────────────────
 // IMAGE TO VIDEO (start Veo then poll)
 // ─────────────────────────────────────────────
+async function enhanceImageToVideoPrompt(
+    imageBase64: string,
+    mimeType: string,
+    userPrompt: string
+): Promise<string> {
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const systemInstruction = `Objective: Act as a professional Cinematographer and AI Prompt Engineer. Your task is to take a short user description and an uploaded image to create a highly detailed, technical prompt for the Veo 3.1 video generation model.
+
+Instructions:
+
+Analyze the Image: Identify the subject's key features (facial structure, hair, clothing) and the setting to ensure visual consistency.
+
+Expand the Motion: Take the user's short action (e.g., "drinking coffee") and describe it with physics-based realism (e.g., "steam swirling in slow motion," "subtle facial muscle movements").
+
+Apply Cinematic Standards: Always include specific camera movements (Dolly, Pan, Orbit) and professional lighting (Golden Hour, Rim Lighting, Bokeh).
+
+Incorporate Audio: Veo 3.1 generates native audio. Explicitly describe sound effects, ambient noise, or dialogue matching the scene.
+
+Output Structure:
+Your final output should be a single, flowing paragraph (or labeled sections) following this formula:
+[Cinematography] + [Subject Details] + [Dynamic Action] + [Environmental Context] + [Style/Ambiance] + [Audio Keywords]
+
+Return ONLY the enhanced prompt, no preamble.`;
+
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        systemInstruction,
+    });
+
+    const userDesc = userPrompt?.trim() || "Animate this image with subtle movement, cinematic quality";
+    const result = await model.generateContent([
+        { inlineData: { data: imageBase64, mimeType } },
+        { text: `User's short description: ${userDesc}` },
+    ]);
+
+    const text = result.response.text()?.trim();
+    return text || userDesc;
+}
+
 async function processImageToVideo(job: any, userId: string, jobData: any) {
     const operationName = jobData?.operationName;
 
     // Phase 1: Start Veo if not started
     if (!operationName && jobData?.imageBase64) {
-        const { enhancePrompt } = await import("@/lib/services/gemini");
+        const mimeType = jobData.mimeType || "image/png";
 
-        let finalPrompt = jobData.prompt || "Animate this image with subtle movement, cinematic quality";
-        if (jobData.prompt) {
-            try { finalPrompt = await enhancePrompt(jobData.prompt, "video"); } catch { }
+        let finalPrompt: string;
+        try {
+            finalPrompt = await enhanceImageToVideoPrompt(
+                jobData.imageBase64,
+                mimeType,
+                jobData.prompt || ""
+            );
+        } catch (err) {
+            console.error("[ImageToVideo] Prompt enhancement failed:", err);
+            finalPrompt = jobData.prompt || "Animate this image with subtle movement, cinematic quality";
         }
 
-        // Download image and start Veo
+        // Start Veo (veo-3.1-fast-generate-preview has explicit image-to-video support per Gemini docs)
+        const veoModel = "veo-3.1-fast-generate-preview";
         const startResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${veoModel}:predictLongRunning?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     instances: [{
                         prompt: finalPrompt,
-                        image: { bytesBase64Encoded: jobData.imageBase64 },
+                        image: {
+                            bytesBase64Encoded: jobData.imageBase64,
+                            mimeType: mimeType,
+                        },
                     }],
-                    parameters: { sampleCount: 1 },
+                    parameters: {
+                        aspectRatio: "16:9",
+                        durationSeconds: 4,
+                    },
                 }),
             }
         );
 
+        const responseBody = await startResponse.text();
         if (!startResponse.ok) {
-            await failJob(job.id, userId, CREDIT_COSTS.video_generation, "Veo start failed", "החזר - יצירת וידאו מתמונה נכשלה");
-            return { status: "failed", progress: 0, result: null, error: "Video start failed" };
+            console.error("[ImageToVideo] Veo API error:", startResponse.status, responseBody);
+            const errMsg = (() => {
+                try {
+                    const j = JSON.parse(responseBody);
+                    return j.error?.message || j.message || responseBody.slice(0, 200);
+                } catch {
+                    return responseBody.slice(0, 200);
+                }
+            })();
+            await failJob(job.id, userId, CREDIT_COSTS.video_generation, errMsg, "החזר - יצירת וידאו מתמונה נכשלה");
+            return { status: "failed", progress: 0, result: null, error: errMsg };
         }
 
-        const operation = await startResponse.json();
+        const operation = JSON.parse(responseBody);
         // Save operation name, remove heavy base64 data
         await supabaseAdmin.from("jobs").update({
             progress: 20,
@@ -861,10 +926,20 @@ async function processCartoonize(job: any, userId: string, jobData: any) {
         await updateProgress(job.id, 50);
 
         // STEP 2: GENERATION (Use the model that works for Image Generation)
-        // We construct a text-to-image prompt based on the description
-        const caricaturePrompt = `A 3D Pixar-style digital caricature of: ${description}. 
-    Additional details: ${params.subjectDescription || ""} ${params.settingEnvironment || ""} ${params.hobbyProfession || ""}
-    Style: Vibrant, expressive, cute, oversized head, small body, high quality 3D render, 8k resolution.`;
+        const env = params.settingEnvironment?.trim() || "Modern Office";
+        const profession = params.hobbyProfession?.trim() || "general professional";
+        const extraDesc = params.subjectDescription?.trim() || "";
+
+        const caricaturePrompt = `Create a professional avatar/caricature based on this person description: ${description}
+${extraDesc ? `Additional subject details: ${extraDesc}.` : ""}
+
+Character Fidelity: Replicate the subject's exact facial structure, hair color/texture, and unique expressions. The cartoon version must be instantly recognizable as the person in the photo.
+
+Professional Integration: Dress the character in professional attire and include 1-2 subtle props related to their specific ${profession}.
+
+Environment: Render a vibrant ${env} with soft cinematic lighting and a slight depth-of-field blur to keep the focus on the figure.
+
+Art Style: Clean 3D rendering, expressive features, and a friendly, confident persona. Avoid "uncanny" realism; aim for a polished, professional avatar.`;
 
         // Use the exact same endpoint/model as your working Image Generation
         // Note: We use REST fetch to be 100% sure of the endpoint
@@ -968,16 +1043,64 @@ async function saveState(jobId: string, jobData: any, state: any) {
 }
 
 function extractVideoUri(pollData: any): string | null {
-    return (
-        pollData.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
-        pollData.response?.generatedSamples?.[0]?.video?.uri ||
-        pollData.response?.videos?.[0]?.uri ||
-        null
+    const resp = pollData.response || pollData.result || {};
+    const genResp = resp.generateVideoResponse || resp;
+
+    // Path 1: generateVideoResponse.generatedSamples (Gemini API)
+    const samples =
+        genResp.generatedSamples ||
+        genResp.videos ||
+        resp.generatedSamples ||
+        resp.videos ||
+        [];
+
+    if (samples.length > 0) {
+        const s = samples[0];
+        const uri =
+            s.video?.uri ||
+            s.uri ||
+            s.videoUri ||
+            s.video?.videoUri ||
+            null;
+        if (uri) return uri;
+
+        // Base64 encoded video
+        const enc = s.video?.encodedVideo || s.encodedVideo || s.video;
+        if (enc?.bytesBase64Encoded) {
+            const mime = enc.mimeType || "video/mp4";
+            return `data:${mime};base64,${enc.bytesBase64Encoded}`;
+        }
+    }
+
+    // Path 2: predictions (Vertex AI / predictLongRunning)
+    const preds = resp.predictions || [];
+    if (preds.length > 0) {
+        const p = preds[0];
+        const uri = p.videoUri || p.uri || p.video?.uri || (typeof p === "string" ? p : null);
+        if (uri) return uri;
+    }
+
+    // Path 3: top-level videos
+    const videos = resp.videos || [];
+    if (videos.length > 0) {
+        const v = videos[0];
+        const uri = v.uri || v.videoUri || v.video?.uri || (typeof v === "string" ? v : null);
+        if (uri) return uri;
+    }
+
+    // Debug: log structure when nothing found
+    console.warn(
+        "[extractVideoUri] No video found. Response keys:",
+        Object.keys(resp).join(", "),
+        "| Full (truncated):",
+        JSON.stringify(pollData).substring(0, 800)
     );
+    return null;
 }
 
 async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, feature: string, prompt: string) {
-    const dlUrl = videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`;
+    const isDataUrl = videoUri.startsWith("data:");
+    const dlUrl = isDataUrl ? videoUri : (videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`);
     const vidRes = await fetch(dlUrl);
     if (!vidRes.ok) {
         await failJob(job.id, userId, CREDIT_COSTS.video_generation, "Download failed", "החזר - הורדת וידאו נכשלה");

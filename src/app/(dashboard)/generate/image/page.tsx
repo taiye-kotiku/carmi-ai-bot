@@ -32,6 +32,7 @@ export default function TextToImagePage() {
     const [progress, setProgress] = useState(0);
     const [statusText, setStatusText] = useState("");
     const [result, setResult] = useState<string | null>(null);
+    const [resultLoadError, setResultLoadError] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef2 = useRef<HTMLInputElement>(null);
     const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -69,7 +70,12 @@ export default function TextToImagePage() {
         pollRef.current = setInterval(async () => {
             try {
                 const res = await fetch(`/api/jobs/${jobId}`);
-                const data = await res.json();
+                let data: { status?: string; progress?: number; result?: { url?: string; imageUrl?: string }; error?: string };
+                try {
+                    data = await res.json();
+                } catch {
+                    return;
+                }
 
                 if (data.progress) {
                     setProgress(data.progress);
@@ -99,9 +105,10 @@ export default function TextToImagePage() {
                     setProgress(0);
                 } else {
                     // Update status text based on progress
-                    if (data.progress < 30) setStatusText("מתחיל יצירה...");
-                    else if (data.progress < 60) setStatusText("מעבד תמונה...");
-                    else if (data.progress < 90) setStatusText("משפר איכות...");
+                    const p = data.progress ?? 0;
+                    if (p < 30) setStatusText("מתחיל יצירה...");
+                    else if (p < 60) setStatusText("מעבד תמונה...");
+                    else if (p < 90) setStatusText("משפר איכות...");
                     else setStatusText("שומר לקובץ...");
                 }
             } catch (err) {
@@ -161,6 +168,7 @@ export default function TextToImagePage() {
         setIsGenerating(true);
         setProgress(5);
         setResult(null);
+        setResultLoadError(false);
         setStatusText("שולח בקשה...");
 
         try {
@@ -189,7 +197,15 @@ export default function TextToImagePage() {
                 body: JSON.stringify(body),
             });
 
-            const data = await response.json();
+            let data: { jobId?: string; error?: string };
+            try {
+                const text = await response.text();
+                data = text ? JSON.parse(text) : {};
+            } catch {
+                throw new Error(response.status === 413
+                    ? "הנתונים גדולים מדי. נא להקטין את גודל התמונות."
+                    : `שגיאת שרת (${response.status}). נא לנסות שוב.`);
+            }
 
             if (!response.ok) {
                 throw new Error(data.error || "שגיאה ביצירת התמונה");
@@ -419,11 +435,22 @@ export default function TextToImagePage() {
                                 ) : result ? (
                                     <div className="w-full space-y-4">
                                         <div className="relative rounded-lg overflow-hidden border border-gray-200 shadow-sm group">
-                                            <img
-                                                src={result}
-                                                alt="Generated Result"
-                                                className="w-full h-auto object-contain max-h-[500px]"
-                                            />
+                                            {resultLoadError ? (
+                                                <div className="p-4 bg-amber-50 text-amber-800 rounded-lg text-sm">
+                                                    התמונה לא נטענה.{" "}
+                                                    <a href={result} target="_blank" rel="noopener noreferrer" className="underline">
+                                                        לחץ לפתיחה בחלון חדש
+                                                    </a>
+                                                </div>
+                                            ) : (
+                                                <img
+                                                    src={result}
+                                                    alt="Generated Result"
+                                                    className="w-full h-auto object-contain max-h-[500px]"
+                                                    referrerPolicy="no-referrer"
+                                                    onError={() => setResultLoadError(true)}
+                                                />
+                                            )}
                                         </div>
                                         <ExportFormats imageUrl={result} baseFilename="generated-image" />
                                     </div>

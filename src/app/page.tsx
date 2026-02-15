@@ -668,13 +668,13 @@ export default async function HomePage() {
             <div className="flex flex-wrap justify-center gap-6 md:gap-10">
               <div className="flex flex-col items-center">
                 <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
-                  <Image src="/examples/image-edit-1.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                  <Image src="/examples/nirel.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
                 </div>
-                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+                <p className="text-sm text-slate-400 mt-2"> מלווה משקיעים NYG</p>
               </div>
               <div className="flex flex-col items-center">
                 <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
-                  <Image src="/examples/image-edit-2.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                  <Image src="/examples/mocart.png" alt=" רויאל ז'אווי - מנכלית Mocart" fill className="object-cover" sizes="80px" />
                 </div>
                 <p className="text-sm text-slate-400 mt-2">משתמש</p>
               </div>
@@ -682,7 +682,7 @@ export default async function HomePage() {
                 <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
                   <Image src="/examples/image-edit-3.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
                 </div>
-                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+                <p className="text-sm text-slate-400 mt-2">עורך דין גניר שמעון</p>
               </div>
             </div>
           </div>

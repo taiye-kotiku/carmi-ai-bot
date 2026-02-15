@@ -18,6 +18,7 @@ export default function ImageToVideoPage() {
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const isCompletedRef = useRef(false);
 
     const { addGenerationNotification } = useNotifications();
 
@@ -67,6 +68,7 @@ export default function ImageToVideoPage() {
             const { jobId } = await response.json();
 
             // Poll for job status
+            isCompletedRef.current = false;
             const pollInterval = setInterval(async () => {
                 const jobResponse = await fetch(`/api/jobs/${jobId}`);
                 const job = await jobResponse.json();
@@ -74,11 +76,15 @@ export default function ImageToVideoPage() {
                 setProgress(job.progress);
 
                 if (job.status === "completed") {
+                    if (isCompletedRef.current) return;
+                    isCompletedRef.current = true;
                     clearInterval(pollInterval);
                     setResult(job.result.videoUrl);
                     setIsGenerating(false);
                     addGenerationNotification("video");
                 } else if (job.status === "failed") {
+                    if (isCompletedRef.current) return;
+                    isCompletedRef.current = true;
                     clearInterval(pollInterval);
                     setError(job.error || "שגיאה ביצירת הסרטון");
                     setIsGenerating(false);

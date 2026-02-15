@@ -35,6 +35,7 @@ export default function TextToImagePage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef2 = useRef<HTMLInputElement>(null);
     const pollRef = useRef<NodeJS.Timeout | null>(null);
+    const isCompletedRef = useRef(false);
 
     const { addGenerationNotification } = useNotifications();
 
@@ -63,6 +64,8 @@ export default function TextToImagePage() {
     }, []);
 
     const pollJob = useCallback((jobId: string) => {
+        isCompletedRef.current = false;
+        if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = setInterval(async () => {
             try {
                 const res = await fetch(`/api/jobs/${jobId}`);
@@ -73,6 +76,8 @@ export default function TextToImagePage() {
                 }
 
                 if (data.status === "completed") {
+                    if (isCompletedRef.current) return;
+                    isCompletedRef.current = true;
                     stopPolling();
                     const imageUrl = data.result?.url || data.result?.imageUrl;
                     if (imageUrl) {
@@ -86,6 +91,8 @@ export default function TextToImagePage() {
                     }
                     setIsGenerating(false);
                 } else if (data.status === "failed") {
+                    if (isCompletedRef.current) return;
+                    isCompletedRef.current = true;
                     stopPolling();
                     toast.error(data.error || "יצירת התמונה נכשלה");
                     setIsGenerating(false);

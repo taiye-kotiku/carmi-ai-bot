@@ -1,4 +1,3 @@
-// src/components/features/create-character-modal.tsx
 "use client";
 
 import { useState, useRef } from "react";
@@ -15,16 +14,62 @@ interface Props {
     onCreated: () => void;
 }
 
+const GENDER_OPTIONS = [
+    { value: "male", label: "גבר", emoji: "👨" },
+    { value: "female", label: "אישה", emoji: "👩" },
+];
+
+const HAIR_OPTIONS = [
+    { value: "short", label: "קצר", labelEn: "short hair" },
+    { value: "medium", label: "בינוני", labelEn: "medium length hair" },
+    { value: "long", label: "ארוך", labelEn: "long hair" },
+    { value: "bald", label: "קירח", labelEn: "bald, no hair" },
+    { value: "buzz", label: "מגולח", labelEn: "buzz cut" },
+    { value: "curly", label: "מתולתל", labelEn: "curly hair" },
+];
+
+const HAIR_COLOR_OPTIONS = [
+    { value: "black", label: "שחור", labelEn: "black hair" },
+    { value: "brown", label: "חום", labelEn: "brown hair" },
+    { value: "blonde", label: "בלונד", labelEn: "blonde hair" },
+    { value: "red", label: "ג'ינג'י", labelEn: "red hair" },
+    { value: "gray", label: "אפור/שיבה", labelEn: "gray hair" },
+];
+
 export function CreateCharacterModal({ open = true, onClose, onCreated }: Props) {
     if (!open) return null;
+
     const [name, setName] = useState("");
-    const [description, setDescription] = useState("");
+    const [gender, setGender] = useState<string>("");
+    const [hairStyle, setHairStyle] = useState<string>("");
+    const [hairColor, setHairColor] = useState<string>("");
+    const [extraDescription, setExtraDescription] = useState("");
     const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Build structured description from selections
+    const buildDescription = (): string => {
+        const parts: string[] = [];
+
+        const genderOpt = GENDER_OPTIONS.find((g) => g.value === gender);
+        if (genderOpt) parts.push(`gender:${genderOpt.value}`);
+
+        const hairOpt = HAIR_OPTIONS.find((h) => h.value === hairStyle);
+        if (hairOpt) parts.push(`hair_style:${hairOpt.labelEn}`);
+
+        const colorOpt = HAIR_COLOR_OPTIONS.find((c) => c.value === hairColor);
+        if (colorOpt) parts.push(`hair_color:${colorOpt.labelEn}`);
+
+        if (extraDescription.trim()) {
+            parts.push(`notes:${extraDescription.trim()}`);
+        }
+
+        return parts.join(" | ");
+    };
 
     const handleFileUpload = async (
         event: React.ChangeEvent<HTMLInputElement>
@@ -64,7 +109,6 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                 const data = await res.json();
 
                 if (res.ok) {
-                    // Handle different response formats
                     if (data.url) {
                         newUrls.push(data.url);
                     } else if (data.urls && data.urls[0]) {
@@ -108,6 +152,10 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
             setError("יש להזין שם לדמות");
             return;
         }
+        if (!gender) {
+            setError("יש לבחור מין");
+            return;
+        }
         if (uploadedUrls.length < 5) {
             setError(`יש להעלות לפחות 5 תמונות. יש לך ${uploadedUrls.length}.`);
             return;
@@ -116,12 +164,14 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
         setCreating(true);
 
         try {
+            const description = buildDescription();
+
             const res = await fetch("/api/characters", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     name: name.trim(),
-                    description: description.trim() || null,
+                    description,
                     reference_images: uploadedUrls,
                 }),
             });
@@ -140,7 +190,7 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
         }
     };
 
-    const canCreate = name.trim().length > 0 && uploadedUrls.length >= 5;
+    const canCreate = name.trim().length > 0 && gender.length > 0 && uploadedUrls.length >= 5;
 
     return (
         <div
@@ -177,19 +227,89 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                         />
                     </div>
 
-                    {/* Description */}
+                    {/* Gender */}
+                    <div className="space-y-2">
+                        <Label className="text-base font-semibold">
+                            מין <span className="text-destructive">*</span>
+                        </Label>
+                        <div className="grid grid-cols-2 gap-3">
+                            {GENDER_OPTIONS.map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setGender(opt.value)}
+                                    className={`p-3 rounded-lg border-2 text-center transition-all ${gender === opt.value
+                                            ? "border-primary bg-primary/5"
+                                            : "border-border hover:border-primary/50"
+                                        }`}
+                                >
+                                    <div className="text-2xl mb-1">{opt.emoji}</div>
+                                    <div className="text-sm font-medium">{opt.label}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Hair Style */}
+                    <div className="space-y-2">
+                        <Label className="text-base font-semibold">
+                            סגנון שיער{" "}
+                            <span className="text-muted-foreground font-normal text-sm">(מומלץ)</span>
+                        </Label>
+                        <div className="flex flex-wrap gap-2">
+                            {HAIR_OPTIONS.map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() =>
+                                        setHairStyle(hairStyle === opt.value ? "" : opt.value)
+                                    }
+                                    className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${hairStyle === opt.value
+                                            ? "bg-primary text-primary-foreground border-primary"
+                                            : "bg-background hover:bg-muted border-border"
+                                        }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Hair Color */}
+                    <div className="space-y-2">
+                        <Label className="text-base font-semibold">
+                            צבע שיער{" "}
+                            <span className="text-muted-foreground font-normal text-sm">(מומלץ)</span>
+                        </Label>
+                        <div className="flex flex-wrap gap-2">
+                            {HAIR_COLOR_OPTIONS.map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() =>
+                                        setHairColor(hairColor === opt.value ? "" : opt.value)
+                                    }
+                                    className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${hairColor === opt.value
+                                            ? "bg-primary text-primary-foreground border-primary"
+                                            : "bg-background hover:bg-muted border-border"
+                                        }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Extra Description */}
                     <div className="space-y-2">
                         <Label htmlFor="char-desc" className="text-base font-semibold">
-                            תיאור{" "}
-                            <span className="text-muted-foreground font-normal">
+                            תיאור נוסף{" "}
+                            <span className="text-muted-foreground font-normal text-sm">
                                 (אופציונלי)
                             </span>
                         </Label>
                         <Textarea
                             id="char-desc"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            placeholder="תיאור קצר של הדמות..."
+                            value={extraDescription}
+                            onChange={(e) => setExtraDescription(e.target.value)}
+                            placeholder="למשל: זקן, משקפיים, קעקועים, חיוך רחב..."
                             rows={2}
                             dir="rtl"
                             maxLength={200}
@@ -201,11 +321,10 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                         <Label className="text-base font-semibold">
                             תמונות אימון <span className="text-destructive">*</span>
                             <span className="text-muted-foreground font-normal text-sm block mt-0.5">
-                                מינימום 10 תמונות, מומלץ 10-20
+                                מינימום 5 תמונות, מומלץ 10-20
                             </span>
                         </Label>
 
-                        {/* Upload button */}
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -244,12 +363,12 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                         <div className="flex items-center gap-2">
                             <div
                                 className={`text-sm font-medium ${uploadedUrls.length >= 5
-                                    ? "text-green-600"
-                                    : "text-amber-600"
+                                        ? "text-green-600"
+                                        : "text-amber-600"
                                     }`}
                             >
                                 {uploadedUrls.length >= 5 ? "✅" : "⚠️"} {uploadedUrls.length}
-                                /20 תמונות (מינימום)
+                                /20 תמונות (מינימום 5)
                             </div>
                             {uploadedUrls.length >= 10 && uploadedUrls.length < 20 && (
                                 <span className="text-xs text-green-600">👍 כמות טובה</span>
@@ -279,7 +398,6 @@ export function CreateCharacterModal({ open = true, onClose, onCreated }: Props)
                                     </div>
                                 ))}
 
-                                {/* Add more button */}
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={uploading}

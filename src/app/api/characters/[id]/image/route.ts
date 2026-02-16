@@ -82,7 +82,7 @@ export async function POST(
         // ✅ Enhance prompt: translate Hebrew + add quality keywords
         let enhancedPrompt: string;
         try {
-            enhancedPrompt = await enhancePrompt(prompt.trim());
+            enhancedPrompt = await enhancePrompt(prompt.trim(), character.description);
         } catch (e) {
             console.warn("[CharacterImage] Enhancement failed, using original:", e);
             enhancedPrompt = prompt.trim();

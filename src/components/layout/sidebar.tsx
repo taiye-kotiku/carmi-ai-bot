@@ -20,6 +20,7 @@ import {
     HelpCircle,
     Palette,
     Coins,
+    Pencil,
 } from "lucide-react";
 
 type NavItem =
@@ -37,6 +38,7 @@ const navigation: NavItem[] = [
 
     { type: "divider", label: "יצירת תוכן" },
     { type: "link", name: "יצירת תמונה", href: "/generate/image", icon: Image },
+    { type: "link", name: "עריכת תמונה", href: "/generate/image-editing", icon: Pencil },
     { type: "link", name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
     { type: "link", name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
     { type: "link", name: "יצירת קריקטורה", href: "/generate/cartoonize", icon: Palette },

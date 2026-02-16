@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Download, Instagram, Music } from "lucide-react";
-import { ExportFormat, FORMAT_DIMENSIONS, downloadResizedImage } from "@/lib/services/image-resizer";
+import { ExportFormat, FORMAT_DIMENSIONS, downloadResizedImage, downloadOriginalImage } from "@/lib/services/image-resizer";
 import { useState } from "react";
 
 interface ExportFormatsProps {
@@ -11,7 +11,7 @@ interface ExportFormatsProps {
 }
 
 export function ExportFormats({ imageUrl, baseFilename }: ExportFormatsProps) {
-    const [exporting, setExporting] = useState<ExportFormat | null>(null);
+    const [exporting, setExporting] = useState<ExportFormat | "original" | null>(null);
 
     const handleExport = async (format: ExportFormat) => {
         setExporting(format);
@@ -25,11 +25,44 @@ export function ExportFormats({ imageUrl, baseFilename }: ExportFormatsProps) {
         }
     };
 
+    const handleDownloadOriginal = async () => {
+        setExporting("original");
+        try {
+            await downloadOriginalImage(imageUrl, baseFilename ? `${baseFilename}-original.png` : undefined);
+        } catch (error) {
+            console.error("Download failed:", error);
+            alert("שגיאה בהורדת התמונה");
+        } finally {
+            setExporting(null);
+        }
+    };
+
     const formats: ExportFormat[] = ["instagram-post", "instagram-story", "instagram-reel", "tiktok"];
 
     return (
         <div className="space-y-3">
             <h4 className="text-sm font-medium text-gray-700">ייצא לפורמטים שונים:</h4>
+            <div className="flex flex-wrap gap-2 mb-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownloadOriginal}
+                    disabled={exporting !== null}
+                    className="text-xs"
+                >
+                    {exporting === "original" ? (
+                        <>
+                            <div className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin ml-1" />
+                            מוריד...
+                        </>
+                    ) : (
+                        <>
+                            <Download className="h-4 w-4 ml-1" />
+                            גודל מקורי
+                        </>
+                    )}
+                </Button>
+            </div>
             <div className="grid grid-cols-2 gap-2">
                 {formats.map((format) => {
                     const dims = FORMAT_DIMENSIONS[format];

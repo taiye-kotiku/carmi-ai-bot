@@ -107,6 +107,25 @@ export async function resizeImageToFormat(
 }
 
 /**
+ * Download image in its original size (no resize)
+ */
+export async function downloadOriginalImage(
+    imageUrl: string,
+    filename?: string
+): Promise<void> {
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename || `image-original-${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
+}
+
+/**
  * Download resized image
  */
 export async function downloadResizedImage(

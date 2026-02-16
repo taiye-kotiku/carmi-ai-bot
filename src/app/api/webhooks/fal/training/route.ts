@@ -20,7 +20,6 @@ export async function POST(request: NextRequest) {
         console.log("[Webhook] Status:", body.status);
         console.log("[Webhook] Character:", characterId);
 
-        // fal.ai webhooks use "OK" for success, "ERROR" for failure
         if (body.status === "OK") {
             const loraUrl =
                 body.payload?.diffusers_lora_file?.url ||
@@ -34,14 +33,14 @@ export async function POST(request: NextRequest) {
                 await supabaseAdmin
                     .from("characters")
                     .update({
-                        status: "trained",
+                        status: "ready",  // ✅ FIXED: was "trained", UI expects "ready"
                         lora_url: loraUrl,
                         trained_at: new Date().toISOString(),
                         error_message: null
                     })
                     .eq("id", characterId);
 
-                console.log("[Webhook] Character updated to trained!");
+                console.log("[Webhook] Character updated to ready!");
             } else {
                 console.error("[Webhook] No LoRA URL found in payload:", JSON.stringify(body.payload));
                 await supabaseAdmin
@@ -62,7 +61,6 @@ export async function POST(request: NextRequest) {
                 })
                 .eq("id", characterId);
         } else {
-            // Log unexpected status for debugging
             console.warn("[Webhook] Unexpected status:", body.status);
         }
 

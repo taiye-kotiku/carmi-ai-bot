@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Plus, Loader2, Image as ImageIcon, Video, MoreVertical, Trash2, RefreshCw } from "lucide-react";
@@ -20,60 +20,72 @@ interface Character {
     name: string;
     description: string;
     image_urls: string[];
-    status: "draft" | "pending" | "training" | "ready" | "failed";
+    status: "draft" | "pending" | "training" | "ready" | "trained" | "failed";
     created_at: string;
     trigger_word?: string;
 }
 
 export default function CharactersPage() {
     const [characters, setCharacters] = useState<Character[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true); // only true on initial load
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [restartingId, setRestartingId] = useState<string | null>(null);
 
     const pollInterval = useRef<NodeJS.Timeout | null>(null);
+    const hasFetchedOnce = useRef(false);
 
-    const fetchCharacters = async () => {
-        setLoading(true);
+    const fetchCharacters = useCallback(async () => {
+        // Only show loading skeleton on first fetch
+        if (!hasFetchedOnce.current) {
+            setLoading(true);
+        }
+
         try {
-            const res = await fetch(`/api/characters?t=${Date.now()}`); // cache buster
+            const res = await fetch(`/api/characters?t=${Date.now()}`);
             const data = await res.json();
 
-            // Handle array OR {characters: [...]}
             const charactersArray = Array.isArray(data) ? data : data.characters;
 
             if (charactersArray) {
                 setCharacters(charactersArray);
 
-                const hasTraining = charactersArray.some(c => c.status === "training");
-                if (hasTraining) startPolling();
-                else stopPolling();
+                const hasTraining = charactersArray.some(
+                    (c: Character) => c.status === "training"
+                );
+                if (hasTraining) {
+                    startPolling();
+                } else {
+                    stopPolling();
+                }
             }
         } catch (error) {
             console.error("Failed to load characters", error);
-            toast.error("לא ניתן לטעון את הדמויות");
+            if (!hasFetchedOnce.current) {
+                toast.error("לא ניתן לטעון את הדמויות");
+            }
         } finally {
             setLoading(false);
+            hasFetchedOnce.current = true;
         }
-    };
+    }, []);
 
-    const startPolling = () => {
+    const startPolling = useCallback(() => {
         if (pollInterval.current) return;
         pollInterval.current = setInterval(fetchCharacters, 5000);
-    };
+    }, [fetchCharacters]);
 
-    const stopPolling = () => {
+    const stopPolling = useCallback(() => {
         if (pollInterval.current) {
             clearInterval(pollInterval.current);
             pollInterval.current = null;
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchCharacters();
         return () => stopPolling();
-    }, []);
+    }, [fetchCharacters, stopPolling]);
 
     const handleDelete = async () => {
         if (!deleteId) return;
@@ -87,14 +99,12 @@ export default function CharactersPage() {
         }
     };
 
-    // ---------- handleResumeTraining ----------
     const handleResumeTraining = async (charId: string) => {
         setRestartingId(charId);
         try {
-            // Optimistic update
             setCharacters(prev =>
                 prev.map(c =>
-                    c.id === charId ? { ...c, status: "training" } : c
+                    c.id === charId ? { ...c, status: "training" as const } : c
                 )
             );
 
@@ -103,9 +113,8 @@ export default function CharactersPage() {
             if (!res.ok) {
                 const err = await res.json();
                 toast.error(err.error || "התחלת האימון נכשלה");
-                fetchCharacters(); // Revert
+                fetchCharacters();
             } else {
-                // ✅ IMMEDIATELY REFETCH to update UI
                 await fetchCharacters();
                 toast.success("האימון התחיל! זה ייקח מספר דקות.");
                 startPolling();
@@ -119,16 +128,36 @@ export default function CharactersPage() {
         }
     };
 
+    // Helper: treat "trained" the same as "ready" (safety fallback)
+    const isReady = (status: string) => status === "ready" || status === "trained";
+
     const renderStatus = (status: string) => {
+        if (isReady(status)) {
+            return (
+                <span className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-green-200">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />מוכן לשימוש
+                </span>
+            );
+        }
         switch (status) {
-            case "ready":
-                return <span className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-green-200"><span className="w-1.5 h-1.5 bg-green-500 rounded-full" />מוכן לשימוש</span>;
             case "training":
-                return <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-blue-200 animate-pulse"><Loader2 className="w-3 h-3 animate-spin" />מאמן מודל...</span>;
+                return (
+                    <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-blue-200 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />מאמן מודל...
+                    </span>
+                );
             case "failed":
-                return <span className="inline-flex items-center gap-1.5 bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-red-200">נכשל</span>;
+                return (
+                    <span className="inline-flex items-center gap-1.5 bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-red-200">
+                        נכשל
+                    </span>
+                );
             default:
-                return <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-200">ממתין לאימון</span>;
+                return (
+                    <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-200">
+                        ממתין לאימון
+                    </span>
+                );
         }
     };
 
@@ -147,7 +176,9 @@ export default function CharactersPage() {
 
             {loading && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[1, 2, 3].map((i) => (<div key={i} className="h-64 bg-muted/20 animate-pulse rounded-xl border" />))}
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-64 bg-muted/20 animate-pulse rounded-xl border" />
+                    ))}
                 </div>
             )}
 
@@ -160,64 +191,102 @@ export default function CharactersPage() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {characters.map((char) => (
-                    <Card key={char.id} className="overflow-hidden group hover:shadow-md transition-shadow relative">
-                        <div className="absolute top-3 left-3 z-10">{renderStatus(char.status)}</div>
-                        <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-white/90 shadow-sm backdrop-blur"><MoreVertical className="w-4 h-4" /></Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(char.id)}>
-                                        <Trash2 className="w-4 h-4 mr-2" />מחק דמות
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
+            {!loading && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {characters.map((char) => (
+                        <Card key={char.id} className="overflow-hidden group hover:shadow-md transition-shadow relative">
+                            <div className="absolute top-3 left-3 z-10">{renderStatus(char.status)}</div>
+                            <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-white/90 shadow-sm backdrop-blur">
+                                            <MoreVertical className="w-4 h-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(char.id)}>
+                                            <Trash2 className="w-4 h-4 mr-2" />מחק דמות
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
 
-                        <div className="aspect-square bg-muted relative">
-                            {char.image_urls?.[0] ? (
-                                <img src={char.image_urls[0]} alt={char.name} className={`w-full h-full object-cover transition-opacity ${char.status === 'training' ? 'opacity-80' : ''}`} />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-blue-50 to-purple-50">👤</div>
-                            )}
-                            {char.status === 'training' && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                                    <div className="bg-white/90 px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
-                                        <Loader2 className="w-4 h-4 animate-spin text-primary" /><span className="text-sm font-medium">לומד את הפנים...</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="p-5">
-                            <h3 className="font-bold text-lg mb-1">{char.name}</h3>
-                            <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4">{char.description || "ללא תיאור"}</p>
-
-                            <div className="grid grid-cols-2 gap-2">
-                                {char.status === "ready" ? (
-                                    <>
-                                        <Button asChild variant="default" size="sm" className="w-full"><Link href={`/generate/character?id=${char.id}`}><ImageIcon className="w-4 h-4 ml-2" />תמונה</Link></Button>
-                                        <Button asChild variant="outline" size="sm" className="w-full"><Link href={`/generate/character-video`}><Video className="w-4 h-4 ml-2" />וידאו</Link></Button>
-                                    </>
-                                ) : char.status === "training" ? (
-                                    <Button disabled className="w-full col-span-2 bg-muted text-muted-foreground"><Loader2 className="w-4 h-4 ml-2 animate-spin" />תהליך אימון בעיצומו...</Button>
+                            <div className="aspect-square bg-muted relative">
+                                {char.image_urls?.[0] ? (
+                                    <img
+                                        src={char.image_urls[0]}
+                                        alt={char.name}
+                                        className={`w-full h-full object-cover transition-opacity ${char.status === 'training' ? 'opacity-80' : ''}`}
+                                    />
                                 ) : (
-                                    <Button className="w-full col-span-2" disabled={restartingId === char.id} onClick={() => handleResumeTraining(char.id)}>
-                                        {restartingId === char.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 ml-2" />}
-                                        התחל אימון (50 קרדיטים)
-                                    </Button>
+                                    <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-blue-50 to-purple-50">👤</div>
+                                )}
+                                {char.status === 'training' && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+                                        <div className="bg-white/90 px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+                                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                            <span className="text-sm font-medium">לומד את הפנים...</span>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
-                        </div>
-                    </Card>
-                ))}
-            </div>
 
-            <CreateCharacterModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} onCreated={() => { setIsCreateOpen(false); fetchCharacters(); }} />
-            {deleteId && <DeleteCharacterModal isOpen={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={async () => { await handleDelete(); setDeleteId(null); }} />}
+                            <div className="p-5">
+                                <h3 className="font-bold text-lg mb-1">{char.name}</h3>
+                                <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4">
+                                    {char.description || "ללא תיאור"}
+                                </p>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    {isReady(char.status) ? (
+                                        <>
+                                            <Button asChild variant="default" size="sm" className="w-full">
+                                                <Link href={`/generate/character?id=${char.id}`}>
+                                                    <ImageIcon className="w-4 h-4 ml-2" />תמונה
+                                                </Link>
+                                            </Button>
+                                            <Button asChild variant="outline" size="sm" className="w-full">
+                                                <Link href={`/generate/character-video`}>
+                                                    <Video className="w-4 h-4 ml-2" />וידאו
+                                                </Link>
+                                            </Button>
+                                        </>
+                                    ) : char.status === "training" ? (
+                                        <Button disabled className="w-full col-span-2 bg-muted text-muted-foreground">
+                                            <Loader2 className="w-4 h-4 ml-2 animate-spin" />תהליך אימון בעיצומו...
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            className="w-full col-span-2"
+                                            disabled={restartingId === char.id}
+                                            onClick={() => handleResumeTraining(char.id)}
+                                        >
+                                            {restartingId === char.id
+                                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                                : <RefreshCw className="w-4 h-4 ml-2" />
+                                            }
+                                            התחל אימון (50 קרדיטים)
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            )}
+
+            <CreateCharacterModal
+                open={isCreateOpen}
+                onClose={() => setIsCreateOpen(false)}
+                onCreated={() => { setIsCreateOpen(false); fetchCharacters(); }}
+            />
+            {deleteId && (
+                <DeleteCharacterModal
+                    isOpen={!!deleteId}
+                    onClose={() => setDeleteId(null)}
+                    onConfirm={async () => { await handleDelete(); setDeleteId(null); }}
+                />
+            )}
         </div>
     );
 }

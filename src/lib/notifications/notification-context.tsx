@@ -91,12 +91,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
             setEphemeralNotifications((prev) => [notification, ...prev]);
 
-            // Also fire browser notification if permitted
+            // Also fire browser notification if permitted (use stable tag to prevent duplicates)
             if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
                 const n = new Notification(notification.title, {
                     body: notification.body,
                     icon: "/favicon.ico",
-                    tag: notification.id,
+                    tag: `generation-${generationType}`,
                 });
                 n.onclick = () => {
                     window.focus();

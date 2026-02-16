@@ -45,7 +45,12 @@ export default function CartoonizePage() {
             pollRef.current = setInterval(async () => {
                 try {
                     const res = await fetch(`/api/jobs/${jobId}`);
-                    const data = await res.json();
+                    let data: { status?: string; progress?: number; result?: { url?: string; imageUrl?: string }; error?: string };
+                    try {
+                        data = await res.json();
+                    } catch {
+                        return; // Non-JSON response, skip this poll
+                    }
 
                     if (data.progress) {
                         setProgress(data.progress);
@@ -80,15 +85,11 @@ export default function CartoonizePage() {
                         setProgress(0);
                     } else {
                         // Processing state
-                        if (data.progress < 20) {
-                            setStatusText("מנתח את התמונה...");
-                        } else if (data.progress < 50) {
-                            setStatusText("מזהה תווי פנים...");
-                        } else if (data.progress < 80) {
-                            setStatusText("יוצר קריקטורה...");
-                        } else {
-                            setStatusText("מעבד ושומר...");
-                        }
+                        const p = data.progress ?? 0;
+                        if (p < 20) setStatusText("מנתח את התמונה...");
+                        else if (p < 50) setStatusText("מזהה תווי פנים...");
+                        else if (p < 80) setStatusText("יוצר קריקטורה...");
+                        else setStatusText("מעבד ושומר...");
                     }
                 } catch (err) {
                     console.error("Poll error:", err);
@@ -105,8 +106,8 @@ export default function CartoonizePage() {
             toast.error("נא לבחור קובץ תמונה (PNG, JPG, WebP)");
             return;
         }
-        if (file.size > 10 * 1024 * 1024) {
-            toast.error("גודל הקובץ מקסימלי 10MB");
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("גודל הקובץ מקסימלי 5MB (למניעת שגיאות העלאה)");
             return;
         }
         if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -138,7 +139,16 @@ export default function CartoonizePage() {
                 body: formData,
             });
 
-            const data = await response.json();
+            let data: { jobId?: string; error?: string };
+            try {
+                const text = await response.text();
+                data = text ? JSON.parse(text) : {};
+            } catch {
+                const errMsg = response.status === 413
+                    ? "התמונה גדולה מדי. נא להעלות תמונה עד 5MB."
+                    : `שגיאת שרת (${response.status}). נא לנסות שוב.`;
+                throw new Error(errMsg);
+            }
 
             if (!response.ok) {
                 throw new Error(data.error || "שגיאה בהמרה");
@@ -198,7 +208,7 @@ export default function CartoonizePage() {
                     <CardHeader>
                         <CardTitle>בחר תמונה להמרה</CardTitle>
                         <p className="text-sm text-gray-500 mt-1">
-                            PNG, JPG או WebP עד 10MB. מומלץ תמונה עם פנים ברורים.
+                            PNG, JPG או WebP עד 5MB. מומלץ תמונה עם פנים ברורים.
                         </p>
                     </CardHeader>
                     <CardContent className="space-y-6">

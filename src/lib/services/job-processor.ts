@@ -240,7 +240,6 @@ async function processImage(job: any, userId: string, jobData: any) {
                     contents: [{ parts }],
                     generationConfig: {
                         responseModalities: ["Text", "Image"],
-                        imageSize: "1K",
                     },
                 }),
             }
@@ -268,8 +267,9 @@ async function processImage(job: any, userId: string, jobData: any) {
         });
 
         await updateUserStorage(userId, buffer.length);
-        await completeJob(job.id, { url: urlData.publicUrl });
-        return { status: "completed", progress: 100, result: { url: urlData.publicUrl }, error: null };
+        const imageUrl = urlData.publicUrl;
+        await completeJob(job.id, { url: imageUrl, imageUrl });
+        return { status: "completed", progress: 100, result: { url: imageUrl, imageUrl }, error: null };
     } catch (error: any) {
         await failJob(job.id, userId, CREDIT_COSTS.image_generation, error.message, "החזר - יצירת תמונה נכשלה");
         return { status: "failed", progress: 0, result: null, error: error.message };
@@ -962,7 +962,6 @@ Art Style: Clean 3D rendering, expressive features, and a friendly, confident pe
                     contents: [{ parts: [{ text: caricaturePrompt }] }],
                     generationConfig: {
                         responseModalities: ["Text", "Image"],
-                        imageSize: "1K",
                     },
                 }),
             }

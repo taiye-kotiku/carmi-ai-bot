@@ -665,24 +665,30 @@ export default async function HomePage() {
                 <Star key={i} className="h-8 w-8 fill-amber-400 text-amber-400" />
               ))}
             </div>
-            <div className="flex flex-wrap justify-center gap-6 md:gap-10">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10 max-w-2xl md:max-w-4xl mx-auto">
               <div className="flex flex-col items-center">
-                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
-                  <Image src="/examples/image-edit-1.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30 shrink-0">
+                  <Image src="/examples/nirel.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
                 </div>
-                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+                <p className="text-sm text-slate-400 mt-2">מלווה משקיעים NYG</p>
               </div>
               <div className="flex flex-col items-center">
-                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
-                  <Image src="/examples/image-edit-2.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30 shrink-0">
+                  <Image src="/examples/royal.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
                 </div>
-                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+                <p className="text-sm text-slate-400 mt-2">רויאל ז'אווי - מנכ״לית Mocart</p>
               </div>
               <div className="flex flex-col items-center">
-                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30">
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30 shrink-0">
                   <Image src="/examples/image-edit-3.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
                 </div>
-                <p className="text-sm text-slate-400 mt-2">משתמש</p>
+                <p className="text-sm text-slate-400 mt-2">עורך דין גניר שמעון</p>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-white/20 ring-2 ring-amber-500/30 shrink-0">
+                  <Image src="/examples/shahaf.png" alt="משתמש מרוצה" fill className="object-cover" sizes="80px" />
+                </div>
+                <p className="text-sm text-slate-400 mt-2">שחף לוונבראון - יוצרת תוכן</p>
               </div>
             </div>
           </div>

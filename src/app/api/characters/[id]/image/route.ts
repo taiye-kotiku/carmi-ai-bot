@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { generateWithLora } from "@/lib/services/modal";
+import { enhancePrompt } from "@/lib/services/prompt-enhancer";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 
@@ -63,7 +64,7 @@ export async function POST(
             return NextResponse.json({ error: "prompt is required" }, { status: 400 });
         }
 
-        // Deduct credits upfront (atomic check + deduction)
+        // Deduct credits upfront
         try {
             await deductCredits(user.id, "image_generation");
         } catch (err) {
@@ -76,16 +77,31 @@ export async function POST(
             );
         }
 
-        const triggerWord = character.trigger_word || "TOK";
+        const triggerWord = character.trigger_word || "ohwx";
+
+        // ✅ Enhance prompt: translate Hebrew + add quality keywords
+        let enhancedPrompt: string;
+        try {
+            enhancedPrompt = await enhancePrompt(prompt.trim());
+        } catch (e) {
+            console.warn("[CharacterImage] Enhancement failed, using original:", e);
+            enhancedPrompt = prompt.trim();
+        }
+
+        // Prepend trigger word if not already present
+        let finalPrompt = enhancedPrompt;
+        if (!finalPrompt.toLowerCase().includes(triggerWord.toLowerCase())) {
+            finalPrompt = `${triggerWord} person, ${finalPrompt}`;
+        }
 
         console.log(`[CharacterImage] Character: ${character.name}`);
-        console.log(`[CharacterImage] LoRA: ${character.lora_url}`);
-        console.log(`[CharacterImage] Prompt: ${prompt}`);
+        console.log(`[CharacterImage] Original prompt: "${prompt}"`);
+        console.log(`[CharacterImage] Enhanced prompt: "${enhancedPrompt}"`);
+        console.log(`[CharacterImage] Final prompt:    "${finalPrompt}"`);
 
         try {
-            // Generate with Modal
             const result = await generateWithLora({
-                prompt: prompt.trim(),
+                prompt: finalPrompt,
                 modelUrl: character.lora_url,
                 triggerWord: triggerWord,
                 width,
@@ -112,7 +128,7 @@ export async function POST(
                 user_id: user.id,
                 type: "image",
                 feature: "character_image",
-                prompt: prompt.trim(),
+                prompt: finalPrompt,
                 result_urls: [imageUrl],
                 status: "completed",
             });
@@ -122,12 +138,12 @@ export async function POST(
                 image_url: imageUrl,
                 seed: result.seed,
                 generation_id: generationId,
+                enhanced_prompt: enhancedPrompt,
             });
 
         } catch (genError: any) {
             console.error("[CharacterImage] Generation error:", genError);
 
-            // Refund credits on failure
             await addCredits(
                 user.id,
                 CREDIT_COSTS.image_generation,

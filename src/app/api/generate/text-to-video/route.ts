@@ -9,7 +9,7 @@ import { enhanceTextToVideoPrompt } from "@/lib/services/text-to-video-prompt";
 import { nanoid } from "nanoid";
 
 const apiKey = process.env.GOOGLE_AI_API_KEY!;
-const VEO_MODEL = "veo-3.1-fast-generate-preview";
+const VEO_MODELS = ["veo-3.1-fast-generate-preview", "veo-3.0-fast-generate-001"] as const;
 
 export async function POST(request: NextRequest) {
     try {
@@ -64,27 +64,46 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Start video generation with Veo 3.1 (kicks off the job)
-        const startResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${VEO_MODEL}:predictLongRunning?key=${apiKey}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    instances: [{ prompt: finalPrompt }],
-                    parameters: {
-                        aspectRatio,
-                        durationSeconds: duration,
-                        sampleCount: 1,
-                        generateAudio: true, // Required for Veo 3 models
-                    },
-                }),
-            }
-        );
+        // Start video generation (try Veo 3.1 first, fallback to 3.0)
+        let startResponse: Response | null = null;
+        let lastError = "";
 
-        if (!startResponse.ok) {
-            const errorText = await startResponse.text();
-            console.error("Veo start error:", errorText);
+        for (const model of VEO_MODELS) {
+            startResponse = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${apiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        instances: [{ prompt: finalPrompt }],
+                        parameters: {
+                            aspectRatio,
+                            durationSeconds: duration,
+                            sampleCount: 1,
+                            generateAudio: model.startsWith("veo-3.1") || model.startsWith("veo-3.0"),
+                        },
+                    }),
+                }
+            );
+            if (startResponse.ok) break;
+            lastError = await startResponse.text();
+            console.warn(`Veo ${model} failed:`, startResponse.status, lastError);
+            if (startResponse.status === 404 || lastError.includes("not found") || lastError.includes("NotFound")) continue;
+            break; // Don't retry on auth/rate-limit/etc
+        }
+
+        if (!startResponse!.ok) {
+            const errorText = lastError;
+            console.error("Veo start error:", startResponse!.status, errorText);
+
+            let userMessage = "יצירת הוידאו נכשלה";
+            try {
+                const errJson = JSON.parse(errorText);
+                const msg = errJson.error?.message || errJson.message;
+                if (msg) userMessage = msg;
+            } catch {
+                if (errorText.length < 200) userMessage = errorText;
+            }
 
             await addCredits(
                 user.id,
@@ -93,7 +112,7 @@ export async function POST(request: NextRequest) {
             );
 
             return NextResponse.json(
-                { error: "יצירת הוידאו נכשלה" },
+                { error: userMessage },
                 { status: 400 }
             );
         }

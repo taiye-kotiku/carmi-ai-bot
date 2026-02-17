@@ -92,9 +92,9 @@ export async function POST(request: NextRequest) {
             break; // Don't retry on auth/rate-limit/etc
         }
 
-        if (!startResponse!.ok) {
+        if (!startResponse || !startResponse.ok) {
             const errorText = lastError;
-            console.error("Veo start error:", startResponse!.status, errorText);
+            console.error("Veo start error:", startResponse?.status, errorText);
 
             let userMessage = "יצירת הוידאו נכשלה";
             try {
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const operation = await startResponse.json();
+        const operation = await startResponse!.json();
         console.log("Veo operation started:", operation.name);
 
         // Create job with the operation name stored in result

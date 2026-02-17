@@ -36,5 +36,9 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
     return adminClientInstance;
 }
 
-// Export singleton for backward compatibility
-export const supabaseAdmin: SupabaseClient<Database> = getSupabaseAdmin();
+// Lazy singleton: only init when first used (avoids build-time env check)
+export const supabaseAdmin = new Proxy({} as SupabaseClient<Database>, {
+    get(_, prop) {
+        return (getSupabaseAdmin() as unknown as Record<string | symbol, unknown>)[prop];
+    },
+});

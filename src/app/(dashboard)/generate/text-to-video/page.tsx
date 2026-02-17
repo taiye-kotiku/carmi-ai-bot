@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Download, Sparkles, Video } from "lucide-react";
 import { useNotifications } from "@/lib/notifications/notification-context";
+import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export default function TextToVideoPage() {
     const [prompt, setPrompt] = useState("");
@@ -176,7 +177,7 @@ export default function TextToVideoPage() {
                         </div>
 
                         <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-700">
-                            💡 יצירת סרטון עולה 3 קרדיטים ואורכת כ-2-3 דקות
+                            💡 יצירת סרטון עולה {CREDIT_COSTS.video_generation} קרדיטים ואורכת כ-2-3 דקות
                         </div>
 
                         <Button
@@ -193,7 +194,7 @@ export default function TextToVideoPage() {
                             ) : (
                                 <>
                                     <Sparkles className="ml-2 h-5 w-5" />
-                                    צור סרטון (3 קרדיטים)
+                                    צור סרטון ({CREDIT_COSTS.video_generation} קרדיטים)
                                 </>
                             )}
                         </Button>

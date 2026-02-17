@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getPlanByVariantId } from '@/lib/lemonsqueezy/plans';
+import { getPlanByVariantId } from '@/lib/plans';
 
 interface LemonSqueezyWebhook {
     meta: {
@@ -57,12 +57,18 @@ export async function POST(request: NextRequest) {
                     break;
                 }
 
-                const order = payload.data.attributes;
-                const variantId = order.first_order_item.variant_id.toString();
+                const orderAttrs = payload.data.attributes;
+                const firstItem = orderAttrs.first_order_item;
+                const variantId = firstItem?.variant_id?.toString() || '';
                 const plan = getPlanByVariantId(variantId);
 
                 if (!plan) {
                     console.error('[Lemon Squeezy Webhook] Unknown variant ID:', variantId);
+                    break;
+                }
+
+                if (orderAttrs.status !== 'paid') {
+                    console.log('[Lemon Squeezy Webhook] Order not paid, status:', orderAttrs.status);
                     break;
                 }
 
@@ -87,6 +93,22 @@ export async function POST(request: NextRequest) {
                     throw creditError;
                 }
 
+                // Insert into payment_orders for verify endpoint (success page)
+                const orderId = String(payload.data.id);
+                const { error: orderError } = await adminClient.from('payment_orders').upsert({
+                    id: orderId,
+                    user_id: userId,
+                    plan_id: plan.id,
+                    credits: plan.credits,
+                    amount: plan.price,
+                    currency: 'USD',
+                    status: 'completed',
+                    completed_at: new Date().toISOString(),
+                }, { onConflict: 'id' });
+                if (orderError) {
+                    console.warn('[Lemon Squeezy Webhook] payment_orders upsert:', orderError);
+                }
+
                 // Record the credit transaction
                 await adminClient.from('credit_transactions').insert({
                     user_id: userId,
@@ -108,7 +130,7 @@ export async function POST(request: NextRequest) {
                         orderId: payload.data.id,
                         credits: plan.credits,
                         planId: plan.id,
-                        amount: order.total,
+                        amount: orderAttrs.total,
                     },
                 });
 

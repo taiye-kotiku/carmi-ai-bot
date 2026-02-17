@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { useCredits } from "@/hooks/use-credits";
-import { CREDIT_PLANS } from "@/lib/cardcom/plans";
+import { CREDIT_PLANS } from "@/lib/plans";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 import {
     Coins,
@@ -66,7 +66,7 @@ export default function CreditsPage() {
                 throw new Error(data.error || "Failed to create payment session");
             }
 
-            // Redirect to Cardcom payment page
+            // Redirect to Lemon Squeezy checkout
             window.location.href = data.url;
         } catch (err) {
             setError(
@@ -254,7 +254,7 @@ export default function CreditsPage() {
 
                 {/* Trust Section */}
                 <div className="mt-12 text-center text-sm text-gray-500 space-y-2">
-                    <p>🔒 תשלום מאובטח באמצעות Cardcom</p>
+                    <p>🔒 תשלום מאובטח באמצעות Lemon Squeezy (מצב בדיקה)</p>
                     <p>   • ניתן לרכוש שוב בכל עת • </p>
                     <div className="flex items-center justify-center gap-4 mt-4">
                         <Link

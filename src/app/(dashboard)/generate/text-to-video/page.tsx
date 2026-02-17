@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ export default function TextToVideoPage() {
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const isCompletedRef = useRef(false);
 
     const { addGenerationNotification } = useNotifications();
 
@@ -40,11 +41,9 @@ export default function TextToVideoPage() {
             });
 
             const text = await response.text();
-            console.log("Response text:", text);
-
-            let data;
+            let data: { jobId?: string; videoUrl?: string; error?: string };
             try {
-                data = JSON.parse(text);
+                data = text ? JSON.parse(text) : {};
             } catch (e) {
                 console.error("Failed to parse response:", text);
                 throw new Error("תגובה לא תקינה מהשרת");
@@ -54,19 +53,51 @@ export default function TextToVideoPage() {
                 throw new Error(data.error || "שגיאה ביצירת הסרטון");
             }
 
-            if (data.videoUrl) {
-                setProgress(100);
-                setResult(data.videoUrl);
-                addGenerationNotification("video");
-            } else {
-                throw new Error("לא התקבל קישור לוידאו");
+            const jobId = data.jobId;
+            if (!jobId) {
+                throw new Error(data.error || "לא התקבל מזהה עבודה");
             }
+
+            // Poll for job status (video generation takes 2-3 minutes)
+            clearInterval(progressInterval);
+            isCompletedRef.current = false;
+            const pollInterval = setInterval(async () => {
+                try {
+                    const jobRes = await fetch(`/api/jobs/${jobId}`);
+                    const job: { status?: string; progress?: number; result?: { videoUrl?: string; url?: string }; error?: string } = await jobRes.json();
+
+                    setProgress(job.progress ?? 0);
+
+                    if (job.status === "completed") {
+                        if (isCompletedRef.current) return;
+                        isCompletedRef.current = true;
+                        clearInterval(pollInterval);
+                        const videoUrl = job.result?.videoUrl || job.result?.url;
+                        if (videoUrl) {
+                            setProgress(100);
+                            setResult(videoUrl);
+                            addGenerationNotification("video");
+                        } else {
+                            setError("לא התקבל קישור לוידאו");
+                        }
+                        setIsGenerating(false);
+                    } else if (job.status === "failed") {
+                        if (isCompletedRef.current) return;
+                        isCompletedRef.current = true;
+                        clearInterval(pollInterval);
+                        setError(job.error || "שגיאה ביצירת הסרטון");
+                        setIsGenerating(false);
+                    }
+                } catch (pollErr) {
+                    console.error("Poll error:", pollErr);
+                }
+            }, 3000);
         } catch (err: any) {
             console.error("Generate error:", err);
             setError(err.message);
+            setIsGenerating(false);
         } finally {
             clearInterval(progressInterval);
-            setIsGenerating(false);
         }
     };
 

@@ -5,9 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { deductCredits, addCredits } from "@/lib/services/credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import { enhanceTextToVideoPrompt } from "@/lib/services/text-to-video-prompt";
 import { nanoid } from "nanoid";
 
 const apiKey = process.env.GOOGLE_AI_API_KEY!;
+const VEO_MODEL = "veo-3.1-fast-generate-preview";
 
 export async function POST(request: NextRequest) {
     try {
@@ -40,6 +42,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Enhance prompt for best Veo 3.1 results (wraps Hebrew/English in detailed cinematic prompt)
+        let finalPrompt: string;
+        try {
+            finalPrompt = await enhanceTextToVideoPrompt(prompt.trim());
+        } catch (err) {
+            console.error("Text-to-video prompt enhancement failed:", err);
+            finalPrompt = prompt.trim();
+        }
+
         // Deduct credits upfront
         try {
             await deductCredits(user.id, "video_generation");
@@ -53,14 +64,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Start video generation (this is fast — just kicks off the job)
+        // Start video generation with Veo 3.1 (kicks off the job)
         const startResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${VEO_MODEL}:predictLongRunning?key=${apiKey}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    instances: [{ prompt }],
+                    instances: [{ prompt: finalPrompt }],
                     parameters: {
                         aspectRatio,
                         durationSeconds: duration,
@@ -99,7 +110,7 @@ export async function POST(request: NextRequest) {
             progress: 10,
             result: {
                 operationName: operation.name,
-                prompt,
+                prompt: prompt, // original for display
                 aspectRatio,
                 duration,
             },

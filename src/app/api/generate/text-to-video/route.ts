@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
                         aspectRatio,
                         durationSeconds: duration,
                         sampleCount: 1,
+                        generateAudio: true, // Required for Veo 3 models
                     },
                 }),
             }

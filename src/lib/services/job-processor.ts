@@ -168,6 +168,7 @@ async function processImageToVideo(job: any, userId: string, jobData: any) {
                     parameters: {
                         aspectRatio: "16:9",
                         durationSeconds: 4,
+                        generateAudio: true, // Required for Veo 3 models
                     },
                 }),
             }
@@ -1054,11 +1055,58 @@ async function saveState(jobId: string, jobData: any, state: any) {
     }).eq("id", jobId);
 }
 
+function findVideoInObject(obj: any, depth = 0): string | null {
+    if (!obj || depth > 8) return null;
+    if (typeof obj !== "object") return null;
+    if (Array.isArray(obj)) {
+        for (const item of obj) {
+            const r = findVideoInObject(item, depth + 1);
+            if (r) return r;
+        }
+        return null;
+    }
+    const uri = obj.uri || obj.videoUri;
+    if (uri && typeof uri === "string" && (uri.startsWith("http") || uri.startsWith("gs:") || uri.startsWith("https://generativelanguage"))) return uri;
+    if (obj.bytesBase64Encoded && typeof obj.bytesBase64Encoded === "string") {
+        const mime = obj.mimeType || "video/mp4";
+        return `data:${mime};base64,${obj.bytesBase64Encoded}`;
+    }
+    const fileRef = obj.name;
+    if (fileRef && typeof fileRef === "string" && fileRef.includes("files/")) {
+        return `https://generativelanguage.googleapis.com/v1beta/${fileRef}?alt=media&key=${apiKey}`;
+    }
+    for (const v of Object.values(obj)) {
+        const r = findVideoInObject(v, depth + 1);
+        if (r) return r;
+    }
+    return null;
+}
+
 function extractVideoUri(pollData: any): string | null {
     const resp = pollData.response || pollData.result || {};
     const genResp = resp.generateVideoResponse || resp;
 
-    // Path 1: generateVideoResponse.generatedSamples (Gemini API)
+    // Path 1: generatedVideos (Gemini API / Veo 3.1)
+    const generatedVideos = resp.generatedVideos || genResp.generatedVideos || [];
+    if (generatedVideos.length > 0) {
+        const gv = generatedVideos[0];
+        const vid = gv.video || gv;
+        const uri = vid?.uri || vid?.videoUri || gv.uri || gv.videoUri || null;
+        if (uri) return uri;
+        // File reference: { name: "files/xxx" } - fetch via Files API
+        const fileRef = vid?.name || vid?.file?.name || gv.name;
+        if (fileRef && typeof fileRef === "string") {
+            const fileId = fileRef.startsWith("files/") ? fileRef : `files/${fileRef}`;
+            return `https://generativelanguage.googleapis.com/v1beta/${fileId}?alt=media&key=${apiKey}`;
+        }
+        const enc = vid?.encodedVideo || vid?.bytesBase64Encoded ? vid : (vid?.video || {});
+        if (enc?.bytesBase64Encoded) {
+            const mime = enc.mimeType || "video/mp4";
+            return `data:${mime};base64,${enc.bytesBase64Encoded}`;
+        }
+    }
+
+    // Path 2: generateVideoResponse.generatedSamples (Gemini API)
     const samples =
         genResp.generatedSamples ||
         genResp.videos ||
@@ -1084,15 +1132,20 @@ function extractVideoUri(pollData: any): string | null {
         }
     }
 
-    // Path 2: predictions (Vertex AI / predictLongRunning)
+    // Path 3: predictions (Vertex AI / predictLongRunning)
     const preds = resp.predictions || [];
     if (preds.length > 0) {
         const p = preds[0];
         const uri = p.videoUri || p.uri || p.video?.uri || (typeof p === "string" ? p : null);
         if (uri) return uri;
+        const enc = p.video?.encodedVideo || p.bytesBase64Encoded ? p : p.video;
+        if (enc?.bytesBase64Encoded) {
+            const mime = enc.mimeType || "video/mp4";
+            return `data:${mime};base64,${enc.bytesBase64Encoded}`;
+        }
     }
 
-    // Path 3: top-level videos
+    // Path 4: top-level videos
     const videos = resp.videos || [];
     if (videos.length > 0) {
         const v = videos[0];
@@ -1100,19 +1153,32 @@ function extractVideoUri(pollData: any): string | null {
         if (uri) return uri;
     }
 
+    // Path 5: result.generateVideoResponse (nested)
+    const nested = resp.result?.generateVideoResponse || resp.result;
+    if (nested?.generatedSamples?.length > 0) {
+        const s = nested.generatedSamples[0];
+        const uri = s.video?.uri || s.uri || s.videoUri || null;
+        if (uri) return uri;
+    }
+
+    // Path 6: Recursive search for video URI or base64 in response
+    const found = findVideoInObject(resp);
+    if (found) return found;
+
     // Debug: log structure when nothing found
     console.warn(
         "[extractVideoUri] No video found. Response keys:",
         Object.keys(resp).join(", "),
         "| Full (truncated):",
-        JSON.stringify(pollData).substring(0, 800)
+        JSON.stringify(pollData).substring(0, 1200)
     );
     return null;
 }
 
 async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, feature: string, prompt: string) {
     const isDataUrl = videoUri.startsWith("data:");
-    const dlUrl = isDataUrl ? videoUri : (videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`);
+    const hasKey = videoUri.includes("key=");
+    const dlUrl = isDataUrl ? videoUri : (hasKey ? videoUri : (videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`));
     const vidRes = await fetch(dlUrl);
     if (!vidRes.ok) {
         await failJob(job.id, userId, CREDIT_COSTS.video_generation, "Download failed", "החזר - הורדת וידאו נכשלה");

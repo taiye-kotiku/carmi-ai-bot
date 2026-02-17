@@ -7,7 +7,7 @@ export const CREDIT_COSTS = {
     caricature_generation: 5,
     character_training: 50,
     video_clips: 25,
-    video_to_images: 3,
+    video_to_images: 25,
     storage_expansion: 15,
 } as const;
 

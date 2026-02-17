@@ -17,6 +17,7 @@ import { Loader2, Image as ImageIcon, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { ExportFormats } from "@/components/export-formats";
+import { InstagramPreview } from "@/components/instagram-preview";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export default function TextToImagePage() {
@@ -291,12 +292,23 @@ export default function TextToImagePage() {
                                                 />
                                             )}
                                         </div>
+                                        {/* Instagram-style preview - how it looks in feed */}
+                                        {!resultLoadError && (
+                                            <div className="pt-4 border-t">
+                                                <p className="text-sm text-gray-500 mb-3 text-center">איך זה ייראה באינסטגרם</p>
+                                                <InstagramPreview imageUrl={result} aspectRatio={aspectRatio} />
+                                            </div>
+                                        )}
                                         <ExportFormats imageUrl={result} baseFilename="generated-image" />
                                     </div>
                                 ) : (
-                                    <div className="text-center text-gray-400">
-                                        <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                                        <p>התמונה שתיצור תופיע כאן</p>
+                                    <div className="text-center space-y-4">
+                                        <div className="text-gray-400">
+                                            <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                                            <p>התמונה שתיצור תופיע כאן</p>
+                                        </div>
+                                        <p className="text-sm text-gray-500">תצוגה מקדימה – איך זה ייראה באינסטגרם</p>
+                                        <InstagramPreview imageUrl={null} aspectRatio={aspectRatio} />
                                     </div>
                                 )}
                             </CardContent>

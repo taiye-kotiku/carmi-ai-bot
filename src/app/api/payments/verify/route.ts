@@ -36,10 +36,12 @@ export async function GET(request: NextRequest) {
             .single();
 
         if (!order) {
-            return NextResponse.json(
-                { error: "Order not found" },
-                { status: 404 }
-            );
+            // Order not yet processed (webhook may not have fired)
+            return NextResponse.json({
+                status: "pending",
+                credits: 0,
+                planId: null,
+            });
         }
 
         return NextResponse.json({

@@ -22,6 +22,7 @@ import {
     CreditCard,
     HelpCircle,
     Palette,
+    Pencil,
 } from "lucide-react";
 
 const quickLinks = [
@@ -37,6 +38,7 @@ const allLinks = [
         section: "יצירת תוכן",
         items: [
             { name: "יצירת תמונה", href: "/generate/image", icon: Image },
+            { name: "עריכת תמונה", href: "/generate/image-editing", icon: Pencil },
             { name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
             { name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
             { name: "יצירת קריקטורה", href: "/generate/cartoonize", icon: Palette },

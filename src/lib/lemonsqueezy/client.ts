@@ -68,21 +68,31 @@ export class LemonSqueezyClient {
         storeId: string;
         variantId: string;
         customPrice?: number;
+        productOptions?: {
+            redirect_url?: string;
+        };
         checkoutData?: {
             email?: string;
             name?: string;
             custom?: Record<string, any>;
         };
+        testMode?: boolean;
     }): Promise<LemonSqueezyResponse<LemonSqueezyCheckout>> {
+        const attributes: Record<string, any> = {
+            checkout_data: data.checkoutData,
+        };
+        if (data.customPrice != null) attributes.custom_price = data.customPrice;
+        if (data.productOptions?.redirect_url) {
+            attributes.product_options = { redirect_url: data.productOptions.redirect_url };
+        }
+        if (data.testMode === true) attributes.test_mode = true;
+
         return this.request<LemonSqueezyCheckout>('/checkouts', {
             method: 'POST',
             body: JSON.stringify({
                 data: {
                     type: 'checkouts',
-                    attributes: {
-                        custom_price: data.customPrice,
-                        checkout_data: data.checkoutData,
-                    },
+                    attributes,
                     relationships: {
                         store: {
                             data: {

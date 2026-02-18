@@ -13,41 +13,32 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Download, Image as ImageIcon, Sparkles, Upload, X } from "lucide-react";
+import { Loader2, Image as ImageIcon, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { ExportFormats } from "@/components/export-formats";
+import { InstagramPreview } from "@/components/instagram-preview";
 import { CREDIT_COSTS } from "@/lib/config/credits";
 
 export default function TextToImagePage() {
     const [prompt, setPrompt] = useState("");
     const [style, setStyle] = useState("realistic");
     const [aspectRatio, setAspectRatio] = useState("1:1");
-    const [uploadedImage, setUploadedImage] = useState<File | null>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [uploadedImage2, setUploadedImage2] = useState<File | null>(null);
-    const [previewUrl2, setPreviewUrl2] = useState<string | null>(null);
-
     const [isGenerating, setIsGenerating] = useState(false);
     const [progress, setProgress] = useState(0);
     const [statusText, setStatusText] = useState("");
     const [result, setResult] = useState<string | null>(null);
     const [resultLoadError, setResultLoadError] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const fileInputRef2 = useRef<HTMLInputElement>(null);
     const pollRef = useRef<NodeJS.Timeout | null>(null);
     const isCompletedRef = useRef(false);
 
     const { addGenerationNotification } = useNotifications();
 
-    // Styles configuration
+    // Styles configuration (text-to-image only)
     const styles = [
         { value: "realistic", label: "פוטוריאליסטי (מציאותי)" },
         { value: "artistic", label: "אמנותי (ציור)" },
         { value: "cartoon", label: "קריקטורה / אנימציה" },
-        { value: "minimal", label: "מינימליסטי (נקי)" },
-        { value: "celebrity", label: "עם סלבריטאי (לפי שם או תמונה)" },
-        { value: "combine_images", label: "שילוב 2 תמונות (אדם + דמות)" },
     ];
 
     const aspectRatios = [
@@ -117,51 +108,9 @@ export default function TextToImagePage() {
         }, 2000); // Check every 2 seconds
     }, [stopPolling, addGenerationNotification]);
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error("הקובץ גדול מדי (מקסימום 5MB)");
-                return;
-            }
-            setUploadedImage(file);
-            setPreviewUrl(URL.createObjectURL(file));
-        }
-    };
-
-    const clearImage = () => {
-        setUploadedImage(null);
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-    };
-
-    const handleImageUpload2 = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error("הקובץ גדול מדי (מקסימום 5MB)");
-                return;
-            }
-            setUploadedImage2(file);
-            setPreviewUrl2(URL.createObjectURL(file));
-        }
-    };
-
-    const clearImage2 = () => {
-        setUploadedImage2(null);
-        if (previewUrl2) URL.revokeObjectURL(previewUrl2);
-        setPreviewUrl2(null);
-        if (fileInputRef2.current) fileInputRef2.current.value = "";
-    };
-
     const handleGenerate = async () => {
         if (!prompt.trim()) {
             toast.error("נא להזין תיאור לתמונה");
-            return;
-        }
-        if (style === "combine_images" && (!uploadedImage || !uploadedImage2)) {
-            toast.error("סגנון 'שילוב 2 תמונות' דורש העלאת תמונה של אדם ותמונה של דמות");
             return;
         }
 
@@ -172,24 +121,12 @@ export default function TextToImagePage() {
         setStatusText("שולח בקשה...");
 
         try {
-            // Prepare payload
-            let body: any = {
+            // Prepare payload (text-to-image only - no edit/combine)
+            const body: any = {
                 prompt,
                 style,
                 aspectRatio,
             };
-
-            // Convert images to base64 if exist
-            if (uploadedImage) {
-                const buffer = await uploadedImage.arrayBuffer();
-                body.imageBase64 = Buffer.from(buffer).toString("base64");
-                body.imageMimeType = uploadedImage.type;
-            }
-            if (uploadedImage2) {
-                const buffer = await uploadedImage2.arrayBuffer();
-                body.imageBase642 = Buffer.from(buffer).toString("base64");
-                body.imageMimeType2 = uploadedImage2.type;
-            }
 
             const response = await fetch("/api/generate/image", {
                 method: "POST",
@@ -250,13 +187,7 @@ export default function TextToImagePage() {
                                 <div className="space-y-2">
                                     <Label>תיאור התמונה (Prompt)</Label>
                                     <Textarea
-                                        placeholder={
-                                            style === "celebrity"
-                                                ? "לדוגמה: בראד פיט בחוף / עם טיילור סוויפט ברד קארפט..."
-                                                : style === "combine_images"
-                                                  ? "לדוגמה: שניהם בטקס אוסקר / מפגש בקפה..."
-                                                  : "לדוגמה: חתול ג'ינג'י חמוד עם משקפי שמש יושב על חוף הים בשקיעה..."
-                                        }
+                                        placeholder="לדוגמה: חתול ג'ינג'י חמוד עם משקפי שמש יושב על חוף הים בשקיעה..."
                                         value={prompt}
                                         onChange={(e) => setPrompt(e.target.value)}
                                         rows={4}
@@ -264,101 +195,10 @@ export default function TextToImagePage() {
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label>
-                                        {style === "combine_images"
-                                            ? "תמונת אדם (תמונה 1)"
-                                            : "תמונת מקור (אופציונלי - לעריכה)"}
-                                    </Label>
-                                    <div className="flex items-center gap-4">
-                                        <input
-                                            type="file"
-                                            ref={fileInputRef}
-                                            className="hidden"
-                                            accept="image/*"
-                                            onChange={handleImageUpload}
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={isGenerating}
-                                            className="w-full"
-                                        >
-                                            <Upload className="ml-2 h-4 w-4" />
-                                            {style === "combine_images" ? "העלה תמונת אדם" : "העלה תמונה"}
-                                        </Button>
-                                    </div>
-                                    {previewUrl && (
-                                        <div className="relative w-24 h-24 mt-2">
-                                            <img
-                                                src={previewUrl}
-                                                alt="Preview"
-                                                className="w-full h-full object-cover rounded-md border"
-                                            />
-                                            <button
-                                                onClick={clearImage}
-                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"
-                                                disabled={isGenerating}
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {style === "combine_images" && (
-                                    <div className="space-y-2">
-                                        <Label>תמונת דמות/סלבריטאי (תמונה 2)</Label>
-                                        <div className="flex items-center gap-4">
-                                            <input
-                                                type="file"
-                                                ref={fileInputRef2}
-                                                className="hidden"
-                                                accept="image/*"
-                                                onChange={handleImageUpload2}
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => fileInputRef2.current?.click()}
-                                                disabled={isGenerating}
-                                                className="w-full"
-                                            >
-                                                <Upload className="ml-2 h-4 w-4" />
-                                                העלה תמונת דמות
-                                            </Button>
-                                        </div>
-                                        {previewUrl2 && (
-                                            <div className="relative w-24 h-24 mt-2">
-                                                <img
-                                                    src={previewUrl2}
-                                                    alt="Preview 2"
-                                                    className="w-full h-full object-cover rounded-md border"
-                                                />
-                                                <button
-                                                    onClick={clearImage2}
-                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"
-                                                    disabled={isGenerating}
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label>סגנון</Label>
-                                        <Select
-                                            value={style}
-                                            onValueChange={(v) => {
-                                                setStyle(v);
-                                                if (v !== "combine_images") clearImage2();
-                                            }}
-                                            disabled={isGenerating}
-                                        >
+                                        <Select value={style} onValueChange={setStyle} disabled={isGenerating}>
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -452,12 +292,23 @@ export default function TextToImagePage() {
                                                 />
                                             )}
                                         </div>
+                                        {/* Instagram-style preview - how it looks in feed */}
+                                        {!resultLoadError && (
+                                            <div className="pt-4 border-t">
+                                                <p className="text-sm text-gray-500 mb-3 text-center">איך זה ייראה באינסטגרם</p>
+                                                <InstagramPreview imageUrl={result} aspectRatio={aspectRatio} />
+                                            </div>
+                                        )}
                                         <ExportFormats imageUrl={result} baseFilename="generated-image" />
                                     </div>
                                 ) : (
-                                    <div className="text-center text-gray-400">
-                                        <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                                        <p>התמונה שתיצור תופיע כאן</p>
+                                    <div className="text-center space-y-4">
+                                        <div className="text-gray-400">
+                                            <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                                            <p>התמונה שתיצור תופיע כאן</p>
+                                        </div>
+                                        <p className="text-sm text-gray-500">תצוגה מקדימה – איך זה ייראה באינסטגרם</p>
+                                        <InstagramPreview imageUrl={null} aspectRatio={aspectRatio} />
                                     </div>
                                 )}
                             </CardContent>

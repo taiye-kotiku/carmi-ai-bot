@@ -135,7 +135,7 @@ export default function TermsPage() {
 
               <h3 className="text-xl font-medium mt-6 mb-3">6.2 רכישת קרדיטים</h3>
               <ul className="list-disc pr-6 space-y-2">
-                <li>ניתן לרכוש חבילות קרדיטים באמצעות כרטיס אשראי דרך מערכת התשלומים המאובטחת שלנו (Cardcom).</li>
+                <li>ניתן לרכוש חבילות קרדיטים באמצעות כרטיס אשראי דרך מערכת התשלומים המאובטחת שלנו (Lemon Squeezy).</li>
                 <li>המחירים מוצגים בשקלים חדשים (₪) וכוללים מע&quot;מ כנדרש על פי חוק.</li>
                 <li>החיוב מתבצע באופן מיידי עם אישור העסקה.</li>
                 <li>הקרדיטים מתווספים לחשבון באופן אוטומטי לאחר אישור התשלום.</li>
@@ -208,7 +208,7 @@ export default function TermsPage() {
                   שלנו, המהווה חלק בלתי נפרד מתנאי שימוש אלה.
                 </li>
                 <li>אנו משתמשים באמצעי אבטחה מתקדמים להגנה על המידע שלך.</li>
-                <li>תשלומים מעובדים באמצעות Cardcom – מערכת תשלומים מאובטחת בתקן PCI DSS. איננו שומרים פרטי כרטיסי אשראי.</li>
+                <li>תשלומים מעובדים באמצעות Lemon Squeezy – מערכת תשלומים מאובטחת. איננו שומרים פרטי כרטיסי אשראי.</li>
                 <li>המידע מאוחסן בשרתי ענן מאובטחים (Supabase/AWS).</li>
               </ul>
             </section>
@@ -279,7 +279,7 @@ export default function TermsPage() {
               <p>הפלטפורמה משתמשת בשירותי צד שלישי, לרבות:</p>
               <ul className="list-disc pr-6 space-y-2 mt-3">
                 <li><strong>מודלי AI</strong> – לצורך יצירת תוכן (Fal.ai, Google Gemini ועוד)</li>
-                <li><strong>Cardcom</strong> – לעיבוד תשלומים מאובטח</li>
+                <li><strong>Lemon Squeezy</strong> – לעיבוד תשלומים מאובטח</li>
                 <li><strong>Supabase</strong> – לאחסון נתונים ואימות משתמשים</li>
                 <li><strong>Vercel</strong> – לאירוח הפלטפורמה</li>
               </ul>

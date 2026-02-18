@@ -95,9 +95,8 @@ export async function GET(
         } else if (videoData?.uri) {
             console.log("📥 Raw URI from Google:", videoData.uri);
 
-            // Build the authenticated download URL
-            const parsedUri = new URL(videoData.uri);
-            const downloadUrl = `https://generativelanguage.googleapis.com/download${parsedUri.pathname}:download?alt=media&key=${apiKey}`;
+            // URI already contains :download?alt=media — just append the API key
+            const downloadUrl = `${videoData.uri}&key=${apiKey}`;
             console.log("📥 Download URL:", downloadUrl);
 
             const dlRes = await fetch(downloadUrl);

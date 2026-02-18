@@ -35,12 +35,11 @@ export async function GET(
             return NextResponse.json({ error: "Job not found" }, { status: 404 });
         }
 
-        // Already in a terminal state — return immediately, no need to call Google
         if (job.status === "completed" || job.status === "failed") {
             return NextResponse.json(job);
         }
 
-        const operationName = (job.result as any)?.operationName;
+        const operationName = (job.result as { operationName?: string })?.operationName;
         if (!operationName) {
             return NextResponse.json(job);
         }
@@ -52,13 +51,12 @@ export async function GET(
 
         if (!opRes.ok) {
             console.error("Operation poll error:", await opRes.text());
-            // Don't fail — just return current DB state and let client retry
             return NextResponse.json(job);
         }
 
         const operation = await opRes.json();
 
-        // Still running — nudge progress and return
+        // Still running — nudge progress
         if (!operation.done) {
             const newProgress = Math.min((job.progress ?? 10) + 5, 90);
             await supabaseAdmin
@@ -76,61 +74,67 @@ export async function GET(
                 CREDIT_COSTS.video_generation,
                 "החזר - יצירת וידאו נכשלה"
             );
-
-            const failedJob = {
-                ...job,
-                status: "failed",
-                progress: 0,
-                error: operation.error.message || "יצירת הוידאו נכשלה",
-            };
-
             await supabaseAdmin
                 .from("jobs")
                 .update({
-                    status: failedJob.status,
-                    progress: failedJob.progress,
-                    error: failedJob.error,
+                    status: "failed",
+                    progress: 0,
+                    error: operation.error.message || "יצירת הוידאו נכשלה",
                 })
                 .eq("id", job.id);
 
-            return NextResponse.json(failedJob);
+            return NextResponse.json({
+                ...job,
+                status: "failed",
+                error: operation.error.message || "יצירת הוידאו נכשלה",
+            });
         }
 
-        // ✅ Operation succeeded — extract the video
         const samples =
             operation.response?.generateVideoResponse?.generatedSamples ?? [];
 
         if (samples.length === 0) {
-            // Response not fully populated yet — tell client to retry
             return NextResponse.json(job);
         }
 
         const videoData = samples[0]?.video;
         if (!videoData) return NextResponse.json(job);
 
-        // Build a buffer from either base64 payload or a downloadable URI
+        // ✅ Build the correct authenticated download URL
+        // Google URI:  https://generativelanguage.googleapis.com/v1beta/files/FILE_ID
+        // Download URL: https://generativelanguage.googleapis.com/download/v1beta/files/FILE_ID:download?alt=media&key=API_KEY
         let videoBuffer: Buffer | null = null;
 
         if (videoData.bytesBase64Encoded) {
             videoBuffer = Buffer.from(videoData.bytesBase64Encoded, "base64");
         } else if (videoData.uri) {
-            // Google Files API URI — append key + alt=media to download the raw bytes
-            const downloadUrl = videoData.uri.includes("?")
-                ? `${videoData.uri}&alt=media&key=${apiKey}`
-                : `${videoData.uri}?alt=media&key=${apiKey}`;
+            try {
+                const parsedUri = new URL(videoData.uri);
 
-            const dlRes = await fetch(downloadUrl);
-            if (dlRes.ok) {
-                videoBuffer = Buffer.from(await dlRes.arrayBuffer());
-            } else {
-                console.error("Video download error:", await dlRes.text());
+                // Insert /download before /v1beta and append :download
+                const downloadUrl =
+                    `https://generativelanguage.googleapis.com/download${parsedUri.pathname}:download?alt=media&key=${apiKey}`;
+
+                console.log("Downloading video from:", downloadUrl);
+
+                const dlRes = await fetch(downloadUrl);
+
+                if (dlRes.ok) {
+                    videoBuffer = Buffer.from(await dlRes.arrayBuffer());
+                    console.log("Video downloaded, size:", videoBuffer.length);
+                } else {
+                    const errText = await dlRes.text();
+                    console.error("Video download failed:", dlRes.status, errText);
+                }
+            } catch (e) {
+                console.error("Download URL construction failed:", e);
             }
         }
 
+        // Upload to Supabase storage so it's permanently accessible
         let finalVideoUrl: string | null = null;
 
-        // Upload to Supabase storage for permanent hosting
-        if (videoBuffer) {
+        if (videoBuffer && videoBuffer.length > 0) {
             const fileName = `videos/${user.id}/${job.id}.mp4`;
             const { error: uploadError } = await supabaseAdmin.storage
                 .from("generated-videos")
@@ -147,27 +151,25 @@ export async function GET(
                     .getPublicUrl(fileName);
 
                 finalVideoUrl = publicUrl;
+                console.log("Video uploaded to Supabase:", finalVideoUrl);
             } else {
                 console.error("Supabase upload error:", uploadError);
             }
         }
 
-        // Fallback: serve the raw Google URI if upload failed
-        if (!finalVideoUrl && videoData.uri) {
-            finalVideoUrl = videoData.uri;
-        }
-
-        // Nothing worked — mark failed and refund
+        // If everything failed, refund and mark failed
         if (!finalVideoUrl) {
             await addCredits(
                 user.id,
                 CREDIT_COSTS.video_generation,
                 "החזר - לא ניתן להוריד את הוידאו"
             );
-
             await supabaseAdmin
                 .from("jobs")
-                .update({ status: "failed", error: "לא ניתן להוריד את הוידאו" })
+                .update({
+                    status: "failed",
+                    error: "לא ניתן להוריד את הוידאו",
+                })
                 .eq("id", job.id);
 
             return NextResponse.json({
@@ -181,7 +183,11 @@ export async function GET(
 
         await supabaseAdmin
             .from("jobs")
-            .update({ status: "completed", progress: 100, result: updatedResult })
+            .update({
+                status: "completed",
+                progress: 100,
+                result: updatedResult,
+            })
             .eq("id", job.id);
 
         return NextResponse.json({

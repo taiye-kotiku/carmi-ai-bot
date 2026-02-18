@@ -56,12 +56,14 @@ export async function POST(request: NextRequest) {
             .single();
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        const redirectUrl = `${appUrl}/credits/success?order=[order_id]`;
+
+        // ✅ FIXED: Clean URL — LS appends ?order_id=REAL_ID automatically
+        const redirectUrl = `${appUrl}/credits/success`;
 
         const response = await lemonSqueezy.createCheckout({
             storeId,
             variantId: plan.variantId,
-            customPrice: Math.round(plan.price * 100), // cents
+            customPrice: Math.round(plan.price * 100),
             productOptions: {
                 redirect_url: redirectUrl,
             },
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
                     user_id: user.id,
                 },
             },
-            testMode: true, // Test mode for payment testing
+            testMode: true,
         });
 
         const checkoutUrl = response.data.attributes.url;
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             url: checkoutUrl,
-            orderId: null, // Order ID comes from redirect after payment
+            orderId: null,
         });
     } catch (error) {
         console.error("Payment session creation failed:", error);

@@ -16,9 +16,7 @@ export async function GET(
 
     try {
         const supabase = await createClient();
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,167 +38,117 @@ export async function GET(
         }
 
         const operationName = (job.result as { operationName?: string })?.operationName;
-        if (!operationName) {
-            return NextResponse.json(job);
-        }
+        if (!operationName) return NextResponse.json(job);
 
-        // Poll Google's long-running operation
         const opRes = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
         );
 
         if (!opRes.ok) {
-            console.error("Operation poll error:", await opRes.text());
+            const errText = await opRes.text();
+            console.error("❌ Operation poll failed:", opRes.status, errText);
             return NextResponse.json(job);
         }
 
         const operation = await opRes.json();
 
-        // Still running — nudge progress
+        // ✅ LOG THE FULL RAW RESPONSE — paste this in your Vercel/server logs
+        console.log("📦 FULL OPERATION RESPONSE:", JSON.stringify(operation, null, 2));
+
         if (!operation.done) {
             const newProgress = Math.min((job.progress ?? 10) + 5, 90);
-            await supabaseAdmin
-                .from("jobs")
-                .update({ progress: newProgress })
-                .eq("id", job.id);
-
+            await supabaseAdmin.from("jobs").update({ progress: newProgress }).eq("id", job.id);
             return NextResponse.json({ ...job, progress: newProgress });
         }
 
-        // Google reported an error
         if (operation.error) {
-            await addCredits(
-                user.id,
-                CREDIT_COSTS.video_generation,
-                "החזר - יצירת וידאו נכשלה"
-            );
-            await supabaseAdmin
-                .from("jobs")
-                .update({
-                    status: "failed",
-                    progress: 0,
-                    error: operation.error.message || "יצירת הוידאו נכשלה",
-                })
-                .eq("id", job.id);
-
-            return NextResponse.json({
-                ...job,
-                status: "failed",
-                error: operation.error.message || "יצירת הוידאו נכשלה",
-            });
+            console.error("❌ Google operation error:", operation.error);
+            await addCredits(user.id, CREDIT_COSTS.video_generation, "החזר - יצירת וידאו נכשלה");
+            await supabaseAdmin.from("jobs").update({ status: "failed", progress: 0, error: operation.error.message }).eq("id", job.id);
+            return NextResponse.json({ ...job, status: "failed", error: operation.error.message });
         }
 
+        // Try every known path Google might use
         const samples =
-            operation.response?.generateVideoResponse?.generatedSamples ?? [];
+            operation.response?.generateVideoResponse?.generatedSamples ??
+            operation.response?.generatedSamples ??
+            operation.response?.videos ??
+            [];
+
+        console.log("🎬 Samples found:", samples.length);
+        console.log("🎬 Samples data:", JSON.stringify(samples, null, 2));
 
         if (samples.length === 0) {
+            console.error("❌ No samples in response");
             return NextResponse.json(job);
         }
 
-        const videoData = samples[0]?.video;
-        if (!videoData) return NextResponse.json(job);
+        const videoData = samples[0]?.video ?? samples[0];
+        console.log("🎬 Video data:", JSON.stringify(videoData, null, 2));
 
-        // ✅ Build the correct authenticated download URL
-        // Google URI:  https://generativelanguage.googleapis.com/v1beta/files/FILE_ID
-        // Download URL: https://generativelanguage.googleapis.com/download/v1beta/files/FILE_ID:download?alt=media&key=API_KEY
         let videoBuffer: Buffer | null = null;
 
-        if (videoData.bytesBase64Encoded) {
+        if (videoData?.bytesBase64Encoded) {
+            console.log("📥 Using base64 data");
             videoBuffer = Buffer.from(videoData.bytesBase64Encoded, "base64");
-        } else if (videoData.uri) {
-            try {
-                const parsedUri = new URL(videoData.uri);
 
-                // Insert /download before /v1beta and append :download
-                const downloadUrl =
-                    `https://generativelanguage.googleapis.com/download${parsedUri.pathname}:download?alt=media&key=${apiKey}`;
+        } else if (videoData?.uri) {
+            console.log("📥 Raw URI from Google:", videoData.uri);
 
-                console.log("Downloading video from:", downloadUrl);
+            // Build the authenticated download URL
+            const parsedUri = new URL(videoData.uri);
+            const downloadUrl = `https://generativelanguage.googleapis.com/download${parsedUri.pathname}:download?alt=media&key=${apiKey}`;
+            console.log("📥 Download URL:", downloadUrl);
 
-                const dlRes = await fetch(downloadUrl);
+            const dlRes = await fetch(downloadUrl);
+            console.log("📥 Download status:", dlRes.status, dlRes.statusText);
 
-                if (dlRes.ok) {
-                    videoBuffer = Buffer.from(await dlRes.arrayBuffer());
-                    console.log("Video downloaded, size:", videoBuffer.length);
-                } else {
-                    const errText = await dlRes.text();
-                    console.error("Video download failed:", dlRes.status, errText);
-                }
-            } catch (e) {
-                console.error("Download URL construction failed:", e);
+            if (dlRes.ok) {
+                videoBuffer = Buffer.from(await dlRes.arrayBuffer());
+                console.log("✅ Buffer size:", videoBuffer.length);
+            } else {
+                const errBody = await dlRes.text();
+                console.error("❌ Download failed:", dlRes.status, errBody);
             }
+        } else {
+            console.error("❌ No uri or bytesBase64Encoded in videoData");
         }
 
-        // Upload to Supabase storage so it's permanently accessible
         let finalVideoUrl: string | null = null;
 
         if (videoBuffer && videoBuffer.length > 0) {
             const fileName = `videos/${user.id}/${job.id}.mp4`;
+            console.log("⬆️ Uploading to Supabase storage:", fileName);
+
             const { error: uploadError } = await supabaseAdmin.storage
                 .from("generated-videos")
-                .upload(fileName, videoBuffer, {
-                    contentType: "video/mp4",
-                    upsert: true,
-                });
+                .upload(fileName, videoBuffer, { contentType: "video/mp4", upsert: true });
 
             if (!uploadError) {
-                const {
-                    data: { publicUrl },
-                } = supabaseAdmin.storage
+                const { data: { publicUrl } } = supabaseAdmin.storage
                     .from("generated-videos")
                     .getPublicUrl(fileName);
-
                 finalVideoUrl = publicUrl;
-                console.log("Video uploaded to Supabase:", finalVideoUrl);
+                console.log("✅ Uploaded to Supabase:", finalVideoUrl);
             } else {
-                console.error("Supabase upload error:", uploadError);
+                console.error("❌ Supabase upload error:", JSON.stringify(uploadError));
             }
+        } else {
+            console.error("❌ videoBuffer is empty or null");
         }
 
-        // If everything failed, refund and mark failed
         if (!finalVideoUrl) {
-            await addCredits(
-                user.id,
-                CREDIT_COSTS.video_generation,
-                "החזר - לא ניתן להוריד את הוידאו"
-            );
-            await supabaseAdmin
-                .from("jobs")
-                .update({
-                    status: "failed",
-                    error: "לא ניתן להוריד את הוידאו",
-                })
-                .eq("id", job.id);
-
-            return NextResponse.json({
-                ...job,
-                status: "failed",
-                error: "לא ניתן להוריד את הוידאו",
-            });
+            await addCredits(user.id, CREDIT_COSTS.video_generation, "החזר - לא ניתן להוריד את הוידאו");
+            await supabaseAdmin.from("jobs").update({ status: "failed", error: "לא ניתן להוריד את הוידאו" }).eq("id", job.id);
+            return NextResponse.json({ ...job, status: "failed", error: "לא ניתן להוריד את הוידאו" });
         }
 
         const updatedResult = { ...(job.result as Record<string, any>), videoUrl: finalVideoUrl };
+        await supabaseAdmin.from("jobs").update({ status: "completed", progress: 100, result: updatedResult }).eq("id", job.id);
+        return NextResponse.json({ ...job, status: "completed", progress: 100, result: updatedResult });
 
-        await supabaseAdmin
-            .from("jobs")
-            .update({
-                status: "completed",
-                progress: 100,
-                result: updatedResult,
-            })
-            .eq("id", job.id);
-
-        return NextResponse.json({
-            ...job,
-            status: "completed",
-            progress: 100,
-            result: updatedResult,
-        });
     } catch (error: any) {
-        console.error("Job GET error:", error);
-        return NextResponse.json(
-            { error: error.message || "שגיאה בבדיקת סטטוס" },
-            { status: 500 }
-        );
+        console.error("❌ Job GET error:", error);
+        return NextResponse.json({ error: error.message || "שגיאה בבדיקת סטטוס" }, { status: 500 });
     }
 }

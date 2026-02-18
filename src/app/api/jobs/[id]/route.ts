@@ -10,8 +10,10 @@ const apiKey = process.env.GOOGLE_AI_API_KEY!;
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
+
     try {
         const supabase = await createClient();
         const {
@@ -25,7 +27,7 @@ export async function GET(
         const { data: job, error: jobError } = await supabaseAdmin
             .from("jobs")
             .select("*")
-            .eq("id", params.id)
+            .eq("id", id)
             .eq("user_id", user.id)
             .single();
 

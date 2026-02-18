@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
         }
 
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
             return NextResponse.json(
@@ -40,20 +42,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Deduct credits upfront
         try {
             await deductCredits(user.id, "video_generation");
         } catch (err) {
             return NextResponse.json(
-                {
-                    error: (err as Error).message,
-                    code: "INSUFFICIENT_CREDITS",
-                },
+                { error: (err as Error).message, code: "INSUFFICIENT_CREDITS" },
                 { status: 402 }
             );
         }
 
-        // Start video generation (this is fast — just kicks off the job)
         const startResponse = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-fast-generate-001:predictLongRunning?key=${apiKey}`,
             {
@@ -65,6 +62,7 @@ export async function POST(request: NextRequest) {
                         aspectRatio,
                         durationSeconds: duration,
                         sampleCount: 1,
+                        // ✅ DO NOT include generateAudio — not supported by veo-3.0-fast-generate-001
                     },
                 }),
             }
@@ -89,7 +87,6 @@ export async function POST(request: NextRequest) {
         const operation = await startResponse.json();
         console.log("Veo operation started:", operation.name);
 
-        // Create job with the operation name stored in result
         const jobId = nanoid();
         await supabaseAdmin.from("jobs").insert({
             id: jobId,
@@ -105,14 +102,15 @@ export async function POST(request: NextRequest) {
             },
         });
 
-        // Return immediately — client will poll /api/jobs/[id]
         return NextResponse.json({ jobId });
     } catch (error: any) {
         console.error("Video start error:", error);
 
         try {
             const supabase = await createClient();
-            const { data: { user } } = await supabase.auth.getUser();
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
             if (user) {
                 await addCredits(
                     user.id,

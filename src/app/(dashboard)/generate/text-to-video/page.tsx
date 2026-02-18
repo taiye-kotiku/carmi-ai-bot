@@ -8,82 +8,109 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Download, Sparkles, Video } from "lucide-react";
 import { useNotifications } from "@/lib/notifications/notification-context";
 
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLL_ATTEMPTS = 100; // ~5 minutes total
+
 export default function TextToVideoPage() {
     const [prompt, setPrompt] = useState("");
     const [duration, setDuration] = useState<4 | 8>(8);
     const [aspectRatio, setAspectRatio] = useState("16:9");
     const [isGenerating, setIsGenerating] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [statusText, setStatusText] = useState("");
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const { addGenerationNotification } = useNotifications();
 
+    // Polls /api/jobs/[id] until the job is done, then returns the video URL
+    const pollJob = async (jobId: string): Promise<string> => {
+        for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+            await new Promise((res) => setTimeout(res, POLL_INTERVAL_MS));
+
+            const res = await fetch(`/api/jobs/${jobId}`);
+            const job = await res.json();
+
+            if (!res.ok) throw new Error(job.error || "שגיאה בבדיקת סטטוס");
+
+            setProgress(job.progress ?? 0);
+
+            if (job.status === "completed") {
+                const videoUrl = job.result?.videoUrl;
+                if (!videoUrl) throw new Error("הסרטון הושלם אך לא התקבל קישור");
+                return videoUrl;
+            }
+
+            if (job.status === "failed") {
+                throw new Error(job.error || "יצירת הסרטון נכשלה");
+            }
+
+            // Still processing
+            const elapsed = Math.floor(((attempt + 1) * POLL_INTERVAL_MS) / 1000);
+            setStatusText(`מעבד... ${elapsed} שניות`);
+        }
+
+        throw new Error("יצירת הסרטון לקחה יותר מדי זמן");
+    };
+
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
 
         setIsGenerating(true);
-        setProgress(0);
+        setProgress(5);
+        setStatusText("שולח בקשה...");
         setError(null);
         setResult(null);
 
-        const progressInterval = setInterval(() => {
-            setProgress((prev) => Math.min(prev + 1, 95));
-        }, 2000);
-
         try {
+            // Step 1: Kick off the job
             const response = await fetch("/api/generate/text-to-video", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ prompt, duration, aspectRatio }),
             });
 
-            const text = await response.text();
-            console.log("Response text:", text);
-
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                console.error("Failed to parse response:", text);
-                throw new Error("תגובה לא תקינה מהשרת");
-            }
+            const data = await response.json();
 
             if (!response.ok) {
                 throw new Error(data.error || "שגיאה ביצירת הסרטון");
             }
 
-            if (data.videoUrl) {
-                setProgress(100);
-                setResult(data.videoUrl);
-                addGenerationNotification("video");
-            } else {
-                throw new Error("לא התקבל קישור לוידאו");
-            }
+            const { jobId } = data;
+            if (!jobId) throw new Error("לא התקבל מזהה עבודה מהשרת");
+
+            setProgress(10);
+            setStatusText("יצירת הסרטון החלה, ממתין לתוצאות...");
+
+            // Step 2: Poll until done
+            const videoUrl = await pollJob(jobId);
+
+            setProgress(100);
+            setStatusText("הסרטון מוכן!");
+            setResult(videoUrl);
+            addGenerationNotification("video");
         } catch (err: any) {
             console.error("Generate error:", err);
             setError(err.message);
         } finally {
-            clearInterval(progressInterval);
             setIsGenerating(false);
         }
     };
 
     const handleDownload = async () => {
         if (!result) return;
-
         try {
             const response = await fetch(result);
             const blob = await response.blob();
-            const downloadUrl = URL.createObjectURL(blob);
+            const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = downloadUrl;
+            a.href = url;
             a.download = `video-${Date.now()}.mp4`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(downloadUrl);
-        } catch (err) {
+            URL.revokeObjectURL(url);
+        } catch {
             window.open(result, "_blank");
         }
     };
@@ -115,63 +142,52 @@ export default function TextToVideoPage() {
                             disabled={isGenerating}
                         />
 
+                        {/* Duration selector */}
                         <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700">
                                 משך הסרטון
                             </label>
                             <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setDuration(4)}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 4
+                                {([4, 8] as const).map((d) => (
+                                    <button
+                                        key={d}
+                                        type="button"
+                                        onClick={() => setDuration(d)}
+                                        disabled={isGenerating}
+                                        className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === d
                                             ? "bg-blue-500 border-blue-500 text-white"
                                             : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    4 שניות
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setDuration(8)}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${duration === 8
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    8 שניות
-                                </button>
+                                            }`}
+                                    >
+                                        {d} שניות
+                                    </button>
+                                ))}
                             </div>
                         </div>
 
+                        {/* Aspect ratio selector */}
                         <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700">
                                 יחס תצוגה
                             </label>
                             <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setAspectRatio("16:9")}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "16:9"
+                                {[
+                                    { value: "16:9", label: "16:9 (רוחבי)" },
+                                    { value: "9:16", label: "9:16 (אנכי)" },
+                                ].map(({ value, label }) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => setAspectRatio(value)}
+                                        disabled={isGenerating}
+                                        className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === value
                                             ? "bg-blue-500 border-blue-500 text-white"
                                             : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    16:9 (רוחבי)
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setAspectRatio("9:16")}
-                                    disabled={isGenerating}
-                                    className={`flex-1 py-3 rounded-lg border-2 font-medium transition-all ${aspectRatio === "9:16"
-                                            ? "bg-blue-500 border-blue-500 text-white"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-blue-300"
-                                        }`}
-                                >
-                                    9:16 (אנכי)
-                                </button>
+                                            }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
                             </div>
                         </div>
 
@@ -202,7 +218,7 @@ export default function TextToVideoPage() {
                             <div className="space-y-2">
                                 <Progress value={progress} />
                                 <p className="text-sm text-center text-gray-500">
-                                    {progress}% הושלם - יצירת סרטון לוקחת זמן, אנא המתן
+                                    {statusText || `${progress}% הושלם`}
                                 </p>
                             </div>
                         )}

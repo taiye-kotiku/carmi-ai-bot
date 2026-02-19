@@ -70,3 +70,6 @@ export function getPlanById(id: string): Plan | undefined {
 export function getActivePlans(): Plan[] {
     return plans.filter((plan) => !plan.isFree);
 }
+
+// Alias for backward compatibility
+export const CREDIT_PLANS = getActivePlans();

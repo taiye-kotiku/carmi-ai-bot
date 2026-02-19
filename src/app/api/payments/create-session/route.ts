@@ -1,5 +1,4 @@
 // src/app/api/payments/create-session/route.ts
-// Lemon Squeezy checkout (test mode for payment testing)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -20,23 +19,18 @@ export async function POST(request: NextRequest) {
         const { planId } = await request.json();
 
         if (!planId) {
-            return NextResponse.json(
-                { error: "Missing planId" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Missing planId" }, { status: 400 });
         }
 
         const plan = getPlanById(planId);
         if (!plan) {
-            return NextResponse.json(
-                { error: "Invalid plan" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
         }
 
         if (!plan.variantId) {
+            console.error(`Missing variant ID for plan: ${planId}`);
             return NextResponse.json(
-                { error: "Lemon Squeezy variant not configured for this plan. Set LEMONSQUEEZY_VARIANT_* env vars." },
+                { error: "Plan not configured. Contact support." },
                 { status: 500 }
             );
         }
@@ -44,10 +38,17 @@ export async function POST(request: NextRequest) {
         const storeId = process.env.LEMONSQUEEZY_STORE_ID;
         if (!storeId) {
             return NextResponse.json(
-                { error: "LEMONSQUEEZY_STORE_ID not configured" },
+                { error: "Store not configured. Contact support." },
                 { status: 500 }
             );
         }
+
+        // Debug log — remove after confirming it works
+        console.log("Creating checkout:", {
+            planId,
+            variantId: plan.variantId,
+            storeId,
+        });
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -57,15 +58,12 @@ export async function POST(request: NextRequest) {
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-        // ✅ FIXED: Clean URL — LS appends ?order_id=REAL_ID automatically
-        const redirectUrl = `${appUrl}/credits/success`;
-
         const response = await lemonSqueezy.createCheckout({
             storeId,
             variantId: plan.variantId,
-            customPrice: Math.round(plan.price * 100),
+            // ❌ removed customPrice — set prices in LS dashboard instead
             productOptions: {
-                redirect_url: redirectUrl,
+                redirect_url: `${appUrl}/credits/success`,
             },
             checkoutData: {
                 email: profile?.email || user.email || "",
@@ -74,7 +72,7 @@ export async function POST(request: NextRequest) {
                     user_id: user.id,
                 },
             },
-            testMode: true,
+            testMode: false, // ✅ live mode
         });
 
         const checkoutUrl = response.data.attributes.url;
@@ -85,10 +83,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        return NextResponse.json({
-            url: checkoutUrl,
-            orderId: null,
-        });
+        return NextResponse.json({ url: checkoutUrl });
     } catch (error) {
         console.error("Payment session creation failed:", error);
         return NextResponse.json(

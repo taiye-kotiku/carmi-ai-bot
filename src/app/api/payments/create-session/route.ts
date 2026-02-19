@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
                     user_id: user.id,
                 },
             },
-            testMode: false, // ✅ live mode
+            testMode: true, // ✅ test mode
         });
 
         const checkoutUrl = response.data.attributes.url;

@@ -194,7 +194,6 @@ export async function POST(req: Request) {
                                             aspectRatio: "9:16",
                                             durationSeconds: 8,
                                             sampleCount: 1,
-                                            generateAudio: true,
                                         },
                                     }),
                                 }

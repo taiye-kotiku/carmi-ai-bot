@@ -181,7 +181,6 @@ async function processImageToVideo(job: any, userId: string, jobData: any) {
                     parameters: {
                         aspectRatio: "16:9",
                         durationSeconds: 4,
-                        generateAudio: true, // Required for Veo 3 models
                     },
                 }),
             }
@@ -883,7 +882,6 @@ async function processStory(job: any, userId: string, jobData: any) {
                         aspectRatio: "9:16",
                         durationSeconds: 8,
                         sampleCount: 1,
-                        generateAudio: true,
                     },
                 };
 

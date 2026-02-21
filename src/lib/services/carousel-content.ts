@@ -1,4 +1,3 @@
-// src/lib/services/carousel-content.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface GenerateContentOptions {
@@ -42,59 +41,31 @@ Rules:
 4. Keep text concise - it needs to fit on a visual slide
 5. Use *asterisks* around 1-2 key words per slide for emphasis (they will display in bold yellow)
 6. Make each slide flow naturally to the next
+7. Do NOT use any quotation marks inside the slide text
 
-Return ONLY a JSON array of strings, one per slide. No markdown, no explanation.
-Example: ["הנה *ההזדמנות* שלך", "Slide 2 text", "Slide 3 text"]`;
+Return EXACTLY ${slideCount} slides, one per line.
+Use this format - each line starts with the slide number and a pipe character:
+1|First slide text here
+2|Second slide text here
+3|Third slide text here
+
+Return ONLY the numbered lines. No JSON, no markdown, no explanation.`;
 
     try {
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
-        console.log("Gemini response:", responseText.substring(0, 200));
+        console.log("[CarouselContent] Raw response:", responseText.substring(0, 300));
 
-        // Parse JSON from response
-        try {
-            // Clean up response - remove markdown code blocks if present
-            let cleanedResponse = responseText
-                .replace(/```json\n?/g, "")
-                .replace(/```\n?/g, "")
-                .trim();
+        const slides = parseSlides(responseText, slideCount);
 
-            // Try to extract JSON array if wrapped in text
-            const jsonMatch = cleanedResponse.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                cleanedResponse = jsonMatch[0];
-            }
-
-            if (!cleanedResponse.startsWith("[")) {
-                throw new Error("Response does not contain a JSON array");
-            }
-
-            const slides = JSON.parse(cleanedResponse);
-
-            if (!Array.isArray(slides)) {
-                console.error("Response is not an array:", slides);
-                throw new Error("Response is not an array");
-            }
-
-            if (slides.length === 0) {
-                throw new Error("Generated empty slides array");
-            }
-
-            const finalSlides = slides.slice(0, slideCount).filter((s: any) => s && typeof s === "string" && s.trim().length > 0);
-            
-            if (finalSlides.length === 0) {
-                throw new Error("No valid slides after filtering");
-            }
-
-            console.log(`Generated ${finalSlides.length} slides`);
-            return finalSlides;
-        } catch (parseError) {
-            console.error("Failed to parse carousel content:", parseError);
-            console.error("Raw response:", responseText);
-            throw new Error(`Failed to parse carousel content: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        if (slides.length === 0) {
+            throw new Error("No valid slides generated");
         }
+
+        console.log(`[CarouselContent] Generated ${slides.length} slides`);
+        return slides;
     } catch (apiError) {
-        console.error("Gemini API error:", apiError);
+        console.error("[CarouselContent] Error:", apiError);
         if (apiError instanceof Error) {
             if (apiError.message.includes("API_KEY")) {
                 throw new Error("GOOGLE_AI_API_KEY חסר או לא תקין");
@@ -103,4 +74,69 @@ Example: ["הנה *ההזדמנות* שלך", "Slide 2 text", "Slide 3 text"]`;
         }
         throw new Error(`Failed to generate carousel content: ${String(apiError)}`);
     }
+}
+
+function parseSlides(text: string, slideCount: number): string[] {
+    const cleaned = text
+        .replace(/```[a-z]*\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
+
+    // Strategy 1: Parse numbered pipe-separated lines (1|text)
+    const pipeLines = cleaned.split("\n")
+        .map((line) => line.trim())
+        .filter((line) => /^\d+\s*\|/.test(line))
+        .map((line) => line.replace(/^\d+\s*\|\s*/, "").trim())
+        .filter((line) => line.length > 0);
+
+    if (pipeLines.length >= 2) {
+        return pipeLines.slice(0, slideCount);
+    }
+
+    // Strategy 2: Parse numbered lines (1. text or 1) text)
+    const numberedLines = cleaned.split("\n")
+        .map((line) => line.trim())
+        .filter((line) => /^\d+[\.\)]\s/.test(line))
+        .map((line) => line.replace(/^\d+[\.\)]\s*/, "").trim())
+        .filter((line) => line.length > 0);
+
+    if (numberedLines.length >= 2) {
+        return numberedLines.slice(0, slideCount);
+    }
+
+    // Strategy 3: Try JSON parsing with fixes
+    try {
+        const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            let jsonStr = jsonMatch[0];
+            // Fix common JSON issues: smart quotes, trailing commas
+            jsonStr = jsonStr
+                .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+                .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")
+                .replace(/,\s*\]/g, "]");
+
+            const parsed = JSON.parse(jsonStr);
+            if (Array.isArray(parsed)) {
+                const strings = parsed
+                    .map((s: any) => (typeof s === "string" ? s : typeof s === "object" && s?.text ? s.text : String(s)))
+                    .filter((s: string) => s.trim().length > 0);
+                if (strings.length >= 2) {
+                    return strings.slice(0, slideCount);
+                }
+            }
+        }
+    } catch {
+        // JSON parsing failed, continue to next strategy
+    }
+
+    // Strategy 4: Split by non-empty lines (last resort)
+    const rawLines = cleaned.split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 3 && !line.startsWith("#") && !line.startsWith("//"));
+
+    if (rawLines.length >= 2) {
+        return rawLines.slice(0, slideCount);
+    }
+
+    return [];
 }

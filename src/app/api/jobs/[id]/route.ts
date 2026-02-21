@@ -1,12 +1,69 @@
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { addCredits } from "@/lib/services/credits";
-import { CREDIT_COSTS } from "@/lib/config/credits";
+import { processJob } from "@/lib/services/job-processor";
 
-const apiKey = process.env.GOOGLE_AI_API_KEY!;
+function getStatusText(
+    jobType: string,
+    status: string,
+    progress: number
+): string {
+    if (status === "completed") return "הושלם!";
+    if (status === "failed") return "נכשל";
+
+    switch (jobType) {
+        case "generate_image":
+        case "edit_image":
+            if (progress < 50) return "מייצר תמונה באמצעות AI...";
+            return "מעבד ושומר תמונה...";
+        case "text_to_video":
+            if (progress < 15) return "מכין ומשפר פרומפט לוידאו...";
+            if (progress < 75) return "מייצר וידאו... (עד 3 דקות)";
+            return "מוריד ושומר וידאו...";
+        case "image_to_video":
+            if (progress < 20) return "מנתח תמונה ומכין פרומפט קולנועי...";
+            if (progress < 75) return "מייצר וידאו מתמונה...";
+            return "מוריד ושומר וידאו...";
+        case "carousel":
+            if (progress < 40) return "מייצר תוכן לשקופיות...";
+            if (progress < 70) return "מעצב קרוסלה...";
+            return "שומר שקופיות...";
+        case "story": {
+            if (progress < 12) return "מייצר תמונה 1 מ-4 לסטורי...";
+            if (progress < 24) return "מייצר תמונה 2 מ-4 לסטורי...";
+            if (progress < 36) return "מייצר תמונה 3 מ-4 לסטורי...";
+            if (progress < 50) return "מייצר תמונה 4 מ-4 לסטורי...";
+            if (progress < 56) return "מתחיל יצירת וידאו לסטורי...";
+            if (progress < 95) return "מייצר וידאו לסטורי... (עד 2 דקות)";
+            return "שומר סטורי...";
+        }
+        case "cartoonize":
+            if (progress < 30) return "מנתח תמונה מקורית...";
+            if (progress < 60) return "בונה תיאור דמות מפורט...";
+            if (progress < 85) return "מייצר קריקטורה מותאמת אישית...";
+            return "שומר תוצאה...";
+        case "character_image":
+            return "מייצר תמונת דמות...";
+        case "character_video":
+            if (progress < 15) return "מייצר תסריט לסצנות...";
+            if (progress < 45) return "מייצר תמונות לסצנות...";
+            if (progress < 60) return "מתחיל יצירת וידאו לסצנות...";
+            if (progress < 90) return "מייצר וידאו לסצנות...";
+            return "מסיים ושומר...";
+        case "convert_reel":
+            if (progress < 50) return "מחלץ פריימים מהרילז...";
+            return "שומר תמונות...";
+        case "video_clips":
+            if (progress < 10) return "שולח וידאו לעיבוד...";
+            if (progress < 80) return "חותך קליפים חכמים מהוידאו...";
+            return "מוריד ושומר קליפים...";
+        default:
+            return "מעבד...";
+    }
+}
 
 export async function GET(
     request: NextRequest,
@@ -16,10 +73,15 @@ export async function GET(
 
     try {
         const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
         const { data: job, error: jobError } = await supabaseAdmin
@@ -30,124 +92,45 @@ export async function GET(
             .single();
 
         if (jobError || !job) {
-            return NextResponse.json({ error: "Job not found" }, { status: 404 });
+            return NextResponse.json(
+                { error: "Job not found" },
+                { status: 404 }
+            );
         }
 
         if (job.status === "completed" || job.status === "failed") {
-            return NextResponse.json(job);
+            return NextResponse.json({
+                ...job,
+                statusText: getStatusText(
+                    job.type,
+                    job.status,
+                    job.progress ?? 0
+                ),
+            });
         }
 
-        const operationName = (job.result as { operationName?: string })?.operationName;
-        if (!operationName) return NextResponse.json(job);
+        const result = await processJob(job, user.id);
 
-        const opRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
-        );
-
-        if (!opRes.ok) {
-            const errText = await opRes.text();
-            console.error("❌ Operation poll failed:", opRes.status, errText);
-            return NextResponse.json(job);
-        }
-
-        const operation = await opRes.json();
-
-        // ✅ LOG THE FULL RAW RESPONSE — paste this in your Vercel/server logs
-        console.log("📦 FULL OPERATION RESPONSE:", JSON.stringify(operation, null, 2));
-
-        if (!operation.done) {
-            const newProgress = Math.min((job.progress ?? 10) + 5, 90);
-            await supabaseAdmin.from("jobs").update({ progress: newProgress }).eq("id", job.id);
-            return NextResponse.json({ ...job, progress: newProgress });
-        }
-
-        if (operation.error) {
-            console.error("❌ Google operation error:", operation.error);
-            await addCredits(user.id, CREDIT_COSTS.video_generation, "החזר - יצירת וידאו נכשלה");
-            await supabaseAdmin.from("jobs").update({ status: "failed", progress: 0, error: operation.error.message }).eq("id", job.id);
-            return NextResponse.json({ ...job, status: "failed", error: operation.error.message });
-        }
-
-        // Try every known path Google might use
-        const samples =
-            operation.response?.generateVideoResponse?.generatedSamples ??
-            operation.response?.generatedSamples ??
-            operation.response?.videos ??
-            [];
-
-        console.log("🎬 Samples found:", samples.length);
-        console.log("🎬 Samples data:", JSON.stringify(samples, null, 2));
-
-        if (samples.length === 0) {
-            console.error("❌ No samples in response");
-            return NextResponse.json(job);
-        }
-
-        const videoData = samples[0]?.video ?? samples[0];
-        console.log("🎬 Video data:", JSON.stringify(videoData, null, 2));
-
-        let videoBuffer: Buffer | null = null;
-
-        if (videoData?.bytesBase64Encoded) {
-            console.log("📥 Using base64 data");
-            videoBuffer = Buffer.from(videoData.bytesBase64Encoded, "base64");
-
-        } else if (videoData?.uri) {
-            console.log("📥 Raw URI from Google:", videoData.uri);
-
-            // URI already contains :download?alt=media — just append the API key
-            const downloadUrl = `${videoData.uri}&key=${apiKey}`;
-            console.log("📥 Download URL:", downloadUrl);
-
-            const dlRes = await fetch(downloadUrl);
-            console.log("📥 Download status:", dlRes.status, dlRes.statusText);
-
-            if (dlRes.ok) {
-                videoBuffer = Buffer.from(await dlRes.arrayBuffer());
-                console.log("✅ Buffer size:", videoBuffer.length);
-            } else {
-                const errBody = await dlRes.text();
-                console.error("❌ Download failed:", dlRes.status, errBody);
-            }
-        } else {
-            console.error("❌ No uri or bytesBase64Encoded in videoData");
-        }
-
-        let finalVideoUrl: string | null = null;
-
-        if (videoBuffer && videoBuffer.length > 0) {
-            const fileName = `videos/${user.id}/${job.id}.mp4`;
-            console.log("⬆️ Uploading to Supabase storage:", fileName);
-
-            const { error: uploadError } = await supabaseAdmin.storage
-                .from("generated-videos")
-                .upload(fileName, videoBuffer, { contentType: "video/mp4", upsert: true });
-
-            if (!uploadError) {
-                const { data: { publicUrl } } = supabaseAdmin.storage
-                    .from("generated-videos")
-                    .getPublicUrl(fileName);
-                finalVideoUrl = publicUrl;
-                console.log("✅ Uploaded to Supabase:", finalVideoUrl);
-            } else {
-                console.error("❌ Supabase upload error:", JSON.stringify(uploadError));
-            }
-        } else {
-            console.error("❌ videoBuffer is empty or null");
-        }
-
-        if (!finalVideoUrl) {
-            await addCredits(user.id, CREDIT_COSTS.video_generation, "החזר - לא ניתן להוריד את הוידאו");
-            await supabaseAdmin.from("jobs").update({ status: "failed", error: "לא ניתן להוריד את הוידאו" }).eq("id", job.id);
-            return NextResponse.json({ ...job, status: "failed", error: "לא ניתן להוריד את הוידאו" });
-        }
-
-        const updatedResult = { ...(job.result as Record<string, any>), videoUrl: finalVideoUrl };
-        await supabaseAdmin.from("jobs").update({ status: "completed", progress: 100, result: updatedResult }).eq("id", job.id);
-        return NextResponse.json({ ...job, status: "completed", progress: 100, result: updatedResult });
-
+        return NextResponse.json({
+            id: job.id,
+            type: job.type,
+            user_id: job.user_id,
+            created_at: job.created_at,
+            status: result.status,
+            progress: result.progress,
+            result: result.result,
+            error: result.error,
+            statusText: getStatusText(
+                job.type,
+                result.status,
+                result.progress
+            ),
+        });
     } catch (error: any) {
-        console.error("❌ Job GET error:", error);
-        return NextResponse.json({ error: error.message || "שגיאה בבדיקת סטטוס" }, { status: 500 });
+        console.error("[JobGET] Error:", error);
+        return NextResponse.json(
+            { error: error.message || "שגיאה בבדיקת סטטוס" },
+            { status: 500 }
+        );
     }
 }

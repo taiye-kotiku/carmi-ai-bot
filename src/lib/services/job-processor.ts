@@ -229,6 +229,14 @@ async function processImage(job: any, userId: string, jobData: any) {
     const params = jobData?.params;
     if (!params) return currentStatus(job);
 
+    if (jobData.generationStarted) {
+        return { status: "processing", progress: job.progress || 30, result: null, error: null };
+    }
+    const { error: lockError } = await supabaseAdmin.from("jobs").update({
+        result: { ...jobData, generationStarted: true },
+    }).eq("id", job.id).eq("status", "processing");
+    if (lockError) return { status: "processing", progress: job.progress, result: null, error: null };
+
     try {
         const parts: any[] = [];
         if (params.imageBase64 && params.imageBase642 && params.imageMimeType && params.imageMimeType2 && params.style === "combine_images") {
@@ -975,6 +983,14 @@ async function processCarousel(job: any, userId: string, jobData: any) {
     if (job.status !== "processing") return currentStatus(job);
     const params = jobData?.params;
     if (!params) return currentStatus(job);
+
+    if (jobData.generationStarted) {
+        return { status: "processing", progress: job.progress || 20, result: null, error: null };
+    }
+    const { error: lockError } = await supabaseAdmin.from("jobs").update({
+        result: { ...jobData, generationStarted: true },
+    }).eq("id", job.id).eq("status", "processing");
+    if (lockError) return { status: "processing", progress: job.progress, result: null, error: null };
 
     try {
         const { generateCarousel } = await import("@/lib/services/carousel");

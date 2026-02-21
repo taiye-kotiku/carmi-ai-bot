@@ -36,6 +36,8 @@ export async function processJob(job: any, userId: string): Promise<{
                 return await processCharacterVideoStep(job, userId, jobData);
             case "carousel":
                 return await processCarousel(job, userId, jobData);
+            case "story":
+                return await processStory(job, userId, jobData);
             case "convert_reel":
                 return await processReel(job, userId, jobData);
             case "video_clips":
@@ -767,6 +769,192 @@ async function finalizeVideoClips(job: any, userId: string, jobData: any, state:
     await completeJob(job.id, { clips });
 
     return { status: "completed", progress: 100, result: { clips }, error: null };
+}
+
+// ─────────────────────────────────────────────
+// STORY (multiple 9:16 images + 1 Veo video)
+// ─────────────────────────────────────────────
+async function processStory(job: any, userId: string, jobData: any) {
+    if (job.status !== "processing") return currentStatus(job);
+
+    const state = jobData?.state || {};
+    const prompt = jobData?.prompt;
+    const imageBase64 = jobData?.imageBase64;
+    const imageMimeType = jobData?.imageMimeType || "image/png";
+
+    if (!prompt) return currentStatus(job);
+
+    const phase = state.phase || "generate_images";
+    const imageCount = 4; // 4 story images
+
+    try {
+        if (phase === "generate_images") {
+            const imageUrls = state.imageUrls || [];
+            const idx = imageUrls.length;
+
+            if (idx >= imageCount) {
+                // All images done, start video
+                await saveState(job.id, jobData, {
+                    ...state,
+                    phase: "generate_video",
+                    imageUrls,
+                });
+                await updateProgress(job.id, 50);
+                return { status: "processing", progress: 50, result: null, error: null };
+            }
+
+            const parts: any[] = [];
+            const basePrompt = buildEnhancedPrompt(prompt, "realistic", "9:16");
+            if (imageBase64) {
+                parts.push({ inlineData: { mimeType: imageMimeType, data: imageBase64 } });
+                parts.push({ text: `Create a 9:16 vertical story frame based on this image. Theme: ${prompt}. Frame ${idx + 1} of ${imageCount}. Professional, cohesive style.` });
+            } else {
+                parts.push({ text: `${basePrompt} Story frame ${idx + 1} of ${imageCount}. Vertical 9:16 composition.` });
+            }
+
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts }],
+                        generationConfig: { responseModalities: ["Text", "Image"] },
+                    }),
+                }
+            );
+
+            if (!response.ok) throw new Error("Gemini image API failed");
+            const data = await response.json();
+            const imagePart = data.candidates?.[0]?.content?.parts?.find(
+                (p: any) => p.inlineData?.mimeType?.startsWith("image/")
+            );
+            if (!imagePart) throw new Error("No image generated");
+
+            const buffer = Buffer.from(imagePart.inlineData.data, "base64");
+            const fileName = `${userId}/${job.id}/story_${idx + 1}.png`;
+            await supabaseAdmin.storage.from("content").upload(fileName, buffer, { contentType: "image/png", upsert: true });
+            const { data: urlData } = supabaseAdmin.storage.from("content").getPublicUrl(fileName);
+
+            const newUrls = [...imageUrls, urlData.publicUrl];
+            await updateUserStorage(userId, buffer.length);
+            const progress = Math.round(((idx + 1) / imageCount) * 45);
+            await saveState(job.id, jobData, { ...state, imageUrls: newUrls });
+            await updateProgress(job.id, progress);
+
+            return { status: "processing", progress, result: null, error: null };
+        }
+
+        if (phase === "generate_video") {
+            const imageUrls = state.imageUrls || [];
+            const operationName = state.videoOperationName;
+
+            if (!operationName) {
+                // Start Veo - use first image or text prompt
+                let videoPrompt = prompt;
+                try {
+                    videoPrompt = await (await import("@/lib/services/text-to-video-prompt")).enhanceTextToVideoPrompt(prompt);
+                } catch {
+                    // keep original
+                }
+
+                const startBody: any = {
+                    instances: [{ prompt: videoPrompt }],
+                    parameters: {
+                        aspectRatio: "9:16",
+                        durationSeconds: 8,
+                        sampleCount: 1,
+                        generateAudio: true,
+                    },
+                };
+
+                if (imageUrls.length > 0) {
+                    const imgRes = await fetch(imageUrls[0]);
+                    const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+                    const imgBase64 = imgBuf.toString("base64");
+                    startBody.instances[0] = {
+                        prompt: videoPrompt,
+                        image: { bytesBase64Encoded: imgBase64, mimeType: "image/png" },
+                    };
+                }
+
+                const startResponse = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-fast-generate-preview:predictLongRunning?key=${apiKey}`,
+                    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(startBody) }
+                );
+
+                if (!startResponse.ok) {
+                    const errText = await startResponse.text();
+                    await failJob(job.id, userId, CREDIT_COSTS.story_generation, errText, "החזר - סטורי וידאו נכשל");
+                    return { status: "failed", progress: 0, result: null, error: errText };
+                }
+
+                const operation = await startResponse.json();
+                await saveState(job.id, jobData, {
+                    ...state,
+                    videoOperationName: operation.name,
+                    imageUrls,
+                });
+                await updateProgress(job.id, 55);
+                return { status: "processing", progress: 55, result: null, error: null };
+            }
+
+            // Poll Veo
+            const pollRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
+            );
+            if (!pollRes.ok) return stillProcessing(job);
+
+            const pollData = await pollRes.json();
+            if (!pollData.done) {
+                const progress = estimateProgress(job, 120, 55, 95);
+                await updateProgress(job.id, progress);
+                return { status: "processing", progress, result: null, error: null };
+            }
+
+            if (pollData.error) {
+                await failJob(job.id, userId, CREDIT_COSTS.story_generation, pollData.error.message, "החזר - סטורי וידאו נכשל");
+                return { status: "failed", progress: 0, result: null, error: pollData.error.message };
+            }
+
+            const videoUri = extractVideoUri(pollData);
+            if (!videoUri) {
+                await failJob(job.id, userId, CREDIT_COSTS.story_generation, "No video URL", "החזר - סטורי וידאו");
+                return { status: "failed", progress: 0, result: null, error: "No video URL" };
+            }
+
+            const vidRes = await fetch(videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`);
+            if (!vidRes.ok) {
+                await failJob(job.id, userId, CREDIT_COSTS.story_generation, "Download failed", "החזר - סטורי וידאו");
+                return { status: "failed", progress: 0, result: null, error: "Download failed" };
+            }
+
+            const vidBuf = await vidRes.arrayBuffer();
+            const fn = `videos/${userId}/${Date.now()}_story.mp4`;
+            await supabaseAdmin.storage.from("generations").upload(fn, vidBuf, { contentType: "video/mp4", upsert: true });
+            const { data: { publicUrl } } = supabaseAdmin.storage.from("generations").getPublicUrl(fn);
+
+            await supabaseAdmin.from("generations").insert({
+                id: nanoid(), user_id: userId, type: "video", feature: "story_generation",
+                prompt, result_urls: [...(state.imageUrls || []), publicUrl],
+                thumbnail_url: state.imageUrls?.[0], status: "completed",
+                completed_at: new Date().toISOString(), file_size_bytes: vidBuf.byteLength,
+                files_deleted: false, job_id: job.id,
+            });
+
+            await updateUserStorage(userId, vidBuf.byteLength);
+            await completeJob(job.id, {
+                imageUrls: state.imageUrls,
+                videoUrl: publicUrl,
+            });
+            return { status: "completed", progress: 100, result: { imageUrls: state.imageUrls, videoUrl: publicUrl }, error: null };
+        }
+
+        return stillProcessing(job);
+    } catch (error: any) {
+        await failJob(job.id, userId, CREDIT_COSTS.story_generation, error.message, "החזר - יצירת סטורי נכשלה");
+        return { status: "failed", progress: 0, result: null, error: error.message };
+    }
 }
 
 // ─────────────────────────────────────────────

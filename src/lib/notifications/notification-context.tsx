@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 export type EphemeralNotification = {
     id: string;
     type: "generation";
-    generationType: "image" | "video" | "carousel" | "caricature" | "character" | "reel";
+    generationType: "image" | "video" | "carousel" | "caricature" | "character" | "reel" | "story" | "creative_hub";
     title: string;
     body: string;
     timestamp: number;
@@ -65,6 +65,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         caricature: "קריקטורה",
         character: "דמות",
         reel: "רילז",
+        story: "סטורי",
+        creative_hub: "מרכז יצירתי",
     };
 
     // ── Ephemeral ──

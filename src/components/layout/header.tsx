@@ -47,25 +47,26 @@ export function Header() {
 
     return (
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-white px-6">
-            {/* Mobile menu button */}
+            {/* Mobile menu button - 44px touch target */}
             <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden"
+                className="lg:hidden min-h-[44px] min-w-[44px]"
                 onClick={openMobileMenu}
             >
                 <Menu className="h-5 w-5" />
             </Button>
 
-            {/* Credits summary (desktop) */}
-            <div className="hidden md:flex items-center gap-4 text-sm">
+            {/* Credits - compact on mobile, full on desktop */}
+            <div className="flex items-center gap-4 text-sm">
                 <Link
                     href="/credits"
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 hover:bg-purple-100 transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 rounded-full bg-purple-50 hover:bg-purple-100 transition-colors min-h-[44px] md:min-h-0 md:py-1.5"
                 >
-                    <Coins className="h-4 w-4 text-purple-600" />
+                    <Coins className="h-4 w-4 text-purple-600 flex-shrink-0" />
                     <span className="text-gray-600">
-                        קרדיטים: <strong className="text-purple-700">{totalCredits}</strong>
+                        <span className="hidden sm:inline">קרדיטים: </span>
+                        <strong className="text-purple-700">{totalCredits}</strong>
                     </span>
                 </Link>
             </div>

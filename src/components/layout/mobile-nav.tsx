@@ -27,9 +27,9 @@ import {
 
 const quickLinks = [
     { name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
+    { name: "מרכז יצירתי", href: "/generate/creative-hub", icon: Sparkles },
     { name: "תמונה", href: "/generate/image", icon: Image },
     { name: "סרטון", href: "/generate/text-to-video", icon: Video },
-    { name: "דמות", href: "/generate/character", icon: Sparkles },
     { name: "גלריה", href: "/gallery", icon: FolderOpen },
 ];
 
@@ -37,6 +37,7 @@ const allLinks = [
     {
         section: "יצירת תוכן",
         items: [
+            { name: "מרכז יצירתי", href: "/generate/creative-hub", icon: Sparkles },
             { name: "יצירת תמונה", href: "/generate/image", icon: Image },
             { name: "עריכת תמונה", href: "/generate/image-editing", icon: Pencil },
             { name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },
@@ -116,7 +117,7 @@ export function MobileNav() {
                                 key={link.href}
                                 href={link.href}
                                 className={cn(
-                                    "flex flex-col items-center gap-1 px-3 py-2",
+                                    "flex flex-col items-center justify-center gap-1 px-3 py-2 min-h-[44px] min-w-[44px]",
                                     isActive ? "text-purple-600" : "text-gray-500"
                                 )}
                             >
@@ -127,7 +128,7 @@ export function MobileNav() {
                     })}
                     <button
                         onClick={() => setIsOpen(true)}
-                        className="flex flex-col items-center gap-1 px-3 py-2 text-gray-500"
+                        className="flex flex-col items-center justify-center gap-1 px-3 py-2 min-h-[44px] min-w-[44px] text-gray-500"
                     >
                         <Menu className="h-5 w-5" />
                         <span className="text-[10px]">עוד</span>

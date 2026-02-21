@@ -9,6 +9,8 @@ export const CREDIT_COSTS = {
     video_clips: 25,
     video_to_images: 25,
     storage_expansion: 15,
+    story_generation: 15, // multiple 9:16 images + 1 short video
+    creative_hub: 0, // placeholder - use customAmount for total
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;
@@ -21,7 +23,9 @@ export const CREDIT_ACTION_LABELS: Record<CreditAction, string> = {
     character_training: "אימון דמות",
     video_clips: "יצירת רילז וירליים מוידאו",
     video_to_images: "תמונות נבחרות מוידאו",
-    storage_expansion: "הרחבת אחסון (50MB)", // NEW
+    storage_expansion: "הרחבת אחסון (50MB)",
+    story_generation: "יצירת סטורי",
+    creative_hub: "מרכז יצירתי",
 };
 
 export const PLANS = {

@@ -37,6 +37,7 @@ const navigation: NavItem[] = [
     { type: "link", name: "לוח בקרה", href: "/dashboard", icon: LayoutDashboard },
 
     { type: "divider", label: "יצירת תוכן" },
+    { type: "link", name: "מרכז יצירתי", href: "/generate/creative-hub", icon: Sparkles, badge: "חדש" },
     { type: "link", name: "יצירת תמונה", href: "/generate/image", icon: Image },
     { type: "link", name: "עריכת תמונה", href: "/generate/image-editing", icon: Pencil },
     { type: "link", name: "יצירת סרטון", href: "/generate/text-to-video", icon: Video },

@@ -6,7 +6,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Sparkles, Image, Video, LayoutGrid, ImageIcon, Link2, Download } from "lucide-react";
+import {
+    Loader2,
+    Sparkles,
+    Image,
+    Video,
+    LayoutGrid,
+    ImageIcon,
+    Link2,
+    Download,
+    CheckCircle2,
+    XCircle,
+    BookOpen,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { useCredits } from "@/hooks/use-credits";
@@ -31,6 +43,13 @@ const TYPE_LABELS: Record<string, string> = {
     carousel: "קרוסלה",
     video: "וידאו",
     image: "תמונה",
+};
+
+const TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    story: BookOpen,
+    carousel: LayoutGrid,
+    video: Video,
+    image: Image,
 };
 
 const TYPE_COSTS: Record<string, number> = {
@@ -92,7 +111,6 @@ export default function CreativeHubPage() {
         []
     );
 
-    // Poll when we have processing jobs
     useEffect(() => {
         const pending = jobStates.filter((j) => j.status === "processing" || j.status === "pending");
         if (pending.length === 0) return;
@@ -112,7 +130,7 @@ export default function CreativeHubPage() {
                     refreshCredits();
                     addGenerationNotification("creative_hub", next.length);
                     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-                        new Notification("היצירות הושלמו! 🎉", {
+                        new Notification("היצירות הושלמו!", {
                             body: `כל ${next.length} סוגי התוכן מוכנים`,
                             icon: "/favicon.ico",
                         });
@@ -130,7 +148,6 @@ export default function CreativeHubPage() {
         return () => stopPolling();
     }, [stopPolling]);
 
-    // Restore from sessionStorage on mount
     useEffect(() => {
         try {
             const stored = sessionStorage.getItem(STORAGE_KEY);
@@ -243,71 +260,71 @@ export default function CreativeHubPage() {
         setOptions((o) => ({ ...o, [key]: !o[key] }));
     };
 
-    const allJobsDone = jobStates.length > 0 && jobStates.every((j) => j.status === "completed" || j.status === "failed");
-    const hasResults = jobStates.some((j) => j.status === "completed" && j.result);
-
     return (
-        <div className="container mx-auto py-8 px-4 pb-24 lg:pb-8" dir="rtl">
-            <div className="max-w-4xl mx-auto">
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
-                        <Sparkles className="h-8 w-8 text-purple-500" />
+        <div className="pb-20 lg:pb-0" dir="rtl">
+            <div className="max-w-5xl mx-auto">
+                <div className="mb-6">
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-1 flex items-center gap-2">
+                        <Sparkles className="h-6 w-6 sm:h-7 sm:w-7 text-purple-500" />
                         מרכז יצירתי
                     </h1>
-                    <p className="text-gray-600">
-                        תיאור אחד – תמונה, קרוסלה, וידאו וסטורי במקביל
+                    <p className="text-gray-500 text-sm sm:text-base">
+                        תיאור אחד - תמונה, קרוסלה, וידאו וסטורי במקביל
                     </p>
                 </div>
 
-                <div className="grid lg:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>תיאור ומידיה</CardTitle>
+                <div className="grid lg:grid-cols-5 gap-4 sm:gap-6">
+                    {/* Controls - 3 cols on desktop */}
+                    <div className="lg:col-span-3 space-y-4">
+                        <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base sm:text-lg">תיאור ומדיה</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label>תיאור (חובה)</Label>
+                                <div className="space-y-1.5">
+                                    <Label className="text-sm font-medium">תיאור (חובה)</Label>
                                     <Textarea
                                         placeholder="לדוגמה: קפה איכותי בשקיעה עם נוף לים..."
                                         value={prompt}
                                         onChange={(e) => setPrompt(e.target.value)}
                                         rows={4}
                                         disabled={isGenerating}
-                                        className="min-h-[48px] text-base"
+                                        className="min-h-[100px] text-base resize-none"
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label>תמונה / קישור (אופציונלי)</Label>
-                                    <div className="flex gap-2 mb-2">
+                                <div className="space-y-1.5">
+                                    <Label className="text-sm font-medium">תמונה / קישור (אופציונלי)</Label>
+                                    <div className="flex gap-2">
                                         {(["none", "image", "url"] as const).map((t) => (
                                             <button
                                                 key={t}
                                                 type="button"
                                                 onClick={() => setMediaType(t)}
-                                                className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] ${
+                                                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium min-h-[44px] transition-all duration-200 cursor-pointer ${
                                                     mediaType === t
-                                                        ? "bg-purple-100 text-purple-700"
-                                                        : "bg-gray-100 text-gray-600"
+                                                        ? "bg-purple-50 text-purple-700 border-2 border-purple-300"
+                                                        : "bg-gray-50 text-gray-600 border-2 border-transparent hover:bg-gray-100"
                                                 }`}
                                             >
                                                 {t === "none" && "ללא"}
                                                 {t === "image" && (
-                                                    <span className="flex items-center gap-1">
-                                                        <ImageIcon className="h-4 w-4" /> תמונה
-                                                    </span>
+                                                    <>
+                                                        <ImageIcon className="h-4 w-4" />
+                                                        <span className="hidden sm:inline">תמונה</span>
+                                                    </>
                                                 )}
                                                 {t === "url" && (
-                                                    <span className="flex items-center gap-1">
-                                                        <Link2 className="h-4 w-4" /> קישור
-                                                    </span>
+                                                    <>
+                                                        <Link2 className="h-4 w-4" />
+                                                        <span className="hidden sm:inline">קישור</span>
+                                                    </>
                                                 )}
                                             </button>
                                         ))}
                                     </div>
                                     {mediaType === "image" && (
-                                        <div>
+                                        <div className="mt-2">
                                             <input
                                                 type="file"
                                                 accept="image/*"
@@ -317,16 +334,16 @@ export default function CreativeHubPage() {
                                             />
                                             <label
                                                 htmlFor="ch-image"
-                                                className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
+                                                className="flex flex-col items-center justify-center w-full min-h-[100px] border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors duration-200"
                                             >
                                                 {imagePreview ? (
                                                     <img
                                                         src={imagePreview}
-                                                        alt="Preview"
-                                                        className="max-h-32 object-contain"
+                                                        alt="תצוגה מקדימה"
+                                                        className="max-h-28 object-contain rounded"
                                                     />
                                                 ) : (
-                                                    <span className="text-gray-500 text-sm">לחץ להעלאת תמונה</span>
+                                                    <span className="text-gray-400 text-sm">לחץ להעלאת תמונה</span>
                                                 )}
                                             </label>
                                         </div>
@@ -337,44 +354,57 @@ export default function CreativeHubPage() {
                                             value={websiteUrl}
                                             onChange={(e) => setWebsiteUrl(e.target.value)}
                                             disabled={isGenerating}
-                                            className="min-h-[48px] text-base"
+                                            className="min-h-[48px] text-base mt-2"
                                         />
                                     )}
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label>סוגי תוכן</Label>
+                                <div className="space-y-1.5">
+                                    <Label className="text-sm font-medium">סוגי תוכן</Label>
                                     <div className="grid grid-cols-2 gap-2">
-                                        {(["story", "carousel", "video", "image"] as const).map((k) => (
-                                            <button
-                                                key={k}
-                                                type="button"
-                                                onClick={() => toggleOption(k)}
-                                                disabled={isGenerating}
-                                                className={`flex items-center gap-2 p-3 rounded-xl border min-h-[48px] text-right ${
-                                                    options[k]
-                                                        ? "border-purple-500 bg-purple-50 text-purple-700"
-                                                        : "border-gray-200 text-gray-600"
-                                                }`}
-                                            >
-                                                {k === "story" && <LayoutGrid className="h-5 w-5" />}
-                                                {k === "carousel" && <LayoutGrid className="h-5 w-5" />}
-                                                {k === "video" && <Video className="h-5 w-5" />}
-                                                {k === "image" && <Image className="h-5 w-5" />}
-                                                <span>{TYPE_LABELS[k]}</span>
-                                                <span className="text-xs text-gray-500">({TYPE_COSTS[k]} קרדיט)</span>
-                                            </button>
-                                        ))}
+                                        {(["story", "carousel", "video", "image"] as const).map((k) => {
+                                            const Icon = TYPE_ICONS[k];
+                                            return (
+                                                <button
+                                                    key={k}
+                                                    type="button"
+                                                    onClick={() => toggleOption(k)}
+                                                    disabled={isGenerating}
+                                                    className={`flex items-center gap-2.5 p-3 rounded-xl border-2 min-h-[52px] text-right transition-all duration-200 cursor-pointer ${
+                                                        options[k]
+                                                            ? "border-purple-400 bg-purple-50 text-purple-700"
+                                                            : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                                    }`}
+                                                >
+                                                    <Icon className="h-5 w-5 flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <span className="font-medium text-sm">{TYPE_LABELS[k]}</span>
+                                                    </div>
+                                                    <span className="text-[11px] text-gray-400 flex-shrink-0">{TYPE_COSTS[k]}</span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
-                                <div className="pt-2 flex flex-col gap-2">
-                                    <p className="text-sm text-gray-600">
-                                        סה״כ: {totalCost} קרדיטים • יתרה: {creditsLoading ? "..." : credits}
-                                    </p>
+                                {/* Credits summary + Generate button - sticky on mobile */}
+                                <div className="sticky bottom-20 lg:static lg:bottom-auto bg-white pt-3 pb-2 lg:pb-0 z-10 space-y-2 border-t border-gray-100 lg:border-0">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-500">
+                                            {selectedCount > 0 ? `${selectedCount} סוגים נבחרו` : "בחר סוגי תוכן"}
+                                        </span>
+                                        <span className="font-semibold text-gray-700">
+                                            {totalCost > 0 && `${totalCost} קרדיטים`}
+                                            {!creditsLoading && totalCost > 0 && (
+                                                <span className="text-gray-400 font-normal mr-1">
+                                                    (יתרה: {credits})
+                                                </span>
+                                            )}
+                                        </span>
+                                    </div>
                                     <Button
                                         onClick={handleGenerate}
-                                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white min-h-[48px] text-base"
+                                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/20"
                                         size="lg"
                                         disabled={
                                             isGenerating ||
@@ -392,7 +422,7 @@ export default function CreativeHubPage() {
                                         ) : (
                                             <>
                                                 <Sparkles className="ml-2 h-5 w-5" />
-                                                צור ({totalCost} קרדיטים)
+                                                {totalCost > 0 ? `צור (${totalCost} קרדיטים)` : "צור"}
                                             </>
                                         )}
                                     </Button>
@@ -401,137 +431,143 @@ export default function CreativeHubPage() {
                         </Card>
                     </div>
 
-                    <div className="space-y-6">
-                        <Card className="min-h-[400px]">
-                            <CardHeader>
-                                <CardTitle>תוצאות</CardTitle>
+                    {/* Results - 2 cols on desktop */}
+                    <div className="lg:col-span-2 space-y-4">
+                        <Card className="min-h-[300px] sm:min-h-[400px] shadow-sm">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base sm:text-lg">תוצאות</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-4">
+                            <CardContent className="space-y-3">
                                 {jobStates.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                                        <Sparkles className="h-16 w-16 mb-4 opacity-20" />
-                                        <p>התוצאות יופיעו כאן</p>
-                                        <p className="text-sm mt-2">ניתן לסגור את הדף – היצירה תמשיך ברקע</p>
+                                    <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                        <Sparkles className="h-12 w-12 mb-3 opacity-20" />
+                                        <p className="text-sm">התוצאות יופיעו כאן</p>
+                                        <p className="text-xs mt-1 text-gray-300">ניתן לסגור את הדף - היצירה תמשיך ברקע</p>
                                     </div>
                                 ) : (
-                                    <div className="grid gap-4">
-                                        {jobStates.map((job) => (
-                                            <div
-                                                key={job.id}
-                                                className="p-4 rounded-xl border border-gray-200 bg-gray-50/50"
-                                            >
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="font-medium">{TYPE_LABELS[job.type]}</span>
-                                                    {job.status === "processing" && (
-                                                        <span className="text-sm text-gray-500">
-                                                            {job.progress ?? 0}%
-                                                        </span>
-                                                    )}
-                                                    {job.status === "completed" && (
-                                                        <span className="text-sm text-green-600">✓ הושלם</span>
-                                                    )}
-                                                    {job.status === "failed" && (
-                                                        <span className="text-sm text-red-600">נכשל</span>
-                                                    )}
-                                                </div>
-                                                {job.status === "processing" && (
-                                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-purple-500 transition-all"
-                                                            style={{ width: `${job.progress ?? 0}%` }}
-                                                        />
+                                    <div className="space-y-3">
+                                        {jobStates.map((job) => {
+                                            const Icon = TYPE_ICONS[job.type] || Sparkles;
+                                            return (
+                                                <div
+                                                    key={job.id}
+                                                    className="p-3 sm:p-4 rounded-xl border border-gray-200 bg-white"
+                                                >
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Icon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                                        <span className="font-medium text-sm flex-1">{TYPE_LABELS[job.type]}</span>
+                                                        {job.status === "processing" && (
+                                                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                                {job.progress ?? 0}%
+                                                            </span>
+                                                        )}
+                                                        {job.status === "completed" && (
+                                                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                                        )}
+                                                        {job.status === "failed" && (
+                                                            <XCircle className="h-4 w-4 text-red-500" />
+                                                        )}
                                                     </div>
-                                                )}
-                                                {job.status === "completed" && job.result && (
-                                                    <div className="mt-3 space-y-2">
-                                                        {job.type === "video" && job.result.videoUrl && (
-                                                            <div>
-                                                                <video
-                                                                    src={job.result.videoUrl}
-                                                                    controls
-                                                                    className="w-full rounded-lg max-h-48"
-                                                                />
-                                                                <a
-                                                                    href={job.result.videoUrl}
-                                                                    download
-                                                                    className="inline-flex items-center gap-1 text-sm text-purple-600 mt-2"
-                                                                >
-                                                                    <Download className="h-4 w-4" /> הורד
-                                                                </a>
-                                                            </div>
-                                                        )}
-                                                        {job.type === "image" && (job.result.url || job.result.imageUrl) && (
-                                                            <div>
-                                                                <img
-                                                                    src={job.result.url || job.result.imageUrl}
-                                                                    alt="Result"
-                                                                    className="w-full rounded-lg max-h-48 object-contain"
-                                                                />
-                                                                <a
-                                                                    href={job.result.url || job.result.imageUrl}
-                                                                    download
-                                                                    className="inline-flex items-center gap-1 text-sm text-purple-600 mt-2"
-                                                                >
-                                                                    <Download className="h-4 w-4" /> הורד
-                                                                </a>
-                                                            </div>
-                                                        )}
-                                                        {job.type === "story" && (job.result.imageUrls || job.result.videoUrl) && (
-                                                            <div className="flex gap-2 overflow-x-auto pb-2">
-                                                                {(job.result.imageUrls || []).map((url: string, i: number) => (
-                                                                    <img
-                                                                        key={i}
-                                                                        src={url}
-                                                                        alt={`Frame ${i + 1}`}
-                                                                        className="h-24 w-auto rounded-lg object-cover flex-shrink-0"
-                                                                    />
-                                                                ))}
-                                                                {job.result.videoUrl && (
+
+                                                    {job.status === "processing" && (
+                                                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-purple-500 transition-all duration-500 rounded-full"
+                                                                style={{ width: `${job.progress ?? 0}%` }}
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {job.status === "completed" && job.result && (
+                                                        <div className="mt-2 space-y-2">
+                                                            {job.type === "video" && job.result.videoUrl && (
+                                                                <div>
                                                                     <video
                                                                         src={job.result.videoUrl}
-                                                                        className="h-24 rounded-lg flex-shrink-0"
-                                                                        muted
+                                                                        controls
+                                                                        className="w-full rounded-lg"
                                                                         playsInline
                                                                     />
-                                                                )}
-                                                                <a
-                                                                    href={job.result.videoUrl || job.result.imageUrls?.[0]}
-                                                                    download
-                                                                    className="inline-flex items-center gap-1 text-sm text-purple-600 self-center"
-                                                                >
-                                                                    <Download className="h-4 w-4" /> הורד
-                                                                </a>
-                                                            </div>
-                                                        )}
-                                                        {job.type === "carousel" && job.result.images && (
-                                                            <div className="flex gap-2 overflow-x-auto pb-2">
-                                                                {job.result.images.slice(0, 3).map((url: string, i: number) => (
+                                                                    <a
+                                                                        href={job.result.videoUrl}
+                                                                        download
+                                                                        className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 mt-1.5 cursor-pointer transition-colors"
+                                                                    >
+                                                                        <Download className="h-3.5 w-3.5" /> הורד
+                                                                    </a>
+                                                                </div>
+                                                            )}
+                                                            {job.type === "image" && (job.result.url || job.result.imageUrl) && (
+                                                                <div>
                                                                     <img
-                                                                        key={i}
-                                                                        src={url}
-                                                                        alt={`Slide ${i + 1}`}
-                                                                        className="h-24 w-auto rounded-lg object-cover flex-shrink-0"
+                                                                        src={job.result.url || job.result.imageUrl}
+                                                                        alt="תוצאה"
+                                                                        className="w-full rounded-lg object-contain max-h-48"
+                                                                        loading="lazy"
                                                                     />
-                                                                ))}
-                                                                <span className="text-sm text-gray-500 self-center">
-                                                                    +{job.result.images.length} שקופיות
-                                                                </span>
-                                                                <a
-                                                                    href={job.result.images[0]}
-                                                                    download
-                                                                    className="inline-flex items-center gap-1 text-sm text-purple-600 self-center"
-                                                                >
-                                                                    <Download className="h-4 w-4" /> הורד
-                                                                </a>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {job.status === "failed" && job.error && (
-                                                    <p className="text-sm text-red-600 mt-1">{job.error}</p>
-                                                )}
-                                            </div>
-                                        ))}
+                                                                    <a
+                                                                        href={job.result.url || job.result.imageUrl}
+                                                                        download
+                                                                        className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 mt-1.5 cursor-pointer transition-colors"
+                                                                    >
+                                                                        <Download className="h-3.5 w-3.5" /> הורד
+                                                                    </a>
+                                                                </div>
+                                                            )}
+                                                            {job.type === "story" && (job.result.imageUrls || job.result.videoUrl) && (
+                                                                <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-1 px-1">
+                                                                    {(job.result.imageUrls || []).map((url: string, i: number) => (
+                                                                        <img
+                                                                            key={i}
+                                                                            src={url}
+                                                                            alt={`פריים ${i + 1}`}
+                                                                            className="h-20 w-auto rounded-lg object-cover flex-shrink-0"
+                                                                            loading="lazy"
+                                                                        />
+                                                                    ))}
+                                                                    {job.result.videoUrl && (
+                                                                        <video
+                                                                            src={job.result.videoUrl}
+                                                                            className="h-20 rounded-lg flex-shrink-0"
+                                                                            muted
+                                                                            playsInline
+                                                                        />
+                                                                    )}
+                                                                    <a
+                                                                        href={job.result.videoUrl || job.result.imageUrls?.[0]}
+                                                                        download
+                                                                        className="inline-flex items-center gap-1 text-xs text-purple-600 self-center flex-shrink-0 cursor-pointer"
+                                                                    >
+                                                                        <Download className="h-3.5 w-3.5" /> הורד
+                                                                    </a>
+                                                                </div>
+                                                            )}
+                                                            {job.type === "carousel" && job.result.images && (
+                                                                <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-1 px-1">
+                                                                    {job.result.images.slice(0, 3).map((url: string, i: number) => (
+                                                                        <img
+                                                                            key={i}
+                                                                            src={url}
+                                                                            alt={`שקופית ${i + 1}`}
+                                                                            className="h-20 w-auto rounded-lg object-cover flex-shrink-0"
+                                                                            loading="lazy"
+                                                                        />
+                                                                    ))}
+                                                                    <span className="text-xs text-gray-400 self-center flex-shrink-0">
+                                                                        +{job.result.images.length} שקופיות
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {job.status === "failed" && job.error && (
+                                                        <p className="text-xs text-red-500 mt-1">{job.error}</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </CardContent>

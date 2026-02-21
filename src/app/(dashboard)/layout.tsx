@@ -22,12 +22,14 @@ export default async function DashboardLayout({
 
     return (
         <NotificationProvider>
-            <div className="min-h-screen bg-gray-50" dir="rtl">
+            <div className="min-h-screen min-h-[100dvh] bg-gray-50" dir="rtl">
                 <Sidebar />
                 <MobileNav />
-                <div className="lg:mr-64">
+                <div className="lg:mr-64 flex flex-col min-h-screen min-h-[100dvh]">
                     <Header />
-                    <main className="p-4 lg:p-6 pb-24 lg:pb-6">{children}</main>
+                    <main className="flex-1 px-4 py-4 sm:px-6 sm:py-6 pb-20 lg:pb-6 max-w-7xl w-full mx-auto">
+                        {children}
+                    </main>
                 </div>
                 <Toaster position="top-center" richColors />
             </div>

@@ -1,5 +1,4 @@
-// src/app/layout.tsx
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import { Toaster } from "sonner";
 import { TranslationProvider } from "@/lib/i18n/provider";
@@ -10,6 +9,13 @@ const heebo = Heebo({
   subsets: ["hebrew", "latin"],
   variable: "--font-heebo",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#7c3aed",
+};
 
 export const metadata: Metadata = {
   title: "kossem | פלטפורמה מבוססת AI ליצירת תוכן",
@@ -33,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl" suppressHydrationWarning>
       <head />
-      <body className={heebo.className} suppressHydrationWarning>
+      <body className={`${heebo.className} antialiased`} suppressHydrationWarning>
         <TranslationProvider>
           <NotificationInit />
           <main>{children}</main>

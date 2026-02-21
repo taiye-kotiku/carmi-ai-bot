@@ -27,7 +27,6 @@ export default async function DashboardPage() {
         redirect("/login");
     }
 
-    // Fetch user data
     const [profileRes, creditsRes, generationsRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
         supabase.from("credits").select("*").eq("user_id", user.id).single(),
@@ -46,59 +45,63 @@ export default async function DashboardPage() {
 
     const quickActions = [
         {
+            name: "מרכז יצירתי",
+            description: "תמונה, קרוסלה, וידאו וסטורי ממקום אחד",
+            href: "/generate/creative-hub",
+            icon: Sparkles,
+            color: "bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-100",
+            badge: "חדש",
+        },
+        {
             name: "יצירת תמונה",
             description: "צור תמונה מתיאור טקסט",
             href: "/generate/text-to-image",
             icon: Sparkles,
-            color: "bg-purple-50 text-purple-600 hover:bg-purple-100",
+            color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-100",
         },
         {
             name: "וידאו לתמונות",
-            description: "חלץ תמונות מוידאו עם selfie segmentation",
+            description: "חלץ תמונות נבחרות מוידאו",
             href: "/generate/video-to-images",
             icon: Film,
-            color: "bg-blue-50 text-blue-600 hover:bg-blue-100",
-            badge: "🆕",
+            color: "bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100",
         },
         {
             name: "יצירת קרוסלה",
-            description: "צור קרוסלה מתמונות",
+            description: "צור קרוסלה ממותגת",
             href: "/generate/carousel",
             icon: Images,
-            color: "bg-green-50 text-green-600 hover:bg-green-100",
+            color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100",
         },
         {
             name: "הנפשת תמונה",
             description: "הפוך תמונה לסרטון",
             href: "/generate/image-to-video",
             icon: Wand2,
-            color: "bg-orange-50 text-orange-600 hover:bg-orange-100",
+            color: "bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-100",
         },
     ];
 
     return (
-        <div className="space-y-8">
-            {/* Welcome */}
+        <div className="space-y-6 sm:space-y-8">
             <div>
-                <h1 className="text-3xl font-bold mb-2">
-                    שלום{profile?.name ? `, ${profile.name}` : ""}! 👋
+                <h1 className="text-2xl sm:text-3xl font-bold mb-1">
+                    שלום{profile?.name ? `, ${profile.name}` : ""}!
                 </h1>
-                <p className="text-gray-600">מה תרצה ליצור היום?</p>
+                <p className="text-gray-500 text-sm sm:text-base">מה תרצה ליצור היום?</p>
             </div>
 
-            {/* Credits + Storage Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Credits Overview - takes 2 cols */}
-                <Card className="md:col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card className="sm:col-span-2 shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <CreditCard className="h-5 w-5" />
+                        <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                            <CreditCard className="h-5 w-5 text-purple-500" />
                             הקרדיטים שלך
                         </CardTitle>
                         <Link href="/credits">
-                            <Button variant="ghost" size="sm">
-                                פרטים נוספים
-                                <ArrowLeft className="h-4 w-4 mr-2" />
+                            <Button variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
+                                פרטים
+                                <ArrowLeft className="h-4 w-4 mr-1" />
                             </Button>
                         </Link>
                     </CardHeader>
@@ -107,28 +110,26 @@ export default async function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* Storage Widget - 1 col */}
                 <StorageWidget />
             </div>
 
-            {/* Quick Actions */}
             <div>
-                <h2 className="text-lg font-semibold mb-4">פעולות מהירות</h2>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <h2 className="text-base sm:text-lg font-semibold mb-3">פעולות מהירות</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {quickActions.map((action) => (
                         <Link key={action.name} href={action.href}>
                             <Card
-                                className={`h-full transition-colors cursor-pointer ${action.color}`}
+                                className={`h-full transition-all duration-200 cursor-pointer border ${action.color} hover:shadow-md active:scale-[0.98]`}
                             >
-                                <CardContent className="p-6 relative">
+                                <CardContent className="p-4 sm:p-5 relative">
                                     {action.badge && (
-                                        <span className="absolute top-3 left-3 text-sm">
+                                        <span className="absolute top-2 left-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500 text-white">
                                             {action.badge}
                                         </span>
                                     )}
-                                    <action.icon className="h-8 w-8 mb-4" />
-                                    <h3 className="font-semibold mb-1">{action.name}</h3>
-                                    <p className="text-sm opacity-80">{action.description}</p>
+                                    <action.icon className="h-6 w-6 sm:h-7 sm:w-7 mb-2.5" />
+                                    <h3 className="font-semibold text-sm sm:text-base mb-0.5">{action.name}</h3>
+                                    <p className="text-xs opacity-70 leading-relaxed hidden sm:block">{action.description}</p>
                                 </CardContent>
                             </Card>
                         </Link>
@@ -136,29 +137,26 @@ export default async function DashboardPage() {
                 </div>
             </div>
 
-            {/* Recent Generations */}
             <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">יצירות אחרונות</h2>
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-base sm:text-lg font-semibold">יצירות אחרונות</h2>
                     <Link href="/gallery">
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700">
                             הצג הכל
-                            <ArrowLeft className="h-4 w-4 mr-2" />
+                            <ArrowLeft className="h-4 w-4 mr-1" />
                         </Button>
                     </Link>
                 </div>
 
                 {generations.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
                         {generations.map((gen) => (
-                            <Card key={gen.id} className="overflow-hidden group">
+                            <Card key={gen.id} className="overflow-hidden group cursor-pointer hover:shadow-md transition-shadow duration-200">
                                 <div className="aspect-square relative">
                                     {gen.files_deleted ? (
                                         <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                                            <p className="text-xs text-gray-400 text-center px-2">
-                                                הקובץ נמחק
-                                                <br />
-                                                לפינוי מקום
+                                            <p className="text-[10px] text-gray-400 text-center px-1">
+                                                קובץ נמחק
                                             </p>
                                         </div>
                                     ) : (
@@ -166,10 +164,11 @@ export default async function DashboardPage() {
                                             src={gen.thumbnail_url || gen.result_urls?.[0]}
                                             alt={gen.prompt || "Generated"}
                                             className="w-full h-full object-cover"
+                                            loading="lazy"
                                         />
                                     )}
-                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <Badge variant="secondary">
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                                        <Badge variant="secondary" className="text-[10px]">
                                             {gen.type === "image" && "תמונה"}
                                             {gen.type === "reel" && "רילז"}
                                             {gen.type === "carousel" && "קרוסלה"}
@@ -177,8 +176,8 @@ export default async function DashboardPage() {
                                         </Badge>
                                     </div>
                                 </div>
-                                <CardContent className="p-2">
-                                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                                <CardContent className="p-1.5 sm:p-2">
+                                    <div className="flex items-center gap-1 text-[10px] sm:text-xs text-gray-400">
                                         <Clock className="h-3 w-3" />
                                         <span>{formatRelativeTime(gen.created_at)}</span>
                                     </div>
@@ -187,12 +186,14 @@ export default async function DashboardPage() {
                         ))}
                     </div>
                 ) : (
-                    <Card className="p-12 text-center">
-                        <Sparkles className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                        <h3 className="text-lg font-medium mb-2">עדיין אין יצירות</h3>
-                        <p className="text-gray-500 mb-4">התחל ליצור תוכן עכשיו!</p>
-                        <Link href="/generate/text-to-image">
-                            <Button>צור תמונה ראשונה</Button>
+                    <Card className="p-8 sm:p-12 text-center shadow-sm">
+                        <Sparkles className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-3 text-gray-300" />
+                        <h3 className="text-base sm:text-lg font-medium mb-1">עדיין אין יצירות</h3>
+                        <p className="text-gray-500 text-sm mb-4">התחל ליצור תוכן עכשיו!</p>
+                        <Link href="/generate/creative-hub">
+                            <Button className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700">
+                                צור עכשיו
+                            </Button>
                         </Link>
                     </Card>
                 )}
@@ -205,32 +206,24 @@ function CreditDisplay({ credits }: { credits: any }) {
     const totalCredits = credits?.credits || 0;
 
     const capabilities = [
-        { label: "תמונות", cost: CREDIT_COSTS.image_generation, icon: "🖼️" },
-        {
-            label: "קרוסלות",
-            cost: CREDIT_COSTS.carousel_generation,
-            icon: "📸",
-        },
-        { label: "סרטונים", cost: CREDIT_COSTS.video_generation, icon: "🎬" },
-        {
-            label: "אימון דמות",
-            cost: CREDIT_COSTS.character_training,
-            icon: "🧑‍🎨",
-        },
+        { label: "תמונות", cost: CREDIT_COSTS.image_generation, icon: Sparkles, color: "text-purple-500" },
+        { label: "קרוסלות", cost: CREDIT_COSTS.carousel_generation, icon: Images, color: "text-emerald-500" },
+        { label: "סרטונים", cost: CREDIT_COSTS.video_generation, icon: Film, color: "text-blue-500" },
+        { label: "אימון דמות", cost: CREDIT_COSTS.character_training, icon: Wand2, color: "text-amber-500" },
     ];
 
     return (
         <div className="space-y-4">
             <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 font-medium">קרדיטים זמינים</span>
-                    <span className="font-bold text-2xl text-gray-900">
+                <div className="flex justify-between items-baseline">
+                    <span className="text-gray-500 text-sm">קרדיטים זמינים</span>
+                    <span className="font-bold text-2xl sm:text-3xl text-gray-900">
                         {totalCredits}
                     </span>
                 </div>
-                <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                        className="h-full bg-gradient-to-r from-purple-500 via-blue-500 to-green-500 transition-all"
+                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500 rounded-full"
                         style={{
                             width: `${Math.min((totalCredits / 500) * 100, 100)}%`,
                         }}
@@ -238,19 +231,19 @@ function CreditDisplay({ credits }: { credits: any }) {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                 {capabilities.map((cap) => {
                     const possible = cap.cost === 0 ? null : Math.floor(totalCredits / cap.cost);
                     return (
                         <div
                             key={cap.label}
-                            className="text-center p-2 rounded-lg bg-gray-50"
+                            className="text-center p-2.5 rounded-lg bg-gray-50 border border-gray-100"
                         >
-                            <span className="text-lg">{cap.icon}</span>
-                            <div className="text-sm font-semibold text-gray-900">
-                                {possible === null ? "חינם" : possible}
+                            <cap.icon className={`h-4 w-4 mx-auto mb-1 ${cap.color}`} />
+                            <div className="text-sm font-bold text-gray-900">
+                                {possible === null ? "---" : possible}
                             </div>
-                            <div className="text-xs text-gray-500">{cap.label}</div>
+                            <div className="text-[11px] text-gray-500">{cap.label}</div>
                         </div>
                     );
                 })}

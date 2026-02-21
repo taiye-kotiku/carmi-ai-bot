@@ -33,7 +33,8 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const prompt = body.prompt;
         const aspectRatio = body.aspectRatio === "9:16" ? "9:16" : "16:9";
-        const duration = body.duration === 4 ? 4 : 8;
+        // 4, 8, or 15 (8+7 extend). Default 8.
+        const duration = body.duration === 15 ? 15 : (body.duration === 4 ? 4 : 8);
 
         if (!prompt) {
             return NextResponse.json(
@@ -60,9 +61,8 @@ export async function POST(request: NextRequest) {
                     instances: [{ prompt }],
                     parameters: {
                         aspectRatio,
-                        durationSeconds: duration,
+                        durationSeconds: duration === 15 ? 8 : duration,
                         sampleCount: 1,
-                        // ✅ DO NOT include generateAudio — not supported by veo-3.0-fast-generate-001
                     },
                 }),
             }
@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
                 prompt,
                 aspectRatio,
                 duration,
+                extendTo15: duration === 15,
             },
         });
 

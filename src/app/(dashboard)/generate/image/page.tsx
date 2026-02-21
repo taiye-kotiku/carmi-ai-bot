@@ -4,7 +4,6 @@ import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
     Select,
@@ -34,7 +33,6 @@ export default function TextToImagePage() {
 
     const { addGenerationNotification } = useNotifications();
 
-    // Styles configuration (text-to-image only)
     const styles = [
         { value: "realistic", label: "פוטוריאליסטי (מציאותי)" },
         { value: "artistic", label: "אמנותי (ציור)" },
@@ -42,9 +40,9 @@ export default function TextToImagePage() {
     ];
 
     const aspectRatios = [
-        { value: "1:1", label: "1:1 (ריבוע - אינסטגרם)" },
-        { value: "16:9", label: "16:9 (רוחבי - יוטיוב)" },
-        { value: "9:16", label: "9:16 (סטורי / רילס)" },
+        { value: "1:1", label: "1:1 (ריבוע)" },
+        { value: "16:9", label: "16:9 (רוחבי)" },
+        { value: "9:16", label: "9:16 (סטורי)" },
         { value: "4:3", label: "4:3 (רגיל)" },
     ];
 
@@ -95,7 +93,6 @@ export default function TextToImagePage() {
                     setIsGenerating(false);
                     setProgress(0);
                 } else {
-                    // Update status text based on progress
                     const p = data.progress ?? 0;
                     if (p < 30) setStatusText("מתחיל יצירה...");
                     else if (p < 60) setStatusText("מעבד תמונה...");
@@ -105,7 +102,7 @@ export default function TextToImagePage() {
             } catch (err) {
                 console.error("Poll error:", err);
             }
-        }, 2000); // Check every 2 seconds
+        }, 2000);
     }, [stopPolling, addGenerationNotification]);
 
     const handleGenerate = async () => {
@@ -121,7 +118,6 @@ export default function TextToImagePage() {
         setStatusText("שולח בקשה...");
 
         try {
-            // Prepare payload (text-to-image only - no edit/combine)
             const body: any = {
                 prompt,
                 style,
@@ -164,42 +160,42 @@ export default function TextToImagePage() {
     };
 
     return (
-        <div className="container mx-auto py-8 px-4" dir="rtl">
-            <div className="max-w-4xl mx-auto">
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
-                        <ImageIcon className="h-8 w-8 text-purple-500" />
-                        יצירת תמונה (Text to Image)
+        <div className="pb-20 lg:pb-0" dir="rtl">
+            <div className="max-w-5xl mx-auto">
+                <div className="mb-6">
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-1 flex items-center gap-2">
+                        <ImageIcon className="h-6 w-6 sm:h-7 sm:w-7 text-purple-500" />
+                        יצירת תמונה
                     </h1>
-                    <p className="text-gray-600">
+                    <p className="text-gray-500 text-sm sm:text-base">
                         כתוב תיאור, בחר סגנון וצור תמונות מרהיבות בעזרת AI
                     </p>
                 </div>
 
-                <div className="grid lg:grid-cols-2 gap-8">
-                    {/* Controls */}
-                    <div className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>הגדרות יצירה</CardTitle>
+                <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+                    <div className="space-y-4">
+                        <Card className="shadow-sm">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base sm:text-lg">הגדרות יצירה</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label>תיאור התמונה (Prompt)</Label>
+                                <div className="space-y-1.5">
+                                    <Label className="text-sm font-medium">תיאור התמונה</Label>
                                     <Textarea
                                         placeholder="לדוגמה: חתול ג'ינג'י חמוד עם משקפי שמש יושב על חוף הים בשקיעה..."
                                         value={prompt}
                                         onChange={(e) => setPrompt(e.target.value)}
                                         rows={4}
                                         disabled={isGenerating}
+                                        className="min-h-[100px] text-base resize-none"
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label>סגנון</Label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-sm font-medium">סגנון</Label>
                                         <Select value={style} onValueChange={setStyle} disabled={isGenerating}>
-                                            <SelectTrigger>
+                                            <SelectTrigger className="min-h-[44px]">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -212,10 +208,10 @@ export default function TextToImagePage() {
                                         </Select>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <Label>יחס גובה-רוחב</Label>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-sm font-medium">יחס תמונה</Label>
                                         <Select value={aspectRatio} onValueChange={setAspectRatio} disabled={isGenerating}>
-                                            <SelectTrigger>
+                                            <SelectTrigger className="min-h-[44px]">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -229,17 +225,18 @@ export default function TextToImagePage() {
                                     </div>
                                 </div>
 
-                                <div className="pt-2">
+                                {/* Sticky on mobile */}
+                                <div className="pt-2 sticky bottom-20 lg:static lg:bottom-auto bg-white pb-2 lg:pb-0 z-10">
                                     <Button
                                         onClick={handleGenerate}
-                                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/20"
                                         size="lg"
                                         disabled={isGenerating || !prompt.trim()}
                                     >
                                         {isGenerating ? (
                                             <>
                                                 <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-                                                מייצר...
+                                                מייצר... {Math.round(progress)}%
                                             </>
                                         ) : (
                                             <>
@@ -248,22 +245,24 @@ export default function TextToImagePage() {
                                             </>
                                         )}
                                     </Button>
+                                    {isGenerating && statusText && (
+                                        <p className="text-xs text-center text-gray-400 mt-2 animate-pulse">{statusText}</p>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* Result Preview */}
-                    <div className="space-y-6">
-                        <Card className="h-full min-h-[400px] flex flex-col">
-                            <CardHeader>
-                                <CardTitle>תוצאה</CardTitle>
+                    <div className="space-y-4">
+                        <Card className="min-h-[300px] sm:min-h-[400px] flex flex-col shadow-sm">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base sm:text-lg">תוצאה</CardTitle>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50/50">
+                            <CardContent className="flex-1 flex flex-col items-center justify-center bg-gray-50/50 rounded-b-lg">
                                 {isGenerating ? (
-                                    <div className="text-center space-y-4">
-                                        <div className="relative w-20 h-20 mx-auto">
-                                            <Loader2 className="w-20 h-20 animate-spin text-purple-500/30" />
+                                    <div className="text-center space-y-3 py-8">
+                                        <div className="relative w-16 h-16 mx-auto">
+                                            <Loader2 className="w-16 h-16 animate-spin text-purple-500/30" />
                                             <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-purple-600">
                                                 {Math.round(progress)}%
                                             </div>
@@ -273,42 +272,40 @@ export default function TextToImagePage() {
                                         </p>
                                     </div>
                                 ) : result ? (
-                                    <div className="w-full space-y-4">
-                                        <div className="relative rounded-lg overflow-hidden border border-gray-200 shadow-sm group">
+                                    <div className="w-full space-y-4 p-2">
+                                        <div className="relative rounded-lg overflow-hidden border border-gray-200 shadow-sm">
                                             {resultLoadError ? (
                                                 <div className="p-4 bg-amber-50 text-amber-800 rounded-lg text-sm">
                                                     התמונה לא נטענה.{" "}
-                                                    <a href={result} target="_blank" rel="noopener noreferrer" className="underline">
-                                                        לחץ לפתיחה בחלון חדש
+                                                    <a href={result} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                                                        פתח בחלון חדש
                                                     </a>
                                                 </div>
                                             ) : (
                                                 <img
                                                     src={result}
-                                                    alt="Generated Result"
-                                                    className="w-full h-auto object-contain max-h-[500px]"
+                                                    alt="תוצאת יצירה"
+                                                    className="w-full h-auto object-contain max-h-[400px] sm:max-h-[500px]"
                                                     referrerPolicy="no-referrer"
                                                     onError={() => setResultLoadError(true)}
                                                 />
                                             )}
                                         </div>
-                                        {/* Instagram-style preview - how it looks in feed */}
                                         {!resultLoadError && (
-                                            <div className="pt-4 border-t">
-                                                <p className="text-sm text-gray-500 mb-3 text-center">איך זה ייראה באינסטגרם</p>
+                                            <div className="pt-3 border-t">
+                                                <p className="text-xs text-gray-400 mb-2 text-center">תצוגה מקדימה באינסטגרם</p>
                                                 <InstagramPreview imageUrl={result} aspectRatio={aspectRatio} />
                                             </div>
                                         )}
                                         <ExportFormats imageUrl={result} baseFilename="generated-image" />
                                     </div>
                                 ) : (
-                                    <div className="text-center space-y-4">
-                                        <div className="text-gray-400">
-                                            <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                                            <p>התמונה שתיצור תופיע כאן</p>
+                                    <div className="text-center space-y-3 py-8">
+                                        <ImageIcon className="h-12 w-12 sm:h-16 sm:w-16 mx-auto text-gray-300/50" />
+                                        <p className="text-gray-400 text-sm">התמונה שתיצור תופיע כאן</p>
+                                        <div className="max-w-[200px] mx-auto">
+                                            <InstagramPreview imageUrl={null} aspectRatio={aspectRatio} />
                                         </div>
-                                        <p className="text-sm text-gray-500">תצוגה מקדימה – איך זה ייראה באינסטגרם</p>
-                                        <InstagramPreview imageUrl={null} aspectRatio={aspectRatio} />
                                     </div>
                                 )}
                             </CardContent>

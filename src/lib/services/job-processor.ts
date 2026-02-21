@@ -86,7 +86,18 @@ async function processTextToVideo(job: any, userId: string, jobData: any) {
         return { status: "failed", progress: 0, result: null, error: "No video URL" };
     }
 
-    return await downloadAndSaveVideo(job, userId, videoUri, "text_to_video", jobData.prompt || "");
+    let finalVideoUri = videoUri;
+    if (jobData?.extendTo15) {
+        try {
+            const { extendVeoVideo } = await import("@/lib/services/veo-extend");
+            const extended = await extendVeoVideo(videoUri, jobData.prompt ? `Continue: ${jobData.prompt}` : undefined);
+            finalVideoUri = extended.videoUri;
+        } catch (err) {
+            console.warn("[TextToVideo] Extend failed, using 8s video:", err);
+        }
+    }
+
+    return await downloadAndSaveVideo(job, userId, finalVideoUri, "text_to_video", jobData.prompt || "");
 }
 
 // ─────────────────────────────────────────────

@@ -19,7 +19,6 @@ import {
     CreditCard,
     HelpCircle,
     Palette,
-    Coins,
     Pencil,
 } from "lucide-react";
 
@@ -44,7 +43,7 @@ const navigation: NavItem[] = [
     { type: "link", name: "הנפשת תמונה", href: "/generate/image-to-video", icon: Wand2 },
     { type: "link", name: "יצירת קריקטורה", href: "/generate/cartoonize", icon: Palette },
     { type: "link", name: "וידאו לתמונות", href: "/generate/video-to-images", icon: Film },
-    { type: "link", name: "יצירת רילז וירליים מוידאו", href: "/generate/video-clips", icon: Scissors },
+    { type: "link", name: "רילז מוידאו", href: "/generate/video-clips", icon: Scissors },
     { type: "link", name: "יצירת קרוסלה", href: "/generate/carousel", icon: LayoutGrid },
 
     { type: "divider", label: "דמויות" },
@@ -58,9 +57,6 @@ const navigation: NavItem[] = [
     { type: "divider", label: "הגדרות" },
     { type: "link", name: "מנוי וקרדיטים", href: "/credits", icon: CreditCard },
     { type: "link", name: "הגדרות חשבון", href: "/settings", icon: Settings },
-
-    // Add this to your nav items in sidebar.tsx
-    { type: "link", name: "קרדיטים", href: "/credits", icon: Coins },
 ];
 
 export function Sidebar() {
@@ -68,28 +64,26 @@ export function Sidebar() {
 
     return (
         <aside
-            className="hidden lg:flex lg:flex-col fixed right-0 top-0 w-64 bg-white border-l border-gray-200 h-screen"
+            className="hidden lg:flex lg:flex-col fixed right-0 top-0 w-64 bg-white/95 backdrop-blur-sm border-l border-gray-200/80 h-screen z-40"
             dir="rtl"
         >
-            {/* Logo */}
-            <div className="p-6 border-b border-gray-100">
-                <Link href="/dashboard" className="flex items-center gap-2">
-                    <div className="h-9 w-9 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center">
+            <div className="p-5 border-b border-gray-100">
+                <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer group">
+                    <div className="h-9 w-9 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow duration-200">
                         <Sparkles className="h-5 w-5 text-white" />
                     </div>
                     <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                        AI Studio
+                        kossem
                     </span>
                 </Link>
             </div>
 
-            {/* Navigation */}
-            <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+            <nav className="flex-1 overflow-y-auto p-3 space-y-0.5 scrollbar-thin">
                 {navigation.map((item, index) => {
                     if (item.type === "divider") {
                         return (
-                            <div key={`divider-${index}`} className="pt-5 pb-2">
-                                <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <div key={`divider-${index}`} className="pt-5 pb-1.5">
+                                <p className="px-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                                     {item.label}
                                 </p>
                             </div>
@@ -105,20 +99,23 @@ export function Sidebar() {
                             key={item.href}
                             href={item.href}
                             className={cn(
-                                "flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
+                                "flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-all duration-200 cursor-pointer group",
                                 isActive
-                                    ? "bg-purple-100 text-purple-700 font-medium"
-                                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                    ? "bg-purple-50 text-purple-700 font-medium shadow-sm"
+                                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                             )}
                         >
                             <div className="flex items-center gap-3">
                                 <item.icon
-                                    className={cn("h-5 w-5", isActive && "text-purple-600")}
+                                    className={cn(
+                                        "h-[18px] w-[18px] flex-shrink-0 transition-colors duration-200",
+                                        isActive ? "text-purple-600" : "text-gray-400 group-hover:text-gray-600"
+                                    )}
                                 />
-                                <span>{item.name}</span>
+                                <span className="text-sm">{item.name}</span>
                             </div>
                             {item.badge && (
-                                <span className="px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full">
+                                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full leading-tight">
                                     {item.badge}
                                 </span>
                             )}
@@ -127,22 +124,21 @@ export function Sidebar() {
                 })}
             </nav>
 
-            {/* Bottom Section */}
-            <div className="p-4 border-t border-gray-100 space-y-3">
+            <div className="p-3 border-t border-gray-100 space-y-2">
                 <Link
                     href="/help"
-                    className="flex items-center gap-3 px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                    className="flex items-center gap-3 px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors duration-200 cursor-pointer"
                 >
-                    <HelpCircle className="h-5 w-5" />
+                    <HelpCircle className="h-[18px] w-[18px]" />
                     <span className="text-sm">עזרה ותמיכה</span>
                 </Link>
 
-                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="h-6 w-6 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-3.5 border border-purple-100/60">
+                    <div className="flex items-center gap-2 mb-1.5">
+                        <div className="h-5 w-5 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <Sparkles className="h-3 w-3 text-purple-600" />
                         </div>
-                        <span className="text-sm font-semibold text-purple-700">
+                        <span className="text-xs font-semibold text-purple-700">
                             טיפ מקצועי
                         </span>
                     </div>
@@ -151,10 +147,10 @@ export function Sidebar() {
                     </p>
                     <Link
                         href="/characters"
-                        className="mt-3 text-xs font-medium text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                        className="mt-2.5 text-xs font-medium text-purple-600 hover:text-purple-700 flex items-center gap-1 cursor-pointer transition-colors duration-200"
                     >
                         צור דמות ראשונה
-                        <span className="text-lg leading-none">←</span>
+                        <span className="text-base leading-none">&#8592;</span>
                     </Link>
                 </div>
             </div>

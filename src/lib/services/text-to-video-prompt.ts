@@ -22,8 +22,9 @@ Instructions:
 3. Add Cinematography: Include camera movement (Dolly, Pan, Orbit, static) and framing (wide shot, close-up, medium).
 4. Motion & Physics: Describe natural movement, physics-based realism, subtle details (hair swaying, fabric movement, environmental elements).
 5. Style & Mood: Add cinematic style, mood, and ambiance that match the scene.
-6. Audio Hints: Veo 3.1 generates native audio. Include sound cues (ambient noise, dialogue, music style) when relevant.
-7. Language: Output the enhanced prompt in English for best model compatibility, while preserving any Hebrew cultural/context elements in a way the model can interpret.
+6. Audio Hints: Veo 3.1 generates native audio. Include sound cues (ambient noise, dialogue style, music style) when relevant. If the user's prompt is in Hebrew, the dialogue and narration should be in Hebrew.
+7. Hebrew Content: If the user's prompt is in Hebrew, any spoken dialogue, narration, text overlays, signs, or written elements in the video MUST be in Hebrew. Preserve Hebrew cultural context.
+8. Language: Output the enhanced prompt in English for model compatibility, but explicitly specify that all spoken words, text overlays, signs, and dialogue must be in Hebrew when the original prompt is in Hebrew.
 
 Output: A single flowing paragraph. No preamble, no quotes, no labels. Return ONLY the enhanced prompt.`;
 

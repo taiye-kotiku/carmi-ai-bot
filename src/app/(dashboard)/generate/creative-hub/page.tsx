@@ -417,8 +417,11 @@ export default function CreativeHubPage() {
 
                                 <div className="space-y-1.5">
                                     <Label className="text-sm font-medium">
-                                        תמונה / קישור (אופציונלי)
+                                        תמונה שלך / קישור (אופציונלי)
                                     </Label>
+                                    <p className="text-xs text-gray-400">
+                                        העלה תמונה שלך כדי שהדמות תופיע בכל התוכן שייווצר
+                                    </p>
                                     <div className="flex gap-2">
                                         {(
                                             ["none", "image", "url"] as const
@@ -476,7 +479,7 @@ export default function CreativeHubPage() {
                                                     />
                                                 ) : (
                                                     <span className="text-gray-400 text-sm">
-                                                        לחץ להעלאת תמונה
+                                                        לחץ להעלאת תמונה שלך (פנים ברורות)
                                                     </span>
                                                 )}
                                             </label>
@@ -537,6 +540,16 @@ export default function CreativeHubPage() {
                                         })}
                                     </div>
                                 </div>
+
+                                {/* Character image hint */}
+                                {selectedCount > 0 && mediaType !== "image" && !imageFile && (options.story || options.video || options.image) && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-700 flex items-start gap-2">
+                                        <ImageIcon className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                                        <span>
+                                            רוצה שהדמות שלך תופיע בתוכן? העלה תמונה שלך למעלה כדי שהמערכת תשמור על המראה שלך בכל היצירות.
+                                        </span>
+                                    </div>
+                                )}
 
                                 {/* Sticky generate button */}
                                 <div className="sticky bottom-20 lg:static lg:bottom-auto bg-white pt-3 pb-2 lg:pb-0 z-10 space-y-2 border-t border-gray-100 lg:border-0">
@@ -834,22 +847,42 @@ function JobCard({ job }: { job: JobState }) {
 
                     {/* Carousel result */}
                     {job.type === "carousel" && job.result.images && (
-                        <div>
+                        <div className="space-y-2">
                             <div className="flex gap-1.5 overflow-x-auto pb-1.5 -mx-1 px-1">
-                                {job.result.images
-                                    .slice(0, 3)
-                                    .map((url: string, i: number) => (
-                                        <img
-                                            key={i}
-                                            src={url}
-                                            alt={`שקופית ${i + 1}`}
-                                            className="h-20 w-auto rounded-lg object-cover flex-shrink-0"
-                                            loading="lazy"
-                                        />
-                                    ))}
-                                <span className="text-xs text-gray-400 self-center flex-shrink-0">
-                                    +{job.result.images.length} שקופיות
-                                </span>
+                                {job.result.images.map((url: string, i: number) => (
+                                    <img
+                                        key={i}
+                                        src={url}
+                                        alt={`שקופית ${i + 1}`}
+                                        className="h-20 w-auto rounded-lg object-cover flex-shrink-0"
+                                        loading="lazy"
+                                    />
+                                ))}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {job.result.images.map((url: string, i: number) => (
+                                    <a
+                                        key={i}
+                                        href={url}
+                                        download={`carousel_${i + 1}.png`}
+                                        className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 cursor-pointer transition-colors bg-purple-50 px-2 py-1 rounded-md"
+                                    >
+                                        <Download className="h-3 w-3" /> {i + 1}
+                                    </a>
+                                ))}
+                                <button
+                                    onClick={() => {
+                                        job.result.images.forEach((url: string, i: number) => {
+                                            const a = document.createElement("a");
+                                            a.href = url;
+                                            a.download = `carousel_${i + 1}.png`;
+                                            a.click();
+                                        });
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs text-white bg-purple-600 hover:bg-purple-700 cursor-pointer transition-colors px-2 py-1 rounded-md"
+                                >
+                                    <Download className="h-3 w-3" /> הורד הכל
+                                </button>
                             </div>
                         </div>
                     )}

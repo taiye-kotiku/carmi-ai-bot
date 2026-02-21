@@ -115,16 +115,18 @@ async function enhanceImageToVideoPrompt(
 
 Instructions:
 
-Analyze the Image: Identify the subject's key features (facial structure, hair, clothing) and the setting to ensure visual consistency.
+Analyze the Image: Identify the subject's key features (facial structure, hair, clothing) and the setting to ensure visual consistency. The person in the image MUST appear as the main character in the video with their exact likeness preserved.
 
 Expand the Motion: Take the user's short action (e.g., "drinking coffee") and describe it with physics-based realism (e.g., "steam swirling in slow motion," "subtle facial muscle movements").
 
 Apply Cinematic Standards: Always include specific camera movements (Dolly, Pan, Orbit) and professional lighting (Golden Hour, Rim Lighting, Bokeh).
 
-Incorporate Audio: Veo 3.1 generates native audio. Explicitly describe sound effects, ambient noise, or dialogue matching the scene.
+Incorporate Audio: Veo 3.1 generates native audio. Explicitly describe sound effects, ambient noise, or dialogue matching the scene. If the user prompt is in Hebrew, specify that all dialogue and narration should be in Hebrew.
+
+Hebrew Content: If the user's prompt is in Hebrew, any spoken words, text overlays, signs, or written content in the video MUST be in Hebrew.
 
 Output Structure:
-Your final output should be a single, flowing paragraph (or labeled sections) following this formula:
+Your final output should be a single, flowing paragraph following this formula:
 [Cinematography] + [Subject Details] + [Dynamic Action] + [Environmental Context] + [Style/Ambiance] + [Audio Keywords]
 
 Return ONLY the enhanced prompt, no preamble.`;
@@ -825,9 +827,9 @@ async function processStory(job: any, userId: string, jobData: any) {
             const basePrompt = buildEnhancedPrompt(prompt, "realistic", "9:16");
             if (imageBase64) {
                 parts.push({ inlineData: { mimeType: imageMimeType, data: imageBase64 } });
-                parts.push({ text: `Create a 9:16 vertical story frame based on this image. Theme: ${prompt}. Frame ${idx + 1} of ${imageCount}. Professional, cohesive style.` });
+                parts.push({ text: `Create a 9:16 vertical story frame based on this image. Keep the EXACT same person/character from the provided image - maintain their face, appearance, clothing and likeness precisely. Theme: ${prompt}. Frame ${idx + 1} of ${imageCount}. Professional, cohesive style. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew.` });
             } else {
-                parts.push({ text: `${basePrompt} Story frame ${idx + 1} of ${imageCount}. Vertical 9:16 composition.` });
+                parts.push({ text: `${basePrompt} Story frame ${idx + 1} of ${imageCount}. Vertical 9:16 composition. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew.` });
             }
 
             const response = await fetch(
@@ -868,7 +870,6 @@ async function processStory(job: any, userId: string, jobData: any) {
             const operationName = state.videoOperationName;
 
             if (!operationName) {
-                // Start Veo - use first image or text prompt
                 let videoPrompt = prompt;
                 try {
                     videoPrompt = await (await import("@/lib/services/text-to-video-prompt")).enhanceTextToVideoPrompt(prompt);
@@ -876,34 +877,33 @@ async function processStory(job: any, userId: string, jobData: any) {
                     // keep original
                 }
 
-                const startBody: any = {
-                    instances: [{ prompt: videoPrompt }],
-                    parameters: {
-                        aspectRatio: "9:16",
-                        durationSeconds: 8,
-                        sampleCount: 1,
-                    },
-                };
+                const storyVeoModels = ["veo-3.0-fast-generate-001", "veo-3.1-fast-generate-preview"];
+                let startResponse: Response | null = null;
+                let lastErr = "";
 
-                if (imageUrls.length > 0) {
-                    const imgRes = await fetch(imageUrls[0]);
-                    const imgBuf = Buffer.from(await imgRes.arrayBuffer());
-                    const imgBase64 = imgBuf.toString("base64");
-                    startBody.instances[0] = {
-                        prompt: videoPrompt,
-                        image: { bytesBase64Encoded: imgBase64, mimeType: "image/png" },
+                for (const model of storyVeoModels) {
+                    const body: any = {
+                        instances: [{ prompt: videoPrompt }],
+                        parameters: {
+                            aspectRatio: "9:16",
+                            durationSeconds: 8,
+                            sampleCount: 1,
+                        },
                     };
+
+                    startResponse = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${apiKey}`,
+                        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+                    );
+                    if (startResponse.ok) break;
+                    lastErr = await startResponse.text();
+                    console.warn(`[Story] Veo model ${model} failed:`, lastErr);
+                    if (!lastErr.includes("not found")) break;
                 }
 
-                const startResponse = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-fast-generate-preview:predictLongRunning?key=${apiKey}`,
-                    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(startBody) }
-                );
-
-                if (!startResponse.ok) {
-                    const errText = await startResponse.text();
-                    await failJob(job.id, userId, CREDIT_COSTS.story_generation, errText, "החזר - סטורי וידאו נכשל");
-                    return { status: "failed", progress: 0, result: null, error: errText };
+                if (!startResponse?.ok) {
+                    await failJob(job.id, userId, CREDIT_COSTS.story_generation, lastErr || "Veo start failed", "החזר - סטורי וידאו נכשל");
+                    return { status: "failed", progress: 0, result: null, error: lastErr || "Veo start failed" };
                 }
 
                 const operation = await startResponse.json();
@@ -1378,12 +1378,17 @@ function extractVideoUri(pollData: any): string | null {
     const found = findVideoInObject(resp);
     if (found) return found;
 
-    // Debug: log structure when nothing found
+    // Path 7: Direct top-level search on pollData itself (some APIs wrap differently)
+    const foundTop = findVideoInObject(pollData);
+    if (foundTop) return foundTop;
+
     console.warn(
-        "[extractVideoUri] No video found. Response keys:",
-        Object.keys(resp).join(", "),
+        "[extractVideoUri] No video found. Top-level keys:",
+        JSON.stringify(Object.keys(pollData)),
+        "| response keys:",
+        JSON.stringify(Object.keys(resp)),
         "| Full (truncated):",
-        JSON.stringify(pollData).substring(0, 1200)
+        JSON.stringify(pollData).substring(0, 2000)
     );
     return null;
 }
@@ -1421,12 +1426,13 @@ async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, 
 }
 
 function buildCombineImagesPrompt(prompt: string): string {
-    return `Combine the person from Image 1 with the character from Image 2 into a single, highly detailed, photorealistic image. Both individuals must appear naturally in the same scene. Preserve accurate facial likeness for both the person and the character. Scene/context: "${prompt}". Use professional lighting, cinematic composition, consistent environment. Both figures should be naturally integrated—same setting, consistent lighting, believable interaction or placement. 8K quality, sharp focus, lifelike skin texture and materials.`;
+    return `Combine the person from Image 1 with the character from Image 2 into a single, highly detailed, photorealistic image. Both individuals must appear naturally in the same scene. Preserve accurate facial likeness for both the person and the character. Scene/context: "${prompt}". Use professional lighting, cinematic composition, consistent environment. Both figures should be naturally integrated—same setting, consistent lighting, believable interaction or placement. 8K quality, sharp focus, lifelike skin texture and materials. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew.`;
 }
 
 function buildEditPrompt(prompt: string, style: string): string {
+    const hebrewRule = " IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew. Keep the EXACT same person/character from the provided image - maintain their face, appearance, clothing and likeness precisely.";
     if (style === "celebrity") {
-        return `Combine the person shown in this uploaded image with the celebrity or scenario described: "${prompt}". Create a highly detailed, photorealistic image featuring BOTH characters naturally in the same scene. Preserve accurate facial likeness for both the person in the uploaded image and the celebrity. Use professional lighting, cinematic composition, and photorealistic quality. Both individuals should appear naturally integrated—same setting, consistent lighting, believable interaction or placement. 8K quality, sharp focus, lifelike skin texture and materials.`;
+        return `Combine the person shown in this uploaded image with the celebrity or scenario described: "${prompt}". Create a highly detailed, photorealistic image featuring BOTH characters naturally in the same scene. Preserve accurate facial likeness for both the person in the uploaded image and the celebrity. Use professional lighting, cinematic composition, and photorealistic quality. Both individuals should appear naturally integrated—same setting, consistent lighting, believable interaction or placement. 8K quality, sharp focus, lifelike skin texture and materials.${hebrewRule}`;
     }
     const s: Record<string, string> = {
         realistic: "Edit this image with photorealistic, highly detailed quality. Use professional photography techniques: sharp focus, natural lighting, authentic skin texture, lifelike materials and reflections. The result should be indistinguishable from a high-end professional photograph. 8K quality, cinematic depth of field. Keep the overall composition and enhance realism.",
@@ -1434,7 +1440,7 @@ function buildEditPrompt(prompt: string, style: string): string {
         cartoon: "Edit this image in a cartoon or animated style. Use clean lines, vibrant colors, expressive character design. Style reminiscent of high-quality animation or illustration. Fun, dynamic, and visually engaging. Suitable for comics or animated content. Maintain recognizability while applying the cartoon aesthetic.",
         minimal: "Edit this image with a minimalist, clean approach. Use simple shapes, limited color palette, ample negative space. Modern, uncluttered composition. Less is more—focus on essential elements. Sophisticated, designer aesthetic. Simplify while preserving the core subject.",
     };
-    return `${s[style] || s.realistic} User instruction: ${prompt}`;
+    return `${s[style] || s.realistic}${hebrewRule} User instruction: ${prompt}`;
 }
 
 function buildEnhancedPrompt(prompt: string, style: string, aspectRatio: string): string {
@@ -1454,5 +1460,5 @@ function buildEnhancedPrompt(prompt: string, style: string, aspectRatio: string)
         celebrity: "Create a highly detailed, photorealistic image featuring the celebrity and scenario described. Maintain accurate likeness of the celebrity. Professional lighting, cinematic composition. 8K quality, sharp focus, lifelike skin texture.",
     };
     const styleText = s[style] || s.realistic;
-    return `${styleText} Composition: ${aspect}. Subject and scene: ${prompt}`;
+    return `${styleText} Composition: ${aspect}. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew. Subject and scene: ${prompt}`;
 }

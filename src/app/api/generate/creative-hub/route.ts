@@ -81,6 +81,8 @@ export async function POST(req: Request) {
             }
         }
 
+        const hasUserImage = !!imageBase64;
+
         // Calculate total cost
         const costMap: Record<string, number> = {
             story: CREDIT_COSTS.story_generation,
@@ -156,8 +158,8 @@ export async function POST(req: Request) {
             jobs.push(
                 (async () => {
                     const jobId = nanoid();
-                    if (imageBase64) {
-                        // Image-to-video - job processor will start Veo on first poll
+                    if (hasUserImage) {
+                        // Image-to-video with user's character
                         await supabaseAdmin.from("jobs").insert({
                             id: jobId,
                             user_id: user.id,
@@ -172,7 +174,6 @@ export async function POST(req: Request) {
                         });
                         jobIds.video = jobId;
                     } else {
-                        // Text-to-video - start Veo now
                         let videoPrompt = finalPrompt;
                         try {
                             videoPrompt = await enhanceTextToVideoPrompt(finalPrompt);
@@ -235,15 +236,18 @@ export async function POST(req: Request) {
                 (async () => {
                     const jobId = nanoid();
                     jobIds.image = jobId;
+                    const imagePrompt = hasUserImage
+                        ? `Use the person from the provided image as the main character. Keep their EXACT face, appearance, and likeness. ${finalPrompt}`
+                        : finalPrompt;
                     await supabaseAdmin.from("jobs").insert({
                         id: jobId,
                         user_id: user.id,
-                        type: imageBase64 ? "edit_image" : "generate_image",
+                        type: hasUserImage ? "edit_image" : "generate_image",
                         status: "processing",
                         progress: 10,
                         result: {
                             params: {
-                                prompt: finalPrompt,
+                                prompt: imagePrompt,
                                 aspectRatio: "9:16",
                                 style: "realistic",
                                 imageBase64: imageBase64 || null,

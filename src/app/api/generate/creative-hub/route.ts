@@ -13,6 +13,32 @@ import { enhanceTextToVideoPrompt } from "@/lib/services/text-to-video-prompt";
 const apiKey = process.env.GOOGLE_AI_API_KEY!;
 const VEO_MODELS = ["veo-3.1-fast-generate-preview", "veo-3.0-fast-generate-001"] as const;
 
+async function generateHebrewVideoNarration(prompt: string): Promise<string | null> {
+    if (!apiKey || !prompt?.trim()) return null;
+    try {
+        const { GoogleGenerativeAI } = await import("@google/generative-ai");
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash",
+            systemInstruction: `You are a Hebrew scriptwriter for short social media videos (8-15 seconds).
+Given a topic/description, write a short, natural Hebrew narration script that a person would speak in a video.
+Rules:
+- Write 2-4 short sentences in natural spoken Hebrew
+- Keep it concise (max 30 words total)
+- Make it engaging and suitable for Instagram content
+- Return ONLY the Hebrew text, nothing else`,
+        });
+        const result = await model.generateContent(
+            `Write a short Hebrew narration for a video about: ${prompt.slice(0, 500)}`
+        );
+        const text = result.response.text()?.trim();
+        if (text && text.length > 5 && text.length < 200) return text;
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 type CreativeHubOptions = {
     story?: boolean;
     carousel?: boolean;
@@ -176,7 +202,12 @@ export async function POST(req: Request) {
                     } else {
                         let videoPrompt = finalPrompt;
                         try {
-                            videoPrompt = await enhanceTextToVideoPrompt(finalPrompt);
+                            // Generate Hebrew narration script for better Veo Hebrew audio
+                            const hebrewScript = await generateHebrewVideoNarration(finalPrompt);
+                            if (hebrewScript) {
+                                videoPrompt = `${finalPrompt}. The person speaks the following Hebrew narration naturally: "${hebrewScript}"`;
+                            }
+                            videoPrompt = await enhanceTextToVideoPrompt(videoPrompt);
                         } catch {
                             // keep original
                         }

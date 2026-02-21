@@ -9,6 +9,68 @@ import { nanoid } from "nanoid";
 const apiKey = process.env.GOOGLE_AI_API_KEY!;
 
 /**
+ * Use Gemini to create a short Hebrew narration script for video prompts.
+ * This gives Veo 3.1 explicit Hebrew dialogue to produce better Hebrew audio.
+ */
+async function generateHebrewNarration(prompt: string): Promise<string | null> {
+    if (!apiKey || !prompt?.trim()) return null;
+    try {
+        const { GoogleGenerativeAI } = await import("@google/generative-ai");
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash",
+            systemInstruction: `You are a Hebrew scriptwriter for short social media videos (8-15 seconds).
+Given a topic/description, write a short, natural Hebrew narration script that a person would speak in a video.
+Rules:
+- Write 2-4 short sentences in natural spoken Hebrew
+- Keep it concise (max 30 words total)
+- Make it engaging and suitable for Instagram content
+- Return ONLY the Hebrew text, nothing else`,
+        });
+        const result = await model.generateContent(
+            `Write a short Hebrew narration for a video about: ${prompt.slice(0, 500)}`
+        );
+        const text = result.response.text()?.trim();
+        if (text && text.length > 5 && text.length < 200) return text;
+        return null;
+    } catch (err) {
+        console.warn("[HebrewNarration] Failed:", err);
+        return null;
+    }
+}
+
+/**
+ * After video generation, create Hebrew VTT subtitles using Gemini transcription.
+ * Returns a WebVTT string or null if transcription fails.
+ */
+async function generateHebrewVttSubtitles(videoUrl: string): Promise<string | null> {
+    try {
+        const { transcribeVideoToHebrew } = await import("@/lib/services/video-transcription");
+        const entries = await transcribeVideoToHebrew(videoUrl);
+        if (!entries || entries.length === 0) return null;
+
+        const lines = ["WEBVTT", ""];
+        for (const e of entries) {
+            lines.push(formatVttTime(e.start) + " --> " + formatVttTime(e.end));
+            lines.push(e.text);
+            lines.push("");
+        }
+        return lines.join("\n");
+    } catch (err) {
+        console.warn("[HebrewVTT] Subtitle generation failed:", err);
+        return null;
+    }
+}
+
+function formatVttTime(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+}
+
+/**
  * Try to advance a processing job one step.
  * Each call completes within ~8 seconds.
  */
@@ -121,9 +183,9 @@ Expand the Motion: Take the user's short action (e.g., "drinking coffee") and de
 
 Apply Cinematic Standards: Always include specific camera movements (Dolly, Pan, Orbit) and professional lighting (Golden Hour, Rim Lighting, Bokeh).
 
-Incorporate Audio: Veo 3.1 generates native audio. Explicitly describe sound effects, ambient noise, or dialogue matching the scene. If the user prompt is in Hebrew, specify that all dialogue and narration should be in Hebrew.
+Incorporate Audio & Dialogue: Veo 3.1 generates native audio with speech. If the user's prompt is in Hebrew or contains a Hebrew narration script, you MUST include the exact Hebrew dialogue in the prompt. Write it as: 'The person speaks in Hebrew: "[exact Hebrew text]"'. This is critical for generating proper Hebrew speech.
 
-Hebrew Content: If the user's prompt is in Hebrew, any spoken words, text overlays, signs, or written content in the video MUST be in Hebrew.
+Hebrew Content: If the user's prompt is in Hebrew, ALL spoken dialogue, narration, voiceover, text overlays, signs, and written content in the video MUST be in Hebrew. Never translate Hebrew - keep it in Hebrew script within the prompt.
 
 Output Structure:
 Your final output should be a single, flowing paragraph following this formula:
@@ -152,45 +214,59 @@ async function processImageToVideo(job: any, userId: string, jobData: any) {
     // Phase 1: Start Veo if not started
     if (!operationName && jobData?.imageBase64) {
         const mimeType = jobData.mimeType || "image/png";
+        const userPrompt = jobData.prompt || "";
 
         let finalPrompt: string;
         try {
+            // Generate Hebrew narration script and include it in the prompt
+            const hebrewScript = await generateHebrewNarration(userPrompt);
+            const promptWithHebrew = hebrewScript
+                ? `${userPrompt}. The person speaks the following Hebrew narration naturally: "${hebrewScript}"`
+                : userPrompt;
             finalPrompt = await enhanceImageToVideoPrompt(
                 jobData.imageBase64,
                 mimeType,
-                jobData.prompt || ""
+                promptWithHebrew
             );
         } catch (err) {
             console.error("[ImageToVideo] Prompt enhancement failed:", err);
-            finalPrompt = jobData.prompt || "Animate this image with subtle movement, cinematic quality";
+            finalPrompt = userPrompt || "Animate this image with subtle movement, cinematic quality. All speech must be in Hebrew.";
         }
 
-        // Start Veo (veo-3.1-fast-generate-preview has explicit image-to-video support per Gemini docs)
-        const veoModel = "veo-3.1-fast-generate-preview";
-        const startResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${veoModel}:predictLongRunning?key=${apiKey}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    instances: [{
-                        prompt: finalPrompt,
-                        image: {
-                            bytesBase64Encoded: jobData.imageBase64,
-                            mimeType: mimeType,
-                        },
-                    }],
-                    parameters: {
-                        aspectRatio: "16:9",
-                        durationSeconds: 4,
-                    },
-                }),
-            }
-        );
+        // Try veo-3.1 first (better Hebrew + native image-to-video), fallback to veo-3.0
+        const models = ["veo-3.1-fast-generate-preview", "veo-3.0-fast-generate-001"];
+        let startResponse: Response | null = null;
+        let responseBody = "";
 
-        const responseBody = await startResponse.text();
-        if (!startResponse.ok) {
-            console.error("[ImageToVideo] Veo API error:", startResponse.status, responseBody);
+        for (const model of models) {
+            startResponse = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${apiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        instances: [{
+                            prompt: finalPrompt,
+                            image: {
+                                bytesBase64Encoded: jobData.imageBase64,
+                                mimeType: mimeType,
+                            },
+                        }],
+                        parameters: {
+                            aspectRatio: "9:16",
+                            durationSeconds: 8,
+                            sampleCount: 1,
+                        },
+                    }),
+                }
+            );
+            responseBody = await startResponse.text();
+            if (startResponse.ok) break;
+            console.warn(`[ImageToVideo] Veo model ${model} failed:`, responseBody.slice(0, 300));
+            if (!responseBody.includes("not found")) break;
+        }
+
+        if (!startResponse?.ok) {
             const errMsg = (() => {
                 try {
                     const j = JSON.parse(responseBody);
@@ -204,7 +280,6 @@ async function processImageToVideo(job: any, userId: string, jobData: any) {
         }
 
         const operation = JSON.parse(responseBody);
-        // Save operation name, remove heavy base64 data
         await supabaseAdmin.from("jobs").update({
             progress: 20,
             result: { operationName: operation.name, prompt: jobData.prompt },
@@ -872,18 +947,44 @@ async function processStory(job: any, userId: string, jobData: any) {
             if (!operationName) {
                 let videoPrompt = prompt;
                 try {
-                    videoPrompt = await (await import("@/lib/services/text-to-video-prompt")).enhanceTextToVideoPrompt(prompt);
+                    const hebrewScript = await generateHebrewNarration(prompt);
+                    if (hebrewScript) {
+                        videoPrompt = `${prompt}. The person in the video speaks the following Hebrew narration naturally: "${hebrewScript}"`;
+                    }
+                    videoPrompt = await (await import("@/lib/services/text-to-video-prompt")).enhanceTextToVideoPrompt(videoPrompt);
                 } catch {
                     // keep original
                 }
 
-                const storyVeoModels = ["veo-3.0-fast-generate-001", "veo-3.1-fast-generate-preview"];
+                // Prepare reference image (user's uploaded photo or first generated story image)
+                let refImageBase64: string | null = null;
+                if (imageBase64) {
+                    refImageBase64 = imageBase64;
+                } else if (imageUrls.length > 0) {
+                    try {
+                        const imgRes = await fetch(imageUrls[0]);
+                        const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+                        refImageBase64 = imgBuf.toString("base64");
+                    } catch {
+                        console.warn("[Story] Failed to download story image for video reference");
+                    }
+                }
+
+                const storyVeoModels = ["veo-3.1-fast-generate-preview", "veo-3.0-fast-generate-001"];
                 let startResponse: Response | null = null;
                 let lastErr = "";
 
                 for (const model of storyVeoModels) {
+                    const instance: any = { prompt: videoPrompt };
+                    if (refImageBase64) {
+                        instance.image = {
+                            bytesBase64Encoded: refImageBase64,
+                            mimeType: imageMimeType || "image/png",
+                        };
+                    }
+
                     const body: any = {
-                        instances: [{ prompt: videoPrompt }],
+                        instances: [instance],
                         parameters: {
                             aspectRatio: "9:16",
                             durationSeconds: 8,
@@ -951,6 +1052,22 @@ async function processStory(job: any, userId: string, jobData: any) {
             await supabaseAdmin.storage.from("generations").upload(fn, vidBuf, { contentType: "video/mp4", upsert: true });
             const { data: { publicUrl } } = supabaseAdmin.storage.from("generations").getPublicUrl(fn);
 
+            // Generate Hebrew subtitles for the story video
+            let vttUrl: string | null = null;
+            try {
+                const vttContent = await generateHebrewVttSubtitles(publicUrl);
+                if (vttContent) {
+                    const vttFn = `videos/${userId}/${Date.now()}_story_he.vtt`;
+                    await supabaseAdmin.storage.from("generations").upload(vttFn, Buffer.from(vttContent, "utf-8"), {
+                        contentType: "text/vtt", upsert: true,
+                    });
+                    const { data: vttData } = supabaseAdmin.storage.from("generations").getPublicUrl(vttFn);
+                    vttUrl = vttData.publicUrl;
+                }
+            } catch (err) {
+                console.warn("[Story] VTT generation failed:", err);
+            }
+
             await supabaseAdmin.from("generations").insert({
                 id: nanoid(), user_id: userId, type: "video", feature: "story_generation",
                 prompt, result_urls: [...(state.imageUrls || []), publicUrl],
@@ -960,11 +1077,10 @@ async function processStory(job: any, userId: string, jobData: any) {
             });
 
             await updateUserStorage(userId, vidBuf.byteLength);
-            await completeJob(job.id, {
-                imageUrls: state.imageUrls,
-                videoUrl: publicUrl,
-            });
-            return { status: "completed", progress: 100, result: { imageUrls: state.imageUrls, videoUrl: publicUrl }, error: null };
+            const storyResult: any = { imageUrls: state.imageUrls, videoUrl: publicUrl };
+            if (vttUrl) storyResult.vttUrl = vttUrl;
+            await completeJob(job.id, storyResult);
+            return { status: "completed", progress: 100, result: storyResult, error: null };
         }
 
         return stillProcessing(job);
@@ -1413,6 +1529,22 @@ async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, 
     await supabaseAdmin.storage.from("generations").upload(fn, vidBuf, { contentType: "video/mp4", upsert: true });
     const { data: { publicUrl } } = supabaseAdmin.storage.from("generations").getPublicUrl(fn);
 
+    // Generate Hebrew VTT subtitles as a fallback for Hebrew audio
+    let vttUrl: string | null = null;
+    try {
+        const vttContent = await generateHebrewVttSubtitles(publicUrl);
+        if (vttContent) {
+            const vttFn = `videos/${userId}/${Date.now()}_he.vtt`;
+            await supabaseAdmin.storage.from("generations").upload(vttFn, Buffer.from(vttContent, "utf-8"), {
+                contentType: "text/vtt", upsert: true,
+            });
+            const { data: vttData } = supabaseAdmin.storage.from("generations").getPublicUrl(vttFn);
+            vttUrl = vttData.publicUrl;
+        }
+    } catch (err) {
+        console.warn("[downloadAndSaveVideo] VTT generation failed:", err);
+    }
+
     await supabaseAdmin.from("generations").insert({
         id: nanoid(), user_id: userId, type: "video", feature,
         prompt, result_urls: [publicUrl], status: "completed",
@@ -1421,8 +1553,10 @@ async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, 
     });
 
     await updateUserStorage(userId, vidBuf.byteLength);
-    await completeJob(job.id, { videoUrl: publicUrl });
-    return { status: "completed", progress: 100, result: { videoUrl: publicUrl }, error: null };
+    const result: any = { videoUrl: publicUrl };
+    if (vttUrl) result.vttUrl = vttUrl;
+    await completeJob(job.id, result);
+    return { status: "completed", progress: 100, result, error: null };
 }
 
 function buildCombineImagesPrompt(prompt: string): string {

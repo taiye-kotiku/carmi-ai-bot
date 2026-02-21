@@ -768,11 +768,22 @@ function JobCard({ job }: { job: JobState }) {
                     {job.type === "video" && job.result.videoUrl && (
                         <div>
                             <video
-                                src={job.result.videoUrl}
                                 controls
                                 className="w-full rounded-lg"
                                 playsInline
-                            />
+                                crossOrigin="anonymous"
+                            >
+                                <source src={job.result.videoUrl} type="video/mp4" />
+                                {job.result.vttUrl && (
+                                    <track
+                                        kind="subtitles"
+                                        src={job.result.vttUrl}
+                                        srcLang="he"
+                                        label="עברית"
+                                        default
+                                    />
+                                )}
+                            </video>
                             <a
                                 href={job.result.videoUrl}
                                 download
@@ -826,11 +837,22 @@ function JobCard({ job }: { job: JobState }) {
                                 </div>
                                 {job.result.videoUrl && (
                                     <video
-                                        src={job.result.videoUrl}
                                         controls
                                         className="w-full rounded-lg"
                                         playsInline
-                                    />
+                                        crossOrigin="anonymous"
+                                    >
+                                        <source src={job.result.videoUrl} type="video/mp4" />
+                                        {job.result.vttUrl && (
+                                            <track
+                                                kind="subtitles"
+                                                src={job.result.vttUrl}
+                                                srcLang="he"
+                                                label="עברית"
+                                                default
+                                            />
+                                        )}
+                                    </video>
                                 )}
                                 <a
                                     href={

@@ -9,7 +9,10 @@ import Link from "next/link";
 
 function SuccessContent() {
     const searchParams = useSearchParams();
-    const orderId = searchParams.get("order");
+
+    // ✅ FIXED: LS appends ?order_id=XXX — not ?order=XXX
+    const orderId = searchParams.get("order_id");
+
     const [status, setStatus] = useState<"loading" | "success" | "pending" | "error">("loading");
     const [credits, setCredits] = useState<number>(0);
     const [retries, setRetries] = useState(0);

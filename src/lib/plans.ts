@@ -1,50 +1,76 @@
-// src/lib/plans.ts - Shared credit plans for Lemon Squeezy
-
-export interface CreditPlan {
+export type Plan = {
     id: string;
     name: string;
     nameHe: string;
-    credits: number;
     price: number;
+    currency: string;
+    currencySymbol: string;
+    credits: number;
     pricePerCredit: number;
+    variantId?: string;
+    isFree?: boolean;
     popular?: boolean;
     savings?: string;
     features: string[];
-    variantId: string; // Lemon Squeezy variant ID
-}
+};
 
-export const CREDIT_PLANS: CreditPlan[] = [
+export const CURRENCY = "ILS";
+export const CURRENCY_SYMBOL = "₪";
+
+export const FREE_TRIAL_CREDITS = 40;
+export const FREE_TRIAL_DAYS = 7;
+
+export const plans: Plan[] = [
+    {
+        id: "free_trial",
+        name: "Free Trial",
+        nameHe: "ניסיון חינם",
+        price: 0,
+        currency: CURRENCY,
+        currencySymbol: CURRENCY_SYMBOL,
+        credits: FREE_TRIAL_CREDITS,
+        pricePerCredit: 0,
+        isFree: true,
+        features: [
+            "40 קרדיטים לניסיון",
+            "גישה לכל הכלים",
+            "תוקף ל-7 ימים",
+        ],
+    },
     {
         id: "starter",
         name: "Starter",
         nameHe: "סטארטר",
-        credits: 50,
-        price: 29,
-        pricePerCredit: 0.58,
-        variantId: process.env.NEXT_PUBLIC_LEMONSQUEEZY_VARIANT_STARTER || "",
+        price: 99,
+        currency: CURRENCY,
+        currencySymbol: CURRENCY_SYMBOL,
+        credits: 150,
+        pricePerCredit: parseFloat((99 / 150).toFixed(3)),
+        variantId: process.env.NEXT_PUBLIC_LEMONSQUEEZY_VARIANT_STARTER,
         features: [
-            "50 קרדיטים",
-            "תמונות AI",
-            "קרוסלות",
-            "תמיכה בצ׳אט",
+            "150 קרדיטים לשימוש",
+            "יצירת עד 10 תמונות",
+            "גישה לכל הכלים",
+            "תמיכה בסיסית",
         ],
     },
     {
         id: "creator",
         name: "Creator",
-        nameHe: "קריאייטור",
-        credits: 150,
-        price: 69,
-        pricePerCredit: 0.46,
+        nameHe: "יוצר",
+        price: 139,
+        currency: CURRENCY,
+        currencySymbol: CURRENCY_SYMBOL,
+        credits: 300,
+        pricePerCredit: parseFloat((139 / 300).toFixed(3)),
+        variantId: process.env.NEXT_PUBLIC_LEMONSQUEEZY_VARIANT_CREATOR,
         popular: true,
-        savings: "חיסכון של 21%",
-        variantId: process.env.NEXT_PUBLIC_LEMONSQUEEZY_VARIANT_CREATOR || "",
+        savings: "חיסכון 30%",
         features: [
-            "150 קרדיטים",
-            "תמונות AI",
-            "קרוסלות",
-            "וידאו AI",
-            "דמויות מותאמות",
+            "300 קרדיטים לשימוש",
+            "יצירת עד 20 תמונות",
+            "גישה לכל הכלים",
+            "חיסכון 30% לקרדיט",
             "תמיכה מועדפת",
         ],
     },
@@ -52,44 +78,38 @@ export const CREDIT_PLANS: CreditPlan[] = [
         id: "pro",
         name: "Pro",
         nameHe: "פרו",
-        credits: 400,
-        price: 149,
-        pricePerCredit: 0.37,
-        savings: "חיסכון של 36%",
-        variantId: process.env.NEXT_PUBLIC_LEMONSQUEEZY_VARIANT_PRO || "",
+        price: 229,
+        currency: CURRENCY,
+        currencySymbol: CURRENCY_SYMBOL,
+        credits: 600,
+        pricePerCredit: parseFloat((229 / 600).toFixed(3)),
+        variantId: process.env.NEXT_PUBLIC_LEMONSQUEEZY_VARIANT_PRO,
+        savings: "חיסכון 42%",
         features: [
-            "400 קרדיטים",
-            "כל הכלים",
-            "וידאו AI מתקדם",
-            "דמויות ללא הגבלה",
-            "תמיכה VIP",
-            "גישה מוקדמת לפיצ׳רים",
-        ],
-    },
-    {
-        id: "business",
-        name: "Business",
-        nameHe: "עסקי",
-        credits: 1000,
-        price: 299,
-        pricePerCredit: 0.30,
-        savings: "חיסכון של 48%",
-        variantId: process.env.NEXT_PUBLIC_LEMONSQUEEZY_VARIANT_BUSINESS || "",
-        features: [
-            "1000 קרדיטים",
-            "כל הכלים ללא הגבלה",
-            "API גישה",
-            "מנהל חשבון ייעודי",
-            "תמיכה 24/7",
-            "התאמה אישית",
+            "600 קרדיטים לשימוש",
+            "יצירת עד 40 תמונות",
+            "גישה לכל הכלים",
+            "חיסכון 42% לקרדיט",
+            "תמיכה פרימיום",
         ],
     },
 ];
 
-export function getPlanById(planId: string): CreditPlan | undefined {
-    return CREDIT_PLANS.find((p) => p.id === planId);
+export const CREDIT_PLANS = plans.filter((plan) => !plan.isFree);
+
+export function formatPrice(price: number): string {
+    if (price === 0) return "Free";
+    return `${price}${CURRENCY_SYMBOL}`;
 }
 
-export function getPlanByVariantId(variantId: string): CreditPlan | undefined {
-    return CREDIT_PLANS.find((p) => p.variantId === variantId);
+export function getPlanByVariantId(variantId: string): Plan | undefined {
+    return plans.find((plan) => plan.variantId === variantId);
+}
+
+export function getPlanById(id: string): Plan | undefined {
+    return plans.find((plan) => plan.id === id);
+}
+
+export function getActivePlans(): Plan[] {
+    return plans.filter((plan) => !plan.isFree);
 }

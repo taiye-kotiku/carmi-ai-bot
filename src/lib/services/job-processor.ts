@@ -20,15 +20,15 @@ async function generateHebrewNarration(prompt: string): Promise<string | null> {
         const model = genAI.getGenerativeModel({
             model: "gemini-2.0-flash",
             systemInstruction: `You are a Hebrew scriptwriter for short social media videos (8-15 seconds).
-Given a topic/description, write a short, natural Hebrew narration script that a person would speak in a video.
+Given a topic/description, write a very short Hebrew opening line (1-2 sentences) that a person would speak in the first 2-3 seconds of a video, introducing the topic.
 Rules:
-- Write 2-4 short sentences in natural spoken Hebrew
-- Keep it concise (max 30 words total)
-- Make it engaging and suitable for Instagram content
+- Write ONLY 1-2 very short sentences (max 15 words)
+- This is just the opening hook - the rest of the video shows the topic visually
+- Make it a natural, engaging Hebrew opening like "שלום! היום אני מראה לכם..."
 - Return ONLY the Hebrew text, nothing else`,
         });
         const result = await model.generateContent(
-            `Write a short Hebrew narration for a video about: ${prompt.slice(0, 500)}`
+            `Write a short Hebrew opening line for a video about: ${prompt.slice(0, 500)}`
         );
         const text = result.response.text()?.trim();
         if (text && text.length > 5 && text.length < 200) return text;
@@ -175,23 +175,26 @@ async function enhanceImageToVideoPrompt(
 
     const systemInstruction = `Objective: Act as a professional Cinematographer and AI Prompt Engineer. Your task is to take a short user description and an uploaded image to create a highly detailed, technical prompt for the Veo 3.1 video generation model.
 
+CRITICAL RULES:
+1. NEVER invent or generate a new character. The ONLY person/character in the video is the EXACT person from the uploaded image. Preserve their face, body, hair, clothing, and every visual detail precisely.
+2. VIDEO STRUCTURE: The first 2-3 seconds show the original person from the image being gently animated (subtle movement, breathing, blinking, slight head turn). After the first 2-3 seconds, the video transitions to show content directly relevant to the topic described by the user (product shots, scenery, demonstrations, relevant visuals) while maintaining cinematic quality.
+3. Do NOT create, hallucinate, or substitute any other person or character. The person from the image is the ONLY human that appears.
+
 Instructions:
 
-Analyze the Image: Identify the subject's key features (facial structure, hair, clothing) and the setting to ensure visual consistency. The person in the image MUST appear as the main character in the video with their exact likeness preserved.
+Analyze the Image: Identify the subject's exact features (facial structure, hair, clothing, pose) to ensure the animation in the first 2-3 seconds is a faithful, minimal reenactment of this exact person.
 
-Expand the Motion: Take the user's short action (e.g., "drinking coffee") and describe it with physics-based realism (e.g., "steam swirling in slow motion," "subtle facial muscle movements").
+First 2-3 Seconds: Describe the person from the image with subtle, natural animation - a gentle head turn, eye contact with the camera, a slight smile, natural breathing. Keep it minimal and true to the original image.
 
-Apply Cinematic Standards: Always include specific camera movements (Dolly, Pan, Orbit) and professional lighting (Golden Hour, Rim Lighting, Bokeh).
+Remaining Duration (5-6 seconds): Describe topic-relevant visuals that match the user's description. This can include product shots, scenery, demonstrations, environments, or other relevant content. Describe a smooth cinematic transition from the person to the topic content.
 
-Incorporate Audio & Dialogue: Veo 3.1 generates native audio with speech. If the user's prompt is in Hebrew or contains a Hebrew narration script, you MUST include the exact Hebrew dialogue in the prompt. Write it as: 'The person speaks in Hebrew: "[exact Hebrew text]"'. This is critical for generating proper Hebrew speech.
+Apply Cinematic Standards: Include camera movements (Dolly, Pan, Orbit) and professional lighting (Golden Hour, Rim Lighting, Bokeh).
 
-Hebrew Content: If the user's prompt is in Hebrew, ALL spoken dialogue, narration, voiceover, text overlays, signs, and written content in the video MUST be in Hebrew. Never translate Hebrew - keep it in Hebrew script within the prompt.
+Audio & Dialogue: Veo 3.1 generates native audio with speech. If the user's prompt is in Hebrew or contains a Hebrew narration script, include the exact Hebrew dialogue. Write it as: 'The person speaks in Hebrew: "[exact Hebrew text]"'.
 
-Output Structure:
-Your final output should be a single, flowing paragraph following this formula:
-[Cinematography] + [Subject Details] + [Dynamic Action] + [Environmental Context] + [Style/Ambiance] + [Audio Keywords]
+Hebrew Content: If the user's prompt is in Hebrew, ALL spoken dialogue, narration, voiceover, text overlays, signs, and written content MUST be in Hebrew. Keep Hebrew script as-is.
 
-Return ONLY the enhanced prompt, no preamble.`;
+Output: A single flowing paragraph. Return ONLY the enhanced prompt, no preamble.`;
 
     const model = genAI.getGenerativeModel({
         model: "gemini-2.0-flash",
@@ -218,11 +221,10 @@ async function processImageToVideo(job: any, userId: string, jobData: any) {
 
         let finalPrompt: string;
         try {
-            // Generate Hebrew narration script and include it in the prompt
             const hebrewScript = await generateHebrewNarration(userPrompt);
             const promptWithHebrew = hebrewScript
-                ? `${userPrompt}. The person speaks the following Hebrew narration naturally: "${hebrewScript}"`
-                : userPrompt;
+                ? `${userPrompt}. CRITICAL: Do NOT generate a new character. Use ONLY the exact person from this image. First 2-3 seconds: the person speaks in Hebrew: "${hebrewScript}". Remaining seconds: show content relevant to the topic with cinematic visuals.`
+                : `${userPrompt}. CRITICAL: Do NOT generate a new character. Use ONLY the exact person from this image. First 2-3 seconds: animate the person with subtle natural movement. Remaining seconds: show content relevant to the topic.`;
             finalPrompt = await enhanceImageToVideoPrompt(
                 jobData.imageBase64,
                 mimeType,
@@ -230,7 +232,7 @@ async function processImageToVideo(job: any, userId: string, jobData: any) {
             );
         } catch (err) {
             console.error("[ImageToVideo] Prompt enhancement failed:", err);
-            finalPrompt = userPrompt || "Animate this image with subtle movement, cinematic quality. All speech must be in Hebrew.";
+            finalPrompt = `${userPrompt || "Animate this image"}. Do NOT generate a new character. Use ONLY the exact person from this image. First 2-3 seconds: subtle animation. Remaining seconds: topic-relevant content. All speech in Hebrew.`;
         }
 
         // Try veo-3.1 first (better Hebrew + native image-to-video), fallback to veo-3.0
@@ -949,7 +951,9 @@ async function processStory(job: any, userId: string, jobData: any) {
                 try {
                     const hebrewScript = await generateHebrewNarration(prompt);
                     if (hebrewScript) {
-                        videoPrompt = `${prompt}. The person in the video speaks the following Hebrew narration naturally: "${hebrewScript}"`;
+                        videoPrompt = `${prompt}. IMPORTANT: Do NOT generate a new character. Use ONLY the exact person from the reference image. First 2-3 seconds: the person from the image speaks in Hebrew: "${hebrewScript}". Remaining seconds: show content relevant to the topic with cinematic visuals.`;
+                    } else {
+                        videoPrompt = `${prompt}. IMPORTANT: Do NOT generate a new character. Use ONLY the exact person from the reference image. First 2-3 seconds: animate the person from the image with subtle natural movement. Remaining seconds: show content relevant to the topic.`;
                     }
                     videoPrompt = await (await import("@/lib/services/text-to-video-prompt")).enhanceTextToVideoPrompt(videoPrompt);
                 } catch {

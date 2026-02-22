@@ -21,15 +21,15 @@ async function generateHebrewVideoNarration(prompt: string): Promise<string | nu
         const model = genAI.getGenerativeModel({
             model: "gemini-2.0-flash",
             systemInstruction: `You are a Hebrew scriptwriter for short social media videos (8-15 seconds).
-Given a topic/description, write a short, natural Hebrew narration script that a person would speak in a video.
+Given a topic/description, write a very short Hebrew opening line (1-2 sentences) that a person would speak in the first 2-3 seconds of a video, introducing the topic.
 Rules:
-- Write 2-4 short sentences in natural spoken Hebrew
-- Keep it concise (max 30 words total)
-- Make it engaging and suitable for Instagram content
+- Write ONLY 1-2 very short sentences (max 15 words)
+- This is just the opening hook - the rest of the video shows the topic visually
+- Make it a natural, engaging Hebrew opening like "שלום! היום אני מראה לכם..."
 - Return ONLY the Hebrew text, nothing else`,
         });
         const result = await model.generateContent(
-            `Write a short Hebrew narration for a video about: ${prompt.slice(0, 500)}`
+            `Write a short Hebrew opening line for a video about: ${prompt.slice(0, 500)}`
         );
         const text = result.response.text()?.trim();
         if (text && text.length > 5 && text.length < 200) return text;
@@ -202,10 +202,9 @@ export async function POST(req: Request) {
                     } else {
                         let videoPrompt = finalPrompt;
                         try {
-                            // Generate Hebrew narration script for better Veo Hebrew audio
                             const hebrewScript = await generateHebrewVideoNarration(finalPrompt);
                             if (hebrewScript) {
-                                videoPrompt = `${finalPrompt}. The person speaks the following Hebrew narration naturally: "${hebrewScript}"`;
+                                videoPrompt = `${finalPrompt}. First 2-3 seconds: a person speaks in Hebrew: "${hebrewScript}". Remaining seconds: show content relevant to the topic with cinematic visuals. Do NOT generate a new character.`;
                             }
                             videoPrompt = await enhanceTextToVideoPrompt(videoPrompt);
                         } catch {

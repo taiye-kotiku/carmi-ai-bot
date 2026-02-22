@@ -27,6 +27,15 @@ import { toast } from "sonner";
 import { useNotifications } from "@/lib/notifications/notification-context";
 import { useCredits } from "@/hooks/use-credits";
 import { CREDIT_COSTS } from "@/lib/config/credits";
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogFooter,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 
 const STORAGE_KEY = "creative-hub-jobIds";
 
@@ -100,6 +109,9 @@ export default function CreativeHubPage() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [jobStates, setJobStates] = useState<JobState[]>([]);
     const [globalStatus, setGlobalStatus] = useState("");
+    const [showPromptModal, setShowPromptModal] = useState(false);
+    const [generatedPrompt, setGeneratedPrompt] = useState("");
+    const [isPreparingPrompt, setIsPreparingPrompt] = useState(false);
     const allDoneNotified = useRef(false);
     const completedJobsRef = useRef(new Set<string>());
 
@@ -269,7 +281,7 @@ export default function CreativeHubPage() {
         }
     };
 
-    const handleGenerate = async () => {
+    const handlePreparePrompt = async () => {
         if (!prompt.trim()) {
             toast.error("נא להזין תיאור");
             return;
@@ -283,6 +295,35 @@ export default function CreativeHubPage() {
             return;
         }
 
+        setIsPreparingPrompt(true);
+        try {
+            const res = await fetch("/api/generate/creative-hub/preview", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    prompt: prompt.trim(),
+                    websiteUrl: mediaType === "url" && websiteUrl.trim() ? websiteUrl.trim() : undefined,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "שגיאה בשרת");
+            setGeneratedPrompt(data.finalPrompt || prompt.trim());
+            setShowPromptModal(true);
+        } catch (err: any) {
+            toast.error(err.message || "שגיאה בהכנת הפרומפט");
+        } finally {
+            setIsPreparingPrompt(false);
+        }
+    };
+
+    const handleGenerateFromModal = async () => {
+        const editedPrompt = generatedPrompt.trim();
+        if (!editedPrompt) {
+            toast.error("נא להזין פרומפט");
+            return;
+        }
+
+        setShowPromptModal(false);
         setIsGenerating(true);
         allDoneNotified.current = false;
         completedJobsRef.current = new Set();
@@ -290,10 +331,6 @@ export default function CreativeHubPage() {
         setGlobalStatus("שולח בקשה...");
 
         try {
-            if (mediaType === "url" && websiteUrl.trim()) {
-                setGlobalStatus("מחלץ מידע מהאתר שלך...");
-            }
-
             let imageBase64: string | undefined;
             let imageMimeType: string | undefined;
             if (mediaType === "image" && imageFile) {
@@ -316,15 +353,12 @@ export default function CreativeHubPage() {
             setGlobalStatus("מאתחל יצירות...");
 
             const body: any = {
-                prompt: prompt.trim(),
+                prompt: editedPrompt,
                 options,
             };
             if (imageBase64) {
                 body.imageBase64 = imageBase64;
                 body.imageMimeType = imageMimeType;
-            }
-            if (mediaType === "url" && websiteUrl.trim()) {
-                body.websiteUrl = websiteUrl.trim();
             }
 
             const res = await fetch("/api/generate/creative-hub", {
@@ -571,11 +605,12 @@ export default function CreativeHubPage() {
                                         </span>
                                     </div>
                                     <Button
-                                        onClick={handleGenerate}
+                                        onClick={handlePreparePrompt}
                                         className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/20"
                                         size="lg"
                                         disabled={
                                             isGenerating ||
+                                            isPreparingPrompt ||
                                             !prompt.trim() ||
                                             selectedCount === 0 ||
                                             credits < totalCost ||
@@ -586,6 +621,11 @@ export default function CreativeHubPage() {
                                             <>
                                                 <Loader2 className="ml-2 h-5 w-5 animate-spin" />
                                                 מייצר...
+                                            </>
+                                        ) : isPreparingPrompt ? (
+                                            <>
+                                                <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                                                מכין פרומפט...
                                             </>
                                         ) : (
                                             <>
@@ -729,6 +769,41 @@ export default function CreativeHubPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Prompt preview modal */}
+            <AlertDialog open={showPromptModal} onOpenChange={setShowPromptModal}>
+                <AlertDialogContent className="max-w-2xl max-h-[85vh] flex flex-col" dir="rtl">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>פרומפט לפני יצירה</AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <p className="text-sm text-gray-500">
+                                ערוך את הפרומפט לפי הצורך ולחץ &quot;צור&quot; כדי ליצור את התוכן.
+                            </p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="flex-1 min-h-0 flex flex-col gap-3">
+                        <Textarea
+                            value={generatedPrompt}
+                            onChange={(e) => setGeneratedPrompt(e.target.value)}
+                            placeholder="הפרומפט שישמש ליצירה..."
+                            className="min-h-[200px] resize-y font-mono text-sm"
+                            dir="rtl"
+                        />
+                    </div>
+                    <AlertDialogFooter className="gap-2 sm:gap-0">
+                        <AlertDialogCancel onClick={() => setShowPromptModal(false)}>
+                            ביטול
+                        </AlertDialogCancel>
+                        <button
+                            onClick={handleGenerateFromModal}
+                            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+                        >
+                            <Sparkles className="ml-2 h-4 w-4" />
+                            צור
+                        </button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

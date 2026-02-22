@@ -55,7 +55,8 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
 
     const handleDownload = async (url: string, index: number, isVideo = false) => {
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { mode: "cors" });
+            if (!response.ok) throw new Error("Fetch failed");
             const blob = await response.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -67,7 +68,15 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
             window.URL.revokeObjectURL(downloadUrl);
             toast.success("הקובץ הורד!");
         } catch {
-            toast.error("שגיאה בהורדה");
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `generation-${index + 1}.${isVideo ? "mp4" : "jpg"}`;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            toast.info("הקובץ נפתח בלשונית חדשה");
         }
     };
 

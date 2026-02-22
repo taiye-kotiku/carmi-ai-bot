@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -648,6 +649,9 @@ export default function CreativeHubPage() {
                                         <FileText className="h-3.5 w-3.5" />
                                         מה יקרה כשתלחץ &quot;צור&quot;
                                     </p>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                        תחילה יוצג הפרומפט לעריכה, ואז תוכל לאשר וליצור.
+                                    </p>
                                     <div className="space-y-2">
                                         {(
                                             Object.entries(options) as [
@@ -770,42 +774,71 @@ export default function CreativeHubPage() {
                 </div>
             </div>
 
-            {/* Prompt preview modal */}
-            <AlertDialog open={showPromptModal} onOpenChange={setShowPromptModal}>
-                <AlertDialogContent className="max-w-2xl max-h-[85vh] flex flex-col" dir="rtl">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>פרומפט לפני יצירה</AlertDialogTitle>
-                        <AlertDialogDescription asChild>
-                            <p className="text-sm text-gray-500">
-                                ערוך את הפרומפט לפי הצורך ולחץ &quot;צור&quot; כדי ליצור את התוכן.
-                            </p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <div className="flex-1 min-h-0 flex flex-col gap-3">
-                        <Textarea
-                            value={generatedPrompt}
-                            onChange={(e) => setGeneratedPrompt(e.target.value)}
-                            placeholder="הפרומפט שישמש ליצירה..."
-                            className="min-h-[200px] resize-y font-mono text-sm"
-                            dir="rtl"
-                        />
-                    </div>
-                    <AlertDialogFooter className="gap-2 sm:gap-0">
-                        <AlertDialogCancel onClick={() => setShowPromptModal(false)}>
-                            ביטול
-                        </AlertDialogCancel>
-                        <button
-                            onClick={handleGenerateFromModal}
-                            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-                        >
-                            <Sparkles className="ml-2 h-4 w-4" />
-                            צור
-                        </button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* Prompt preview modal - rendered via portal so it appears above all content */}
+            {showPromptModal &&
+                typeof document !== "undefined" &&
+                createPortal(
+                    <AlertDialog open={showPromptModal} onOpenChange={setShowPromptModal} overlayClassName="z-[100]">
+                        <AlertDialogContent className="max-w-2xl max-h-[85vh] flex flex-col" dir="rtl">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>פרומפט לפני יצירה</AlertDialogTitle>
+                                <AlertDialogDescription asChild>
+                                    <p className="text-sm text-gray-500">
+                                        ערוך את הפרומפט לפי הצורך ולחץ &quot;צור&quot; כדי ליצור את התוכן.
+                                    </p>
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <div className="flex-1 min-h-0 flex flex-col gap-3">
+                                <Textarea
+                                    value={generatedPrompt}
+                                    onChange={(e) => setGeneratedPrompt(e.target.value)}
+                                    placeholder="הפרומפט שישמש ליצירה..."
+                                    className="min-h-[200px] resize-y font-mono text-sm"
+                                    dir="rtl"
+                                    autoFocus
+                                />
+                            </div>
+                            <AlertDialogFooter className="gap-2 sm:gap-0">
+                                <AlertDialogCancel onClick={() => setShowPromptModal(false)}>
+                                    ביטול
+                                </AlertDialogCancel>
+                                <button
+                                    onClick={handleGenerateFromModal}
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+                                >
+                                    <Sparkles className="ml-2 h-4 w-4" />
+                                    צור
+                                </button>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>,
+                    document.body
+                )}
         </div>
     );
+}
+
+async function downloadUrlAsFile(url: string, filename: string, isVideo = false, silent = false) {
+    try {
+        const res = await fetch(url, { mode: "cors" });
+        if (!res.ok) throw new Error("Fetch failed");
+        const blob = await res.blob();
+        const u = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = u;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(u);
+        if (!silent) toast.success("הקובץ הורד!");
+    } catch {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.click();
+        if (!silent) toast.info("הקובץ נפתח בלשונית חדשה");
+    }
 }
 
 function JobCard({
@@ -899,13 +932,13 @@ function JobCard({
                                 className="w-full rounded-lg"
                                 playsInline
                             />
-                            <a
-                                href={job.result.videoUrl}
-                                download
+                            <button
+                                type="button"
+                                onClick={() => downloadUrlAsFile(job.result.videoUrl, "video.mp4", true)}
                                 className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 mt-1.5 cursor-pointer transition-colors"
                             >
                                 <Download className="h-3.5 w-3.5" /> הורד
-                            </a>
+                            </button>
                         </div>
                     )}
 
@@ -921,15 +954,13 @@ function JobCard({
                                     className="w-full rounded-lg object-contain max-h-48"
                                     loading="lazy"
                                 />
-                                <a
-                                    href={
-                                        job.result.url || job.result.imageUrl
-                                    }
-                                    download
+                                <button
+                                    type="button"
+                                    onClick={() => downloadUrlAsFile(job.result.url || job.result.imageUrl, "image.png")}
                                     className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 mt-1.5 cursor-pointer transition-colors"
                                 >
                                     <Download className="h-3.5 w-3.5" /> הורד
-                                </a>
+                                </button>
                             </div>
                         )}
 
@@ -951,13 +982,13 @@ function JobCard({
                                                             className="w-full aspect-[9/16] rounded-lg object-cover"
                                                             loading="lazy"
                                                         />
-                                                        <a
-                                                            href={url}
-                                                            download={`story_${i + 1}.png`}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => downloadUrlAsFile(url, `story_${i + 1}.png`)}
                                                             className="absolute bottom-1 right-1 bg-black/60 text-white rounded-md p-1.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                                         >
                                                             <Download className="h-3.5 w-3.5" />
-                                                        </a>
+                                                        </button>
                                                     </div>
                                                 )
                                             )}
@@ -965,24 +996,24 @@ function JobCard({
                                         <div className="flex flex-wrap gap-1.5">
                                             {(job.result.imageUrls || []).map(
                                                 (url: string, i: number) => (
-                                                    <a
+                                                    <button
                                                         key={i}
-                                                        href={url}
-                                                        download={`story_${i + 1}.png`}
+                                                        type="button"
+                                                        onClick={() => downloadUrlAsFile(url, `story_${i + 1}.png`)}
                                                         className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 cursor-pointer transition-colors bg-purple-50 px-2 py-1 rounded-md"
                                                     >
                                                         <Download className="h-3 w-3" /> {i + 1}
-                                                    </a>
+                                                    </button>
                                                 )
                                             )}
                                             <button
-                                                onClick={() => {
-                                                    (job.result.imageUrls || []).forEach((url: string, i: number) => {
-                                                        const a = document.createElement("a");
-                                                        a.href = url;
-                                                        a.download = `story_${i + 1}.png`;
-                                                        a.click();
-                                                    });
+                                                type="button"
+                                                onClick={async () => {
+                                                    for (let i = 0; i < (job.result.imageUrls || []).length; i++) {
+                                                        await downloadUrlAsFile((job.result.imageUrls || [])[i], `story_${i + 1}.png`, false, true);
+                                                        if (i < (job.result.imageUrls || []).length - 1) await new Promise((r) => setTimeout(r, 200));
+                                                    }
+                                                    toast.success(`הורדת ${(job.result.imageUrls || []).length} תמונות`);
                                                 }}
                                                 className="inline-flex items-center gap-1 text-xs text-white bg-purple-600 hover:bg-purple-700 cursor-pointer transition-colors px-2 py-1 rounded-md"
                                             >
@@ -1002,13 +1033,13 @@ function JobCard({
                                             className="w-full rounded-lg"
                                             playsInline
                                         />
-                                        <a
-                                            href={job.result.videoUrl}
-                                            download="story_video.mp4"
+                                        <button
+                                            type="button"
+                                            onClick={() => downloadUrlAsFile(job.result.videoUrl, "story_video.mp4", true)}
                                             className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 cursor-pointer transition-colors"
                                         >
                                             <Download className="h-3.5 w-3.5" /> הורד וידאו
-                                        </a>
+                                        </button>
                                     </>
                                 )}
                             </div>
@@ -1029,26 +1060,12 @@ function JobCard({
                                 ))}
                             </div>
                             <button
+                                type="button"
                                 onClick={async () => {
                                     const images = job.result.images as string[];
                                     for (let i = 0; i < images.length; i++) {
-                                        try {
-                                            const res = await fetch(images[i], { mode: "cors" });
-                                            const blob = await res.blob();
-                                            const u = URL.createObjectURL(blob);
-                                            const a = document.createElement("a");
-                                            a.href = u;
-                                            a.download = `carousel_${i + 1}.png`;
-                                            a.click();
-                                            URL.revokeObjectURL(u);
-                                            if (i < images.length - 1) await new Promise((r) => setTimeout(r, 150));
-                                        } catch {
-                                            const a = document.createElement("a");
-                                            a.href = images[i];
-                                            a.download = `carousel_${i + 1}.png`;
-                                            a.target = "_blank";
-                                            a.click();
-                                        }
+                                        await downloadUrlAsFile(images[i], `carousel_${i + 1}.png`, false, true);
+                                        if (i < images.length - 1) await new Promise((r) => setTimeout(r, 150));
                                     }
                                     toast.success(`הורדת ${images.length} שקופיות`);
                                 }}

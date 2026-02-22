@@ -7,15 +7,17 @@ export const AlertDialog = ({
     children,
     open,
     onOpenChange,
+    overlayClassName,
 }: {
     children: React.ReactNode
     open?: boolean
     onOpenChange?: (open: boolean) => void
+    overlayClassName?: string
 }) => {
     if (!open) return null
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            className={cn("fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm", overlayClassName)}
             onClick={() => onOpenChange && onOpenChange(false)}
         >
             <div onClick={(e) => e.stopPropagation()}>{children}</div>

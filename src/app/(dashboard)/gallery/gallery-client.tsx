@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Download, X, ChevronRight, ChevronLeft, Play, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,28 @@ function isVideoUrl(url: string): boolean {
 }
 
 export function GalleryClient({ generations }: { generations: Generation[] }) {
+    const router = useRouter();
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [filter, setFilter] = useState<string>("all");
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    const handleDelete = async (e: React.MouseEvent, gen: Generation) => {
+        e.stopPropagation();
+        if (gen.files_deleted) return;
+        if (deletingId) return;
+        setDeletingId(gen.id);
+        try {
+            const res = await fetch(`/api/generations/${gen.id}`, { method: "DELETE" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "שגיאה");
+            toast.success("התוכן נמחק");
+            router.refresh();
+        } catch (err: any) {
+            toast.error(err.message || "שגיאה במחיקה");
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
     const filteredGenerations = generations.filter((gen) => {
         if (filter === "all") return true;
@@ -183,6 +204,14 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                                         >
                                             <Download className="h-4 w-4" />
                                         </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="destructive"
+                                            onClick={(e) => handleDelete(e, gen)}
+                                            disabled={deletingId === gen.id}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
                                     </div>
                                 )}
 
@@ -246,6 +275,20 @@ export function GalleryClient({ generations }: { generations: Generation[] }) {
                         onClick={() => setSelectedIndex(null)}
                     >
                         <X className="h-6 w-6" />
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        className="absolute top-4 left-4 z-10 flex items-center gap-1.5"
+                        onClick={(e) => {
+                            if (selectedGen) {
+                                handleDelete(e, selectedGen);
+                                setSelectedIndex(null);
+                            }
+                        }}
+                        disabled={deletingId === selectedGen?.id}
+                    >
+                        <Trash2 className="h-4 w-4" /> מחק
                     </Button>
 
                     {selectedIndex! > 0 && (

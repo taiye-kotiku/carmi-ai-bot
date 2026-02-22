@@ -32,6 +32,8 @@ Instructions:
 8. Hebrew Content: If the user's prompt is in Hebrew, ALL spoken dialogue, narration, voiceover, text overlays, signs, and written elements in the video MUST be in Hebrew. Never translate Hebrew content to English - keep Hebrew words in Hebrew script.
 9. Language: Output the enhanced prompt in English for model compatibility, but embed any Hebrew dialogue/narration as-is in Hebrew script within the prompt.
 
+10. NO TEXT ON VIDEO: Do NOT add any text overlays, titles, subtitles, captions, or written words on the video. The video must be purely visual and audio - no on-screen text.
+
 Output: A single flowing paragraph. No preamble, no quotes, no labels. Return ONLY the enhanced prompt.`;
 
     const model = genAI.getGenerativeModel({

@@ -820,22 +820,11 @@ function JobCard({
                     {job.type === "video" && job.result.videoUrl && (
                         <div>
                             <video
+                                src={job.result.videoUrl}
                                 controls
                                 className="w-full rounded-lg"
                                 playsInline
-                                crossOrigin="anonymous"
-                            >
-                                <source src={job.result.videoUrl} type="video/mp4" />
-                                {job.result.vttUrl && (
-                                    <track
-                                        kind="subtitles"
-                                        src={job.result.vttUrl}
-                                        srcLang="he"
-                                        label="עברית"
-                                        default
-                                    />
-                                )}
-                            </video>
+                            />
                             <a
                                 href={job.result.videoUrl}
                                 download
@@ -934,22 +923,11 @@ function JobCard({
                                     <>
                                         <p className="text-xs text-gray-500 font-medium mt-2">וידאו סטורי:</p>
                                         <video
+                                            src={job.result.videoUrl}
                                             controls
                                             className="w-full rounded-lg"
                                             playsInline
-                                            crossOrigin="anonymous"
-                                        >
-                                            <source src={job.result.videoUrl} type="video/mp4" />
-                                            {job.result.vttUrl && (
-                                                <track
-                                                    kind="subtitles"
-                                                    src={job.result.vttUrl}
-                                                    srcLang="he"
-                                                    label="עברית"
-                                                    default
-                                                />
-                                            )}
-                                        </video>
+                                        />
                                         <a
                                             href={job.result.videoUrl}
                                             download="story_video.mp4"
@@ -976,31 +954,34 @@ function JobCard({
                                     />
                                 ))}
                             </div>
-                            <div className="flex flex-wrap gap-1.5">
-                                {job.result.images.map((url: string, i: number) => (
-                                    <a
-                                        key={i}
-                                        href={url}
-                                        download={`carousel_${i + 1}.png`}
-                                        className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 cursor-pointer transition-colors bg-purple-50 px-2 py-1 rounded-md"
-                                    >
-                                        <Download className="h-3 w-3" /> {i + 1}
-                                    </a>
-                                ))}
-                                <button
-                                    onClick={() => {
-                                        job.result.images.forEach((url: string, i: number) => {
+                            <button
+                                onClick={async () => {
+                                    const images = job.result.images as string[];
+                                    for (let i = 0; i < images.length; i++) {
+                                        try {
+                                            const res = await fetch(images[i], { mode: "cors" });
+                                            const blob = await res.blob();
+                                            const u = URL.createObjectURL(blob);
                                             const a = document.createElement("a");
-                                            a.href = url;
+                                            a.href = u;
                                             a.download = `carousel_${i + 1}.png`;
                                             a.click();
-                                        });
-                                    }}
-                                    className="inline-flex items-center gap-1 text-xs text-white bg-purple-600 hover:bg-purple-700 cursor-pointer transition-colors px-2 py-1 rounded-md"
-                                >
-                                    <Download className="h-3 w-3" /> הורד הכל
-                                </button>
-                            </div>
+                                            URL.revokeObjectURL(u);
+                                            if (i < images.length - 1) await new Promise((r) => setTimeout(r, 150));
+                                        } catch {
+                                            const a = document.createElement("a");
+                                            a.href = images[i];
+                                            a.download = `carousel_${i + 1}.png`;
+                                            a.target = "_blank";
+                                            a.click();
+                                        }
+                                    }
+                                    toast.success(`הורדת ${images.length} שקופיות`);
+                                }}
+                                className="inline-flex items-center gap-1 text-xs text-white bg-purple-600 hover:bg-purple-700 cursor-pointer transition-colors px-3 py-1.5 rounded-md"
+                            >
+                                <Download className="h-3.5 w-3.5" /> הורד את כל הקרוסלה
+                            </button>
 
                             {/* Swap background with story image */}
                             {storyImages.length > 0 && onRegenerateCarousel && (

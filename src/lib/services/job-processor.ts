@@ -40,37 +40,6 @@ Rules:
 }
 
 /**
- * After video generation, create Hebrew VTT subtitles using Gemini transcription.
- * Returns a WebVTT string or null if transcription fails.
- */
-async function generateHebrewVttSubtitles(videoUrl: string): Promise<string | null> {
-    try {
-        const { transcribeVideoToHebrew } = await import("@/lib/services/video-transcription");
-        const entries = await transcribeVideoToHebrew(videoUrl);
-        if (!entries || entries.length === 0) return null;
-
-        const lines = ["WEBVTT", ""];
-        for (const e of entries) {
-            lines.push(formatVttTime(e.start) + " --> " + formatVttTime(e.end));
-            lines.push(e.text);
-            lines.push("");
-        }
-        return lines.join("\n");
-    } catch (err) {
-        console.warn("[HebrewVTT] Subtitle generation failed:", err);
-        return null;
-    }
-}
-
-function formatVttTime(seconds: number): string {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 1000);
-    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
-}
-
-/**
  * Try to advance a processing job one step.
  * Each call completes within ~8 seconds.
  */
@@ -192,7 +161,9 @@ Apply Cinematic Standards: Include camera movements (Dolly, Pan, Orbit) and prof
 
 Audio & Dialogue: Veo 3.1 generates native audio with speech. If the user's prompt is in Hebrew or contains a Hebrew narration script, include the exact Hebrew dialogue. Write it as: 'The person speaks in Hebrew: "[exact Hebrew text]"'.
 
-Hebrew Content: If the user's prompt is in Hebrew, ALL spoken dialogue, narration, voiceover, text overlays, signs, and written content MUST be in Hebrew. Keep Hebrew script as-is.
+Hebrew Content: If the user's prompt is in Hebrew, ALL spoken dialogue and narration MUST be in Hebrew. Keep Hebrew script as-is.
+
+NO TEXT ON VIDEO: Do NOT add any text overlays, titles, subtitles, captions, or written words on the video. The video must be purely visual and audio - no on-screen text.
 
 Output: A single flowing paragraph. Return ONLY the enhanced prompt, no preamble.`;
 
@@ -1041,36 +1012,26 @@ async function processStory(job: any, userId: string, jobData: any) {
 
             const videoUri = extractVideoUri(pollData);
             if (!videoUri) {
-                await failJob(job.id, userId, CREDIT_COSTS.story_generation, "No video URL", "החזר - סטורי וידאו");
-                return { status: "failed", progress: 0, result: null, error: "No video URL" };
+                // Partial success: return story images even when video fails
+                await completeJob(job.id, {
+                    imageUrls: state.imageUrls,
+                    videoUrl: null,
+                    videoError: "No video URL",
+                });
+                return { status: "completed", progress: 100, result: { imageUrls: state.imageUrls, videoUrl: null }, error: null };
             }
 
             const vidRes = await fetch(videoUri.includes("?") ? `${videoUri}&key=${apiKey}` : `${videoUri}?key=${apiKey}`);
             if (!vidRes.ok) {
-                await failJob(job.id, userId, CREDIT_COSTS.story_generation, "Download failed", "החזר - סטורי וידאו");
-                return { status: "failed", progress: 0, result: null, error: "Download failed" };
+                // Partial success: return story images even when video download fails
+                await completeJob(job.id, { imageUrls: state.imageUrls, videoUrl: null, videoError: "Download failed" });
+                return { status: "completed", progress: 100, result: { imageUrls: state.imageUrls, videoUrl: null }, error: null };
             }
 
             const vidBuf = await vidRes.arrayBuffer();
             const fn = `videos/${userId}/${Date.now()}_story.mp4`;
             await supabaseAdmin.storage.from("generations").upload(fn, vidBuf, { contentType: "video/mp4", upsert: true });
             const { data: { publicUrl } } = supabaseAdmin.storage.from("generations").getPublicUrl(fn);
-
-            // Generate Hebrew subtitles for the story video
-            let vttUrl: string | null = null;
-            try {
-                const vttContent = await generateHebrewVttSubtitles(publicUrl);
-                if (vttContent) {
-                    const vttFn = `videos/${userId}/${Date.now()}_story_he.vtt`;
-                    await supabaseAdmin.storage.from("generations").upload(vttFn, Buffer.from(vttContent, "utf-8"), {
-                        contentType: "text/vtt", upsert: true,
-                    });
-                    const { data: vttData } = supabaseAdmin.storage.from("generations").getPublicUrl(vttFn);
-                    vttUrl = vttData.publicUrl;
-                }
-            } catch (err) {
-                console.warn("[Story] VTT generation failed:", err);
-            }
 
             await supabaseAdmin.from("generations").insert({
                 id: nanoid(), user_id: userId, type: "video", feature: "story_generation",
@@ -1081,10 +1042,8 @@ async function processStory(job: any, userId: string, jobData: any) {
             });
 
             await updateUserStorage(userId, vidBuf.byteLength);
-            const storyResult: any = { imageUrls: state.imageUrls, videoUrl: publicUrl };
-            if (vttUrl) storyResult.vttUrl = vttUrl;
-            await completeJob(job.id, storyResult);
-            return { status: "completed", progress: 100, result: storyResult, error: null };
+            await completeJob(job.id, { imageUrls: state.imageUrls, videoUrl: publicUrl });
+            return { status: "completed", progress: 100, result: { imageUrls: state.imageUrls, videoUrl: publicUrl }, error: null };
         }
 
         return stillProcessing(job);
@@ -1533,22 +1492,6 @@ async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, 
     await supabaseAdmin.storage.from("generations").upload(fn, vidBuf, { contentType: "video/mp4", upsert: true });
     const { data: { publicUrl } } = supabaseAdmin.storage.from("generations").getPublicUrl(fn);
 
-    // Generate Hebrew VTT subtitles as a fallback for Hebrew audio
-    let vttUrl: string | null = null;
-    try {
-        const vttContent = await generateHebrewVttSubtitles(publicUrl);
-        if (vttContent) {
-            const vttFn = `videos/${userId}/${Date.now()}_he.vtt`;
-            await supabaseAdmin.storage.from("generations").upload(vttFn, Buffer.from(vttContent, "utf-8"), {
-                contentType: "text/vtt", upsert: true,
-            });
-            const { data: vttData } = supabaseAdmin.storage.from("generations").getPublicUrl(vttFn);
-            vttUrl = vttData.publicUrl;
-        }
-    } catch (err) {
-        console.warn("[downloadAndSaveVideo] VTT generation failed:", err);
-    }
-
     await supabaseAdmin.from("generations").insert({
         id: nanoid(), user_id: userId, type: "video", feature,
         prompt, result_urls: [publicUrl], status: "completed",
@@ -1557,10 +1500,8 @@ async function downloadAndSaveVideo(job: any, userId: string, videoUri: string, 
     });
 
     await updateUserStorage(userId, vidBuf.byteLength);
-    const result: any = { videoUrl: publicUrl };
-    if (vttUrl) result.vttUrl = vttUrl;
-    await completeJob(job.id, result);
-    return { status: "completed", progress: 100, result, error: null };
+    await completeJob(job.id, { videoUrl: publicUrl });
+    return { status: "completed", progress: 100, result: { videoUrl: publicUrl }, error: null };
 }
 
 function buildCombineImagesPrompt(prompt: string): string {

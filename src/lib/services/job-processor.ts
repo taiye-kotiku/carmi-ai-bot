@@ -875,9 +875,9 @@ async function processStory(job: any, userId: string, jobData: any) {
             const basePrompt = buildEnhancedPrompt(prompt, "realistic", "9:16");
             if (imageBase64) {
                 parts.push({ inlineData: { mimeType: imageMimeType, data: imageBase64 } });
-                parts.push({ text: `Create a 9:16 vertical story frame based on this image. Keep the EXACT same person/character from the provided image - maintain their face, appearance, clothing and likeness precisely. Theme: ${prompt}. Frame ${idx + 1} of ${imageCount}. Professional, cohesive style. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew.` });
+                parts.push({ text: `Create a 9:16 vertical story frame based on this image. Keep the EXACT same person/character from the provided image - maintain their face, appearance, clothing and likeness precisely. Theme: ${prompt}. Frame ${idx + 1} of ${imageCount}. Professional, cohesive style. Do NOT add any logo, brand mark, watermark, or branding element. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew.` });
             } else {
-                parts.push({ text: `${basePrompt} Story frame ${idx + 1} of ${imageCount}. Vertical 9:16 composition. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew.` });
+                parts.push({ text: `${basePrompt} Story frame ${idx + 1} of ${imageCount}. Vertical 9:16 composition. Do NOT add any logo, brand mark, watermark, or branding element. IMPORTANT: Any text, titles, captions, or words visible in the image MUST be written in Hebrew.` });
             }
 
             const response = await fetch(

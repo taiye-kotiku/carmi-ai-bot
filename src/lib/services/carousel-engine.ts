@@ -148,8 +148,8 @@ function drawCleanText(
     const maxWidth = WIDTH - MARGIN * 2.5;
     const maxHeight = HEIGHT * 0.5;
 
-    let currentFontSize = bodyFontSize || 95;
-    const minFontSize = 40;
+    let currentFontSize = bodyFontSize || 63;
+    const minFontSize = 28;
     const highlightFontSize = headlineFontSize || currentFontSize;
 
     ctx.direction = "rtl";
@@ -571,12 +571,12 @@ export async function createCarouselWithEngine(
             );
         }
 
-        // Draw text (centered, adaptive)
+        // Draw text (centered, adaptive, positioned slightly lower)
         drawCleanText(
             ctx,
             slides[i],
             WIDTH / 2,
-            HEIGHT / 2,
+            HEIGHT / 2 + 80,
             textColor,
             HIGHLIGHT_COLOR,
             fontPath,

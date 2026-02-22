@@ -298,12 +298,30 @@ export default function CreativeHubPage() {
 
         setIsPreparingPrompt(true);
         try {
+            let imageBase64: string | undefined;
+            let imageMimeType: string | undefined;
+            if (mediaType === "image" && imageFile) {
+                imageBase64 = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const result = reader.result as string;
+                        const base64 = result.includes(",") ? result.split(",")[1]! : result;
+                        resolve(base64);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(imageFile);
+                });
+                imageMimeType = imageFile.type || "image/png";
+            }
+
             const res = await fetch("/api/generate/creative-hub/preview", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     prompt: prompt.trim(),
                     websiteUrl: mediaType === "url" && websiteUrl.trim() ? websiteUrl.trim() : undefined,
+                    imageBase64,
+                    imageMimeType,
                 }),
             });
             const data = await res.json().catch(() => ({}));

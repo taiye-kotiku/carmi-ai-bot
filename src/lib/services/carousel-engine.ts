@@ -396,12 +396,11 @@ export async function createCarouselWithEngine(
                 throw new Error("Failed to decode base64 image");
             }
             
-            // Resize image to CONTAIN - show full image without cropping (no height/width crop)
+            // Resize image to COVER - fill canvas completely, no black margins (crop if aspect differs)
             bgResized = await sharp(customBgBuffer)
                 .resize(WIDTH, HEIGHT, {
-                    fit: "contain", // Show full image, add background if aspect differs
+                    fit: "cover",
                     position: "center",
-                    background: { r: 0, g: 0, b: 0, alpha: 1 }, // Black fill for letterboxing
                     kernel: sharp.kernel.lanczos3,
                 })
                 .png({ 
@@ -426,9 +425,8 @@ export async function createCarouselWithEngine(
                 
                 bgResized = await sharp(customBgBuffer)
                     .resize(WIDTH, HEIGHT, {
-                        fit: "contain",
+                        fit: "cover",
                         position: "center",
-                        background: { r: 0, g: 0, b: 0, alpha: 1 },
                     })
                     .png()
                     .toBuffer();

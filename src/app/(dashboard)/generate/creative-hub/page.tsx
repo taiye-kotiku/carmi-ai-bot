@@ -67,7 +67,6 @@ const TYPE_COSTS: Record<string, number> = {
 const STEPS_INFO: Record<string, string[]> = {
     story: [
         "יצירת 4 תמונות אנכיות לסטורי",
-        "יצירת וידאו 8 שניות מהתמונה הראשונה",
         "שמירה וסיום",
     ],
     carousel: [

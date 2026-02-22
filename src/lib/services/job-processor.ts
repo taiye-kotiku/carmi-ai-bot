@@ -861,14 +861,14 @@ async function processStory(job: any, userId: string, jobData: any) {
             const idx = imageUrls.length;
 
             if (idx >= imageCount) {
-                // All images done, start video
-                await saveState(job.id, jobData, {
-                    ...state,
-                    phase: "generate_video",
-                    imageUrls,
+                // All images done - complete without video (user did not ask for video)
+                await supabaseAdmin.from("generations").insert({
+                    id: nanoid(), user_id: userId, type: "carousel", feature: "story_generation",
+                    prompt, result_urls: imageUrls, thumbnail_url: imageUrls[0], status: "completed",
+                    completed_at: new Date().toISOString(), file_size_bytes: 0, files_deleted: false, job_id: job.id,
                 });
-                await updateProgress(job.id, 50);
-                return { status: "processing", progress: 50, result: null, error: null };
+                await completeJob(job.id, { imageUrls, videoUrl: null });
+                return { status: "completed", progress: 100, result: { imageUrls, videoUrl: null }, error: null };
             }
 
             const parts: any[] = [];

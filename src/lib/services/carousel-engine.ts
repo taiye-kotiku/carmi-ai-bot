@@ -396,13 +396,13 @@ export async function createCarouselWithEngine(
                 throw new Error("Failed to decode base64 image");
             }
             
-            // Resize image to COVER the canvas (fills entire area, may crop edges)
-            // This ensures no black bars - the image fills the entire canvas
+            // Resize image to CONTAIN - show full image without cropping (no height/width crop)
             bgResized = await sharp(customBgBuffer)
                 .resize(WIDTH, HEIGHT, {
-                    fit: "cover", // Cover entire canvas, crop if needed (NO black bars)
-                    position: "center", // Center the image when cropping
-                    kernel: sharp.kernel.lanczos3, // High quality resampling
+                    fit: "contain", // Show full image, add background if aspect differs
+                    position: "center",
+                    background: { r: 0, g: 0, b: 0, alpha: 1 }, // Black fill for letterboxing
+                    kernel: sharp.kernel.lanczos3,
                 })
                 .png({ 
                     quality: 100, 
@@ -426,8 +426,9 @@ export async function createCarouselWithEngine(
                 
                 bgResized = await sharp(customBgBuffer)
                     .resize(WIDTH, HEIGHT, {
-                        fit: "cover",
+                        fit: "contain",
                         position: "center",
+                        background: { r: 0, g: 0, b: 0, alpha: 1 },
                     })
                     .png()
                     .toBuffer();
